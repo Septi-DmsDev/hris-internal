@@ -1,4 +1,63 @@
-// Stub — will be fully implemented in Task 3
-// Diperlukan agar src/lib/db/schema/index.ts dan src/lib/db/index.ts bisa compile
+import {
+  pgTable,
+  pgEnum,
+  uuid,
+  varchar,
+  text,
+  boolean,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
-export {};
+export const employeeGroupEnum = pgEnum("employee_group", [
+  "MANAGERIAL",
+  "TEAMWORK",
+]);
+
+export const branches = pgTable("branches", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  address: text("address"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const divisions = pgTable("divisions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  code: varchar("code", { length: 20 }).notNull().unique(),
+  branchId: uuid("branch_id").references(() => branches.id),
+  trainingPassPercent: varchar("training_pass_percent", { length: 5 }).default("80"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const positions = pgTable("positions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  code: varchar("code", { length: 20 }).notNull().unique(),
+  employeeGroup: employeeGroupEnum("employee_group").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const grades = pgTable("grades", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 50 }).notNull(),
+  code: varchar("code", { length: 20 }).notNull().unique(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export type Branch = typeof branches.$inferSelect;
+export type NewBranch = typeof branches.$inferInsert;
+export type Division = typeof divisions.$inferSelect;
+export type NewDivision = typeof divisions.$inferInsert;
+export type Position = typeof positions.$inferSelect;
+export type NewPosition = typeof positions.$inferInsert;
+export type Grade = typeof grades.$inferSelect;
+export type NewGrade = typeof grades.$inferInsert;

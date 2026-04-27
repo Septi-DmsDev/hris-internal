@@ -21,7 +21,7 @@ export const userRoles = pgTable("user_roles", {
   role: userRoleEnum("role").notNull().default("TEAMWORK"),
   divisionId: uuid("division_id"), // null = akses semua, diisi = SPV hanya divisi ini
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
 export type UserRoleRow = typeof userRoles.$inferSelect;

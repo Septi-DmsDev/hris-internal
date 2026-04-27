@@ -42,10 +42,13 @@ export default function LoginForm() {
           id="email"
           type="email"
           placeholder="hrd@perusahaan.com"
+          aria-describedby={errors.email ? "email-error" : undefined}
           {...register("email")}
         />
         {errors.email && (
-          <p className="text-sm text-red-500">{errors.email.message}</p>
+          <p id="email-error" role="alert" className="text-sm text-red-500">
+            {errors.email.message}
+          </p>
         )}
       </div>
       <div className="space-y-1">
@@ -54,17 +57,20 @@ export default function LoginForm() {
           id="password"
           type="password"
           placeholder="••••••••"
+          aria-describedby={errors.password ? "password-error" : undefined}
           {...register("password")}
         />
         {errors.password && (
-          <p className="text-sm text-red-500">{errors.password.message}</p>
+          <p id="password-error" role="alert" className="text-sm text-red-500">
+            {errors.password.message}
+          </p>
         )}
       </div>
       {serverError && (
-        <p className="text-sm text-red-500">{serverError}</p>
+        <p role="alert" className="text-sm text-red-500">{serverError}</p>
       )}
       <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Masuk..." : "Masuk"}
+        {loading ? "Memproses..." : "Masuk"}
       </Button>
     </form>
   );

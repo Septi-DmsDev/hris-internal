@@ -6,8 +6,8 @@ import { redirect } from "next/navigation";
 
 export async function loginAction(formData: FormData) {
   const raw = {
-    email: formData.get("email") as string,
-    password: formData.get("password") as string,
+    email: formData.get("email")?.toString() ?? "",
+    password: formData.get("password")?.toString() ?? "",
   };
 
   const parsed = loginSchema.safeParse(raw);
@@ -27,6 +27,9 @@ export async function loginAction(formData: FormData) {
 
 export async function logoutAction() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("[logoutAction] signOut failed:", error.message);
+  }
   redirect("/login");
 }

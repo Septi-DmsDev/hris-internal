@@ -26,18 +26,35 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    // Supabase unreachable — fail closed: treat as unauthenticated
+  }
 
   const pathname = request.nextUrl.pathname;
   const isLoginPage = pathname === "/login";
-  const isPublic = pathname === "/" || pathname.startsWith("/_next");
+  const isPublic =
+    pathname === "/" ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/_next");
 
   if (!user && !isLoginPage && !isPublic) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const redirectResponse = NextResponse.redirect(new URL("/login", request.url));
+    supabaseResponse.cookies.getAll().forEach((c) =>
+      redirectResponse.cookies.set(c.name, c.value)
+    );
+    return redirectResponse;
   }
 
   if (user && isLoginPage) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const redirectResponse = NextResponse.redirect(new URL("/dashboard", request.url));
+    supabaseResponse.cookies.getAll().forEach((c) =>
+      redirectResponse.cookies.set(c.name, c.value)
+    );
+    return redirectResponse;
   }
 
   return supabaseResponse;

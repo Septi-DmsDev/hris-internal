@@ -24,5 +24,5 @@ export const userRoles = pgTable("user_roles", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export type UserRole = typeof userRoles.$inferSelect;
-export type NewUserRole = typeof userRoles.$inferInsert;
+export type UserRoleRow = typeof userRoles.$inferSelect;
+export type NewUserRoleRow = typeof userRoles.$inferInsert;

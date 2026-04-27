@@ -5,6 +5,7 @@ import {
   varchar,
   text,
   boolean,
+  integer,
   timestamp,
 } from "drizzle-orm/pg-core";
 
@@ -18,19 +19,19 @@ export const branches = pgTable("branches", {
   name: varchar("name", { length: 100 }).notNull(),
   address: text("address"),
   isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
 export const divisions = pgTable("divisions", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   code: varchar("code", { length: 20 }).notNull().unique(),
-  branchId: uuid("branch_id").references(() => branches.id),
-  trainingPassPercent: varchar("training_pass_percent", { length: 5 }).default("80"),
+  branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+  trainingPassPercent: integer("training_pass_percent").default(80).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
 export const positions = pgTable("positions", {
@@ -39,8 +40,8 @@ export const positions = pgTable("positions", {
   code: varchar("code", { length: 20 }).notNull().unique(),
   employeeGroup: employeeGroupEnum("employee_group").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
 export const grades = pgTable("grades", {
@@ -49,8 +50,8 @@ export const grades = pgTable("grades", {
   code: varchar("code", { length: 20 }).notNull().unique(),
   description: text("description"),
   isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull().$onUpdateFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
 export type Branch = typeof branches.$inferSelect;

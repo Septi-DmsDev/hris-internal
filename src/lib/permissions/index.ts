@@ -1,7 +1,7 @@
 // src/lib/permissions/index.ts
 import type { UserRole } from "@/types";
 
-type Permission =
+export type Permission =
   | "master:read" | "master:write" | "master:delete"
   | "employees:read" | "employees:write" | "employees:delete"
   | "performance:input" | "performance:approve" | "performance:override"
@@ -9,6 +9,12 @@ type Permission =
   | "tickets:read" | "tickets:write" | "tickets:approve"
   | "payroll:read" | "payroll:write" | "payroll:finalize"
   | "settings:read" | "settings:write";
+
+const USER_ROLES = ["SUPER_ADMIN", "HRD", "FINANCE", "SPV", "TEAMWORK", "MANAGERIAL", "PAYROLL_VIEWER"] as const;
+
+export function isUserRole(r: unknown): r is UserRole {
+  return typeof r === "string" && (USER_ROLES as readonly string[]).includes(r);
+}
 
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   SUPER_ADMIN: [
@@ -59,7 +65,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
 export function canAccess(role: UserRole, permission: Permission): boolean {
   if (role === "SUPER_ADMIN") return true;
-  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+  return ROLE_PERMISSIONS[role].includes(permission);
 }
 
 export function requireRole(

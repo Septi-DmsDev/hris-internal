@@ -1,6 +1,6 @@
 // src/lib/permissions/index.test.ts
 import { describe, it, expect } from "vitest";
-import { canAccess, ROLE_PERMISSIONS } from "./index";
+import { canAccess, ROLE_PERMISSIONS, requireRole } from "./index";
 
 describe("canAccess", () => {
   it("SUPER_ADMIN bisa akses semua resource", () => {
@@ -31,5 +31,29 @@ describe("canAccess", () => {
     expect(canAccess("FINANCE", "payroll:read")).toBe(true);
     expect(canAccess("FINANCE", "payroll:finalize")).toBe(true);
     expect(canAccess("FINANCE", "employees:delete")).toBe(false);
+  });
+
+  it("MANAGERIAL hanya bisa baca employees dan payroll", () => {
+    expect(canAccess("MANAGERIAL", "employees:read")).toBe(true);
+    expect(canAccess("MANAGERIAL", "payroll:write")).toBe(false);
+    expect(canAccess("MANAGERIAL", "employees:write")).toBe(false);
+  });
+
+  it("PAYROLL_VIEWER hanya bisa baca payroll", () => {
+    expect(canAccess("PAYROLL_VIEWER", "payroll:read")).toBe(true);
+    expect(canAccess("PAYROLL_VIEWER", "payroll:write")).toBe(false);
+    expect(canAccess("PAYROLL_VIEWER", "payroll:finalize")).toBe(false);
+  });
+});
+
+describe("requireRole", () => {
+  it("cocok dengan satu role yang benar", () => {
+    expect(requireRole("HRD", "HRD")).toBe(true);
+    expect(requireRole("HRD", "FINANCE")).toBe(false);
+  });
+
+  it("cocok dengan array role", () => {
+    expect(requireRole("SPV", ["SPV", "MANAGERIAL"])).toBe(true);
+    expect(requireRole("TEAMWORK", ["SPV", "MANAGERIAL"])).toBe(false);
   });
 });

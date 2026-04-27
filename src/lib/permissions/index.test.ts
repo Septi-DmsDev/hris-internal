@@ -1,6 +1,6 @@
 // src/lib/permissions/index.test.ts
 import { describe, it, expect } from "vitest";
-import { canAccess, ROLE_PERMISSIONS, requireRole } from "./index";
+import { canAccess, ROLE_PERMISSIONS, requireRole, isUserRole } from "./index";
 
 describe("canAccess", () => {
   it("SUPER_ADMIN bisa akses semua resource", () => {
@@ -55,5 +55,21 @@ describe("requireRole", () => {
   it("cocok dengan array role", () => {
     expect(requireRole("SPV", ["SPV", "MANAGERIAL"])).toBe(true);
     expect(requireRole("TEAMWORK", ["SPV", "MANAGERIAL"])).toBe(false);
+  });
+});
+
+describe("isUserRole", () => {
+  it("mengembalikan true untuk role yang valid", () => {
+    expect(isUserRole("SUPER_ADMIN")).toBe(true);
+    expect(isUserRole("TEAMWORK")).toBe(true);
+    expect(isUserRole("PAYROLL_VIEWER")).toBe(true);
+  });
+
+  it("mengembalikan false untuk nilai yang tidak valid", () => {
+    expect(isUserRole("ADMIN")).toBe(false);
+    expect(isUserRole("")).toBe(false);
+    expect(isUserRole(null)).toBe(false);
+    expect(isUserRole(42)).toBe(false);
+    expect(isUserRole(undefined)).toBe(false);
   });
 });

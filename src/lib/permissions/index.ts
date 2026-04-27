@@ -1,4 +1,4 @@
-// src/lib/permissions/index.ts
+import { USER_ROLES } from "@/types";
 import type { UserRole } from "@/types";
 
 export type Permission =
@@ -9,8 +9,6 @@ export type Permission =
   | "tickets:read" | "tickets:write" | "tickets:approve"
   | "payroll:read" | "payroll:write" | "payroll:finalize"
   | "settings:read" | "settings:write";
-
-const USER_ROLES = ["SUPER_ADMIN", "HRD", "FINANCE", "SPV", "TEAMWORK", "MANAGERIAL", "PAYROLL_VIEWER"] as const;
 
 export function isUserRole(r: unknown): r is UserRole {
   return typeof r === "string" && (USER_ROLES as readonly string[]).includes(r);

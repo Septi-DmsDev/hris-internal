@@ -9,3 +9,35 @@ export const pointCatalogSyncSchema = z.object({
 });
 
 export type PointCatalogSyncInput = z.infer<typeof pointCatalogSyncSchema>;
+
+export const dailyActivityEntrySchema = z.object({
+  id: z.string().uuid().optional(),
+  employeeId: z.string().uuid("Karyawan tidak valid."),
+  workDate: z.coerce.date({ message: "Tanggal kerja wajib diisi." }),
+  actualDivisionId: z.string().uuid("Divisi aktual tidak valid."),
+  pointCatalogEntryId: z.string().uuid("Pekerjaan poin tidak valid."),
+  quantity: z.coerce.number().positive("Qty harus lebih besar dari 0."),
+  notes: z.string().trim().optional().transform((value) => value || undefined),
+});
+
+export const dailyActivityDecisionSchema = z.object({
+  activityEntryId: z.string().uuid("Aktivitas tidak valid."),
+  notes: z.string().trim().optional().transform((value) => value || undefined),
+});
+
+export const monthlyPerformanceGenerationSchema = z.object({
+  periodStartDate: z.coerce.date({ message: "Tanggal awal periode wajib diisi." }),
+  periodEndDate: z.coerce.date({ message: "Tanggal akhir periode wajib diisi." }),
+}).superRefine((value, ctx) => {
+  if (value.periodEndDate < value.periodStartDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["periodEndDate"],
+      message: "Tanggal akhir periode tidak boleh lebih awal dari tanggal awal.",
+    });
+  }
+});
+
+export type DailyActivityEntryInput = z.infer<typeof dailyActivityEntrySchema>;
+export type DailyActivityDecisionInput = z.infer<typeof dailyActivityDecisionSchema>;
+export type MonthlyPerformanceGenerationInput = z.infer<typeof monthlyPerformanceGenerationSchema>;

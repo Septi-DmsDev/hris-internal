@@ -17,6 +17,11 @@ import {
   type PointCatalogSyncInput,
 } from "@/lib/validations/point";
 import { parseMasterPointWorkbook } from "@/server/point-engine/parse-master-point-workbook";
+import {
+  getActivePointCatalogVersion,
+  getDivisionTargetRulesByVersion,
+  getPointCatalogEntriesByVersion,
+} from "@/server/services/point-catalog-service";
 import { asc, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -39,8 +44,7 @@ export async function getPointCatalogOverview() {
     .from(pointCatalogVersions)
     .orderBy(desc(pointCatalogVersions.importedAt));
 
-  const activeVersion =
-    versions.find((version) => version.status === "ACTIVE") ?? versions[0] ?? null;
+  const activeVersion = (await getActivePointCatalogVersion()) ?? versions[0] ?? null;
 
   if (!activeVersion) {
     return {
@@ -58,26 +62,8 @@ export async function getPointCatalogOverview() {
   }
 
   const [entries, rules] = await Promise.all([
-    db
-      .select({
-        id: pointCatalogEntries.id,
-        divisionName: pointCatalogEntries.divisionName,
-        externalCode: pointCatalogEntries.externalCode,
-        workName: pointCatalogEntries.workName,
-        pointValue: pointCatalogEntries.pointValue,
-        unitDescription: pointCatalogEntries.unitDescription,
-      })
-      .from(pointCatalogEntries)
-      .where(eq(pointCatalogEntries.versionId, activeVersion.id))
-      .orderBy(
-        asc(pointCatalogEntries.divisionName),
-        asc(pointCatalogEntries.externalRowNumber)
-      ),
-    db
-      .select()
-      .from(divisionPointTargetRules)
-      .where(eq(divisionPointTargetRules.versionId, activeVersion.id))
-      .orderBy(asc(divisionPointTargetRules.divisionName)),
+    getPointCatalogEntriesByVersion(activeVersion.id),
+    getDivisionTargetRulesByVersion(activeVersion.id),
   ]);
 
   const defaultRule = rules.find((rule) => rule.isDefault);

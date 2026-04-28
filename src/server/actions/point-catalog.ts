@@ -22,7 +22,7 @@ import {
   getDivisionTargetRulesByVersion,
   getPointCatalogEntriesByVersion,
 } from "@/server/services/point-catalog-service";
-import { asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 type CatalogEntryRow = {

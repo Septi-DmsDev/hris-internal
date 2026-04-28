@@ -22,6 +22,9 @@ export type PayrollPeriodStatus =
   | "PAID"
   | "LOCKED";
 
+export type PayrollAdjustmentType = "ADDITION" | "DEDUCTION";
+export type ManagerialKpiStatus = "DRAFT" | "VALIDATED" | "LOCKED";
+
 export type ActivityStatus =
   | "DRAFT"
   | "DIAJUKAN"

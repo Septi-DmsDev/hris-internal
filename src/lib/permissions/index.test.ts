@@ -1,6 +1,6 @@
 // src/lib/permissions/index.test.ts
 import { describe, it, expect } from "vitest";
-import { canAccess, ROLE_PERMISSIONS, requireRole, isUserRole } from "./index";
+import { canAccess, requireRole, isUserRole } from "./index";
 
 describe("canAccess", () => {
   it("SUPER_ADMIN bisa akses semua resource", () => {

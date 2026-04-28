@@ -54,6 +54,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"],
   },
   {
+    label: "Finance",
+    href: "/finance",
+    icon: <BarChart3 size={18} />,
+    roles: ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"],
+  },
+  {
     label: "Master Data",
     href: "/master/branches",
     icon: <Database size={18} />,

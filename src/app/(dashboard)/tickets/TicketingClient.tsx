@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -106,7 +106,7 @@ export default function TicketingClient({ role, tickets, employeeOptions }: Prop
     setPending(true); setError(null);
     try {
       const result = await createTicket(draft);
-      if (result && "error" in result) { setError(result.error); return; }
+      if (result && "error" in result) { setError(result.error ?? "Gagal mengajukan tiket."); return; }
       setSuccess("Tiket berhasil diajukan."); setCreateOpen(false); setDraft(createDraft());
       router.refresh();
     } finally { setPending(false); }
@@ -123,21 +123,21 @@ export default function TicketingClient({ role, tickets, employeeOptions }: Prop
       };
       const result =
         decision.action === "approve" ? await approveTicket(payload) : await rejectTicket(payload);
-      if (result && "error" in result) { setError(result.error); return; }
+      if (result && "error" in result) { setError(result.error ?? "Gagal memproses tiket."); return; }
       setSuccess(decision.action === "approve" ? "Tiket disetujui." : "Tiket ditolak.");
       setDecision(null); setDecisionNotes(""); setRejectionReason("");
       router.refresh();
     } finally { setPending(false); }
   }
 
-  async function handleCancel(ticketId: string) {
+  const handleCancel = useCallback(async (ticketId: string) => {
     setPending(true); setError(null);
     try {
       const result = await cancelTicket(ticketId);
-      if (result && "error" in result) { setError(result.error); return; }
+      if (result && "error" in result) { setError(result.error ?? "Gagal membatalkan tiket."); return; }
       setSuccess("Tiket dibatalkan."); router.refresh();
     } finally { setPending(false); }
-  }
+  }, [router]);
 
   const columns: ColumnDef<TicketRow>[] = useMemo(() => [
     {
@@ -213,7 +213,7 @@ export default function TicketingClient({ role, tickets, employeeOptions }: Prop
         );
       },
     },
-  ], [canApprove, pending]);
+  ], [canApprove, handleCancel, pending]);
 
   return (
     <div className="space-y-4">

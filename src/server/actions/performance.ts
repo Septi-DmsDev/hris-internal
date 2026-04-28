@@ -16,7 +16,6 @@ import {
 } from "@/lib/db/schema/point";
 import {
   checkRole,
-  getCurrentUserRole,
   getCurrentUserRoleRow,
   getUser,
   requireAuth,
@@ -50,10 +49,6 @@ const PERFORMANCE_ACTIVITY_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
 const PERFORMANCE_GENERATE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
 const APPROVABLE_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG"] as const;
 const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const;
-
-function toIsoDate(value: Date) {
-  return value.toISOString().slice(0, 10);
-}
 
 function toNumber(value: string | number | null | undefined) {
   if (value === null || value === undefined) return 0;

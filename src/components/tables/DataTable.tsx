@@ -40,6 +40,7 @@ export function DataTable<T extends Record<string, unknown>>({
       ? ""
       : ((columnFilters.find((filter) => filter.id === searchKey)?.value as string | undefined) ?? "");
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

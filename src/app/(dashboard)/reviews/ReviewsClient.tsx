@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
@@ -184,14 +184,14 @@ export default function ReviewsClient({ role, reviews, incidents, employeeOption
     } finally { setPending(false); }
   }
 
-  async function handleValidate(reviewId: string) {
+  const handleValidate = useCallback(async (reviewId: string) => {
     setPending(true); setError(null);
     try {
       const result = await validateReview(reviewId);
       if (result && "error" in result) { setError(result.error); return; }
       setSuccess("Review berhasil divalidasi."); router.refresh();
     } finally { setPending(false); }
-  }
+  }, [router]);
 
   async function handleCreateIncident() {
     setPending(true); setError(null);
@@ -253,7 +253,7 @@ export default function ReviewsClient({ role, reviews, incidents, employeeOption
         </Button>
       ) : null,
     },
-  ], [canValidate, pending]);
+  ], [canValidate, handleValidate, pending]);
 
   const incidentColumns: ColumnDef<IncidentRow>[] = useMemo(() => [
     {

@@ -6,7 +6,7 @@ import { divisions } from "@/lib/db/schema/master";
 import { employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { createReviewSchema, createIncidentSchema } from "@/lib/validations/hr";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
@@ -116,7 +116,6 @@ export async function createReview(input: unknown) {
   }
 
   const roleRow = await getCurrentUserRoleRow();
-  const user = await getUser();
 
   const scores = {
     sopQualityScore: parsed.data.sopQualityScore,

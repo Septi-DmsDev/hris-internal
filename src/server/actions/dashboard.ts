@@ -2,11 +2,10 @@
 
 import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
-import { divisions } from "@/lib/db/schema/master";
 import { dailyActivityEntries, monthlyPointPerformances } from "@/lib/db/schema/point";
 import { attendanceTickets, employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { requireAuth, getCurrentUserRoleRow } from "@/lib/auth/session";
-import { and, avg, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, avg, count, eq, inArray, sql } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
 export type DashboardStats = {

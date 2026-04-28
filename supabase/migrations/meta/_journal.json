@@ -22,6 +22,20 @@
       "when": 1777348580188,
       "tag": "0002_silent_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777359020357,
+      "tag": "0003_certain_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777362838440,
+      "tag": "0004_broken_monster_badoon",
+      "breakpoints": true
     }
   ]
 }

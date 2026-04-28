@@ -3,6 +3,7 @@ import postgres from "postgres";
 import * as authSchema from "./schema/auth";
 import * as employeeSchema from "./schema/employee";
 import * as masterSchema from "./schema/master";
+import * as pointSchema from "./schema/point";
 
 const globalForDb = globalThis as unknown as {
   db: ReturnType<typeof drizzle> | undefined;
@@ -10,7 +11,9 @@ const globalForDb = globalThis as unknown as {
 
 function createDb() {
   const client = postgres(process.env.DATABASE_URL!, { prepare: false });
-  return drizzle(client, { schema: { ...authSchema, ...employeeSchema, ...masterSchema } });
+  return drizzle(client, {
+    schema: { ...authSchema, ...employeeSchema, ...masterSchema, ...pointSchema },
+  });
 }
 
 export const db = globalForDb.db ?? createDb();

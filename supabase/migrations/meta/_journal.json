@@ -15,6 +15,13 @@
       "when": 1777347774091,
       "tag": "0001_fluffy_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777348580188,
+      "tag": "0002_silent_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

@@ -39,7 +39,7 @@ export default async function PerformancePage() {
   const activityRecords = workspace.activityEntries as Array<{
     id: string;
     employeeId: string;
-    pointCatalogEntryId: string;
+    pointCatalogEntryId: string | null;
     employeeName: string | null;
     employeeCode: string | null;
     employeeDivisionId: string | null;
@@ -131,7 +131,7 @@ export default async function PerformancePage() {
   const activityRows: PerformanceActivityRow[] = activityRecords.map((entry) => ({
     id: entry.id,
     employeeId: entry.employeeId,
-    pointCatalogEntryId: entry.pointCatalogEntryId,
+    pointCatalogEntryId: entry.pointCatalogEntryId ?? "",
     employeeName: entry.employeeName ?? "-",
     employeeCode: entry.employeeCode ?? "-",
     employeeDivisionId: entry.employeeDivisionId,

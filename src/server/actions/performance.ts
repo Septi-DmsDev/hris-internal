@@ -118,6 +118,7 @@ async function getScopedActivityEntries(role: UserRole, divisionId: string | nul
     .select({
       id: dailyActivityEntries.id,
       employeeId: dailyActivityEntries.employeeId,
+      pointCatalogEntryId: dailyActivityEntries.pointCatalogEntryId,
       employeeName: employees.fullName,
       employeeCode: employees.employeeCode,
       employeeDivisionId: employees.divisionId,
@@ -686,4 +687,30 @@ export async function generateMonthlyPerformance(input: unknown) {
 
   revalidatePath("/performance");
   return { success: true, generatedEmployees: targetEmployees.length };
+}
+
+export async function deleteActivityEntry(activityEntryId: string) {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  if (authError) return authError;
+
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  const [existingEntry] = await db
+    .select()
+    .from(dailyActivityEntries)
+    .where(eq(dailyActivityEntries.id, activityEntryId))
+    .limit(1);
+
+  if (!existingEntry) return { error: "Aktivitas tidak ditemukan." };
+  if (existingEntry.status !== "DRAFT") {
+    return { error: "Hanya aktivitas berstatus DRAFT yang dapat dihapus." };
+  }
+  const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+  if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
+
+  await db.delete(dailyActivityEntries).where(eq(dailyActivityEntries.id, activityEntryId));
+
+  revalidatePath("/performance");
+  return { success: true };
 }

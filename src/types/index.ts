@@ -46,11 +46,14 @@ export type TicketStatus =
 
 export type TicketType = "CUTI" | "SAKIT" | "IZIN" | "EMERGENCY" | "SETENGAH_HARI";
 
-export type UserRole =
-  | "SUPER_ADMIN"
-  | "HRD"
-  | "FINANCE"
-  | "SPV"
-  | "TEAMWORK"
-  | "MANAGERIAL"
-  | "PAYROLL_VIEWER";
+export const USER_ROLES = [
+  "SUPER_ADMIN",
+  "HRD",
+  "FINANCE",
+  "SPV",
+  "TEAMWORK",
+  "MANAGERIAL",
+  "PAYROLL_VIEWER",
+] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];

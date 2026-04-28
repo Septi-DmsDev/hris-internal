@@ -6,6 +6,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   flexRender,
+  type ColumnFiltersState,
   type ColumnDef,
 } from "@tanstack/react-table";
 import {
@@ -20,20 +21,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 
-type DataTableProps<T> = {
+type DataTableProps<T extends Record<string, unknown>> = {
   data: T[];
   columns: ColumnDef<T>[];
   searchKey?: string;
   searchPlaceholder?: string;
 };
 
-export function DataTable<T>({
+export function DataTable<T extends Record<string, unknown>>({
   data,
   columns,
   searchKey,
   searchPlaceholder = "Cari...",
 }: DataTableProps<T>) {
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const searchValue =
+    searchKey === undefined
+      ? ""
+      : ((columnFilters.find((filter) => filter.id === searchKey)?.value as string | undefined) ?? "");
 
   const table = useReactTable({
     data,
@@ -41,8 +46,8 @@ export function DataTable<T>({
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    state: { globalFilter },
-    onGlobalFilterChange: setGlobalFilter,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
     initialState: { pagination: { pageSize: 20 } },
   });
 
@@ -51,8 +56,11 @@ export function DataTable<T>({
       {searchKey !== undefined && (
         <Input
           placeholder={searchPlaceholder}
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
+          value={searchValue}
+          onChange={(e) => {
+            const value = e.target.value;
+            setColumnFilters(value ? [{ id: searchKey, value }] : []);
+          }}
           className="max-w-xs"
         />
       )}

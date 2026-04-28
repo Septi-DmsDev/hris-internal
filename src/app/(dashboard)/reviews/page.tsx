@@ -11,25 +11,28 @@ import type { UserRole } from "@/types";
 export default async function ReviewsPage() {
   const { role, reviews, incidents } = await getReviews();
   const roleRow = await getCurrentUserRoleRow();
+  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD", "SPV"].includes(role);
 
-  const employeeRows = await db
-    .select({
-      id: employees.id,
-      employeeCode: employees.employeeCode,
-      fullName: employees.fullName,
-      divisionName: divisions.name,
-    })
-    .from(employees)
-    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(
-      and(
-        eq(employees.isActive, true),
-        role === "SPV" && roleRow.divisionId
-          ? eq(employees.divisionId, roleRow.divisionId)
-          : undefined,
-      )
-    )
-    .orderBy(asc(employees.fullName));
+  const employeeRows = canManageEmployeeOptions
+    ? await db
+        .select({
+          id: employees.id,
+          employeeCode: employees.employeeCode,
+          fullName: employees.fullName,
+          divisionName: divisions.name,
+        })
+        .from(employees)
+        .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+        .where(
+          and(
+            eq(employees.isActive, true),
+            role === "SPV" && roleRow.divisionId
+              ? eq(employees.divisionId, roleRow.divisionId)
+              : undefined,
+          )
+        )
+        .orderBy(asc(employees.fullName))
+    : [];
 
   const fmt = (d: Date | string | null) =>
     d ? format(new Date(d as string), "yyyy-MM-dd") : "-";

@@ -1049,10 +1049,14 @@ export async function generatePayrollPreview(input: unknown) {
     );
 
     const hasApprovedAbsence = approvedUnpaidLeaveDays + approvedPaidLeaveDays > 0;
+    const teamworkPerformancePercent =
+      performance && toNumber(performance.totalTargetPoints) > 0
+        ? (toNumber(performance.totalApprovedPoints) / toNumber(performance.totalTargetPoints)) * 100
+        : 0;
     const performancePercent =
       employee.employeeGroup === "MANAGERIAL"
         ? toNumber(managerialKpi?.performancePercent)
-        : toNumber(performance?.performancePercent);
+        : teamworkPerformancePercent;
     const fulltimeEligible = !hasApprovedAbsence;
     const disciplineEligible = fulltimeEligible && !hasLateIncident && performancePercent >= 80;
 

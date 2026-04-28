@@ -11,26 +11,29 @@ import type { UserRole } from "@/types";
 export default async function TicketingPage() {
   const { role, tickets } = await getTickets();
   const roleRow = await getCurrentUserRoleRow();
+  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD", "SPV"].includes(role);
 
-  const employeeRows = await db
-    .select({
-      id: employees.id,
-      employeeCode: employees.employeeCode,
-      fullName: employees.fullName,
-      divisionId: employees.divisionId,
-      divisionName: divisions.name,
-    })
-    .from(employees)
-    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(
-      and(
-        eq(employees.isActive, true),
-        role === "SPV" && roleRow.divisionId
-          ? eq(employees.divisionId, roleRow.divisionId)
-          : undefined,
-      )
-    )
-    .orderBy(asc(employees.fullName));
+  const employeeRows = canManageEmployeeOptions
+    ? await db
+        .select({
+          id: employees.id,
+          employeeCode: employees.employeeCode,
+          fullName: employees.fullName,
+          divisionId: employees.divisionId,
+          divisionName: divisions.name,
+        })
+        .from(employees)
+        .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+        .where(
+          and(
+            eq(employees.isActive, true),
+            role === "SPV" && roleRow.divisionId
+              ? eq(employees.divisionId, roleRow.divisionId)
+              : undefined,
+          )
+        )
+        .orderBy(asc(employees.fullName))
+    : [];
 
   const ticketRows = tickets.map((t) => ({
     ...t,

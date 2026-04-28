@@ -57,7 +57,7 @@ function toNumber(value: string | number | null | undefined) {
 }
 
 function ensurePerformanceReadRole(role: UserRole) {
-  if (!["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL"].includes(role)) {
+  if (!["SUPER_ADMIN", "HRD", "SPV"].includes(role)) {
     return false;
   }
   return true;

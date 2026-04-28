@@ -18,18 +18,38 @@ export async function requireAuth() {
 }
 
 export async function checkRole(allowed: UserRole[]): Promise<{ error: string } | null> {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const roleRow = await getCurrentUserRoleRow();
 
-  const [roleRow] = await db
-    .select({ role: userRoles.role })
-    .from(userRoles)
-    .where(eq(userRoles.userId, user.id))
-    .limit(1);
-
-  if (!roleRow || !allowed.includes(roleRow.role as UserRole)) {
+  if (!allowed.includes(roleRow.role as UserRole)) {
     return { error: "Akses ditolak. Hanya HRD dan Super Admin yang dapat melakukan tindakan ini." };
   }
 
   return null;
+}
+
+export async function getCurrentUserRoleRow() {
+  const user = await getUser();
+  if (!user) redirect("/login");
+
+  const [roleRow] = await db
+    .select({
+      id: userRoles.id,
+      userId: userRoles.userId,
+      role: userRoles.role,
+      divisionId: userRoles.divisionId,
+    })
+    .from(userRoles)
+    .where(eq(userRoles.userId, user.id))
+    .limit(1);
+
+  if (!roleRow) {
+    redirect("/login");
+  }
+
+  return roleRow;
+}
+
+export async function getCurrentUserRole(): Promise<UserRole> {
+  const roleRow = await getCurrentUserRoleRow();
+  return roleRow.role as UserRole;
 }

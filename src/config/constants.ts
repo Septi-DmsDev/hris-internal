@@ -1,4 +1,14 @@
-export const POINT_TARGET_HARIAN = 12_000;
+export const POINT_TARGET_HARIAN = 13_000;
+
+export const DIVISION_POINT_TARGET_OVERRIDES: Record<string, number> = {
+  OFFSET: 39_000,
+};
+
+export function resolvePointTargetForDivision(divisionName?: string | null) {
+  const normalizedDivision = divisionName?.trim().toUpperCase();
+  if (!normalizedDivision) return POINT_TARGET_HARIAN;
+  return DIVISION_POINT_TARGET_OVERRIDES[normalizedDivision] ?? POINT_TARGET_HARIAN;
+}
 
 export const GAJI_POKOK_REGULER_DEFAULT = 1_200_000;
 

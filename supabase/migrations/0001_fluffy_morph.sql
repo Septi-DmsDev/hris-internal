@@ -1,0 +1,1 @@
+ALTER TABLE "work_schedule_days" ALTER COLUMN "target_points" SET DEFAULT 13000;

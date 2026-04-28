@@ -1,0 +1,48 @@
+import { z } from "zod";
+
+export const createTicketSchema = z.object({
+  employeeId: z.string().uuid("Karyawan tidak valid."),
+  ticketType: z.enum(["CUTI", "SAKIT", "IZIN", "EMERGENCY", "SETENGAH_HARI"]),
+  startDate: z.coerce.date({ message: "Tanggal mulai wajib diisi." }),
+  endDate: z.coerce.date({ message: "Tanggal akhir wajib diisi." }),
+  reason: z.string().trim().min(5, "Alasan minimal 5 karakter."),
+  attachmentUrl: z.string().trim().url().optional().or(z.literal("")),
+}).superRefine((v, ctx) => {
+  if (v.endDate < v.startDate) {
+    ctx.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh sebelum tanggal mulai." });
+  }
+});
+
+export const ticketDecisionSchema = z.object({
+  ticketId: z.string().uuid("Tiket tidak valid."),
+  notes: z.string().trim().optional().transform((v) => v || undefined),
+  rejectionReason: z.string().trim().optional().transform((v) => v || undefined),
+  payrollImpact: z.enum(["UNPAID", "PAID_QUOTA_MONTHLY", "PAID_QUOTA_ANNUAL"]).optional(),
+});
+
+export const createReviewSchema = z.object({
+  employeeId: z.string().uuid("Karyawan tidak valid."),
+  periodStartDate: z.coerce.date({ message: "Periode awal wajib diisi." }),
+  periodEndDate: z.coerce.date({ message: "Periode akhir wajib diisi." }),
+  sopQualityScore: z.coerce.number().int().min(1).max(5),
+  instructionScore: z.coerce.number().int().min(1).max(5),
+  attendanceDisciplineScore: z.coerce.number().int().min(1).max(5),
+  initiativeTeamworkScore: z.coerce.number().int().min(1).max(5),
+  processMissScore: z.coerce.number().int().min(1).max(5),
+  reviewNotes: z.string().trim().optional().transform((v) => v || undefined),
+});
+
+export const createIncidentSchema = z.object({
+  employeeId: z.string().uuid("Karyawan tidak valid."),
+  incidentType: z.enum(["KOMPLAIN", "MISS_PROSES", "TELAT", "AREA_KOTOR", "PELANGGARAN", "SP1", "SP2", "PENGHARGAAN"]),
+  incidentDate: z.coerce.date({ message: "Tanggal kejadian wajib diisi." }),
+  description: z.string().trim().min(5, "Deskripsi minimal 5 karakter."),
+  impact: z.enum(["REVIEW_ONLY", "PAYROLL_POTENTIAL", "NONE"]).default("REVIEW_ONLY"),
+  payrollDeduction: z.coerce.number().min(0).optional(),
+  notes: z.string().trim().optional().transform((v) => v || undefined),
+});
+
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+export type TicketDecisionInput = z.infer<typeof ticketDecisionSchema>;
+export type CreateReviewInput = z.infer<typeof createReviewSchema>;
+export type CreateIncidentInput = z.infer<typeof createIncidentSchema>;

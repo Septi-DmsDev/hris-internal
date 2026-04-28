@@ -19,7 +19,7 @@ Dashboard HRD internal untuk mengelola karyawan, poin kinerja harian, review, ti
 |---|---|---|
 | Phase 1 | Profiling Karyawan & Master Data Foundation | ✅ Selesai |
 | Phase 2 | Performance Management Engine | ✅ Selesai |
-| Phase 3 | Payroll System & Finance Closing | ⬜ Belum dimulai |
+| Phase 3 | Payroll System & Finance Closing | ✅ Selesai |
 
 ---
 

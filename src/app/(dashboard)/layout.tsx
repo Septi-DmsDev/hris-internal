@@ -1,10 +1,20 @@
+import { cache } from "react";
+import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { userRoles } from "@/lib/db/schema/auth";
 import { eq } from "drizzle-orm";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
-import type { UserRole } from "@/types";
+
+const getUserRole = cache(async (userId: string) => {
+  const [row] = await db
+    .select()
+    .from(userRoles)
+    .where(eq(userRoles.userId, userId))
+    .limit(1);
+  return row;
+});
 
 export default async function DashboardLayout({
   children,
@@ -12,14 +22,13 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const user = await requireAuth();
+  const userRoleRow = await getUserRole(user.id);
 
-  const [userRoleRow] = await db
-    .select()
-    .from(userRoles)
-    .where(eq(userRoles.userId, user.id))
-    .limit(1);
+  if (!userRoleRow) {
+    redirect("/login");
+  }
 
-  const role = (userRoleRow?.role ?? "TEAMWORK") as UserRole;
+  const role = userRoleRow.role;
 
   return (
     <div className="flex min-h-screen">

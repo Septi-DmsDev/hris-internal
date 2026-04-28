@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as authSchema from "./schema/auth";
+import * as employeeSchema from "./schema/employee";
 import * as masterSchema from "./schema/master";
 
 const globalForDb = globalThis as unknown as {
@@ -9,7 +10,7 @@ const globalForDb = globalThis as unknown as {
 
 function createDb() {
   const client = postgres(process.env.DATABASE_URL!, { prepare: false });
-  return drizzle(client, { schema: { ...authSchema, ...masterSchema } });
+  return drizzle(client, { schema: { ...authSchema, ...employeeSchema, ...masterSchema } });
 }
 
 export const db = globalForDb.db ?? createDb();

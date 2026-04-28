@@ -31,13 +31,14 @@ Payroll harus memakai snapshot awal periode untuk divisi payroll, jabatan, grade
 Target harian:
 
 ```text
-12.000 poin per hari
+Default 13.000 poin per hari
+Divisi Offset 39.000 poin per hari
 ```
 
 Rumus:
 
 ```text
-Target Bulanan = 12.000 x jumlah hari masuk target
+Target Bulanan = target harian hasil resolusi divisi snapshot x jumlah hari masuk target
 Persentase Kinerja = total poin approved / target bulanan x 100%
 ```
 
@@ -45,9 +46,9 @@ Status hari:
 
 | Status | Masuk target | Target | Poin aktual |
 |---|---:|---:|---:|
-| Kerja normal | Ya | 12.000 | sesuai input approved |
-| Setengah hari | Ya | 12.000 | sesuai input approved |
-| Alpa | Ya | 12.000 | 0 |
+| Kerja normal | Ya | 13.000 default / 39.000 Offset | sesuai input approved |
+| Setengah hari | Ya | 13.000 default / 39.000 Offset | sesuai input approved |
+| Alpa | Ya | 13.000 default / 39.000 Offset | 0 |
 | Cuti approved | Tidak | 0 | 0 |
 | Sakit approved | Tidak | 0 | 0 |
 | Izin approved | Tidak | 0 | 0 |
@@ -72,6 +73,7 @@ Jika mencapai 165%, bonus prestasi yang didapat hanya 165%, bukan 140% + 165%.
 
 - TW input aktivitas maksimal H+1 dari tanggal kerja.
 - TW hanya bisa memilih pekerjaan sesuai divisi aktual harian.
+- Target performa harian dan bulanan mengikuti divisi payroll snapshot / divisi awal periode.
 - Total poin = jumlah x poin master.
 - SPV hanya bisa approve/tolak, tidak bisa mengubah data.
 - SPV approve/tolak maksimal H+2 setelah input.
@@ -104,6 +106,25 @@ Standar minimal lulus training:
 | Logistic | 80% |
 | Offset | 80% |
 | Blangko / Pabrik | 80% |
+
+## Resolusi Target Divisi
+
+Rule target poin:
+
+```text
+Jika divisi payroll snapshot = Offset -> target harian = 39.000
+Jika divisi payroll snapshot != Offset -> target harian = 13.000
+```
+
+Rule ini dipakai untuk:
+- target harian,
+- target bulanan,
+- persentase performa bulanan,
+- evaluasi training berbasis poin.
+
+Jika karyawan membantu divisi lain di tengah periode:
+- daftar pekerjaan tetap mengikuti divisi aktual harian;
+- target performa tetap mengikuti divisi snapshot periode berjalan.
 
 ## Review Karyawan
 

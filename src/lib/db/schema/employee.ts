@@ -10,6 +10,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { POINT_TARGET_HARIAN } from "@/config/constants";
 import { branches, divisions, employeeGroupEnum, grades, positions } from "./master";
 
 export const employmentStatusEnum = pgEnum("employment_status", [
@@ -133,7 +134,7 @@ export const workScheduleDays = pgTable("work_schedule_days", {
   isWorkingDay: boolean("is_working_day").notNull().default(true),
   startTime: varchar("start_time", { length: 5 }),
   endTime: varchar("end_time", { length: 5 }),
-  targetPoints: integer("target_points").notNull().default(12000),
+  targetPoints: integer("target_points").notNull().default(POINT_TARGET_HARIAN),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });

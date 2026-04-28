@@ -248,7 +248,7 @@ Karena target poin bulanan mengikuti jadwal masing-masing karyawan, profil harus
 |---|---|
 | status_hari | Kerja, Off, Cuti, Sakit, Izin, Alpa, Setengah Hari |
 | masuk_target_poin | Ya/Tidak |
-| target_poin_harian | Default 12.000 jika masuk target |
+| target_poin_harian | Default 13.000 jika masuk target, override 39.000 untuk divisi Offset berdasarkan divisi payroll snapshot |
 | sumber_status | Schedule, Ticket Approved, HRD Override, Payroll Locked |
 
 ---
@@ -340,13 +340,22 @@ Kelompok MANAGERIAL seperti Kabag, SPV, TL, dan Staff tidak memakai sistem poin.
 Target dasar:
 
 ```text
-Target harian = 12.000 poin
+Default target harian = 13.000 poin
+Override target harian divisi Offset = 39.000 poin
+```
+
+Rule resolusi target:
+
+```text
+Target harian mengikuti divisi payroll snapshot / divisi awal periode.
+Jika divisi payroll snapshot = Offset, target harian = 39.000.
+Jika bukan Offset, target harian = 13.000.
 ```
 
 Target bulanan:
 
 ```text
-Target Poin Bulanan = 12.000 x Jumlah Hari Masuk Target
+Target Poin Bulanan = Target Harian Terselesaikan x Jumlah Hari Masuk Target
 ```
 
 Periode rekap:
@@ -359,9 +368,9 @@ Tanggal 26 bulan sebelumnya sampai tanggal 25 bulan berjalan
 
 | Status Hari | Masuk Target? | Target Hari Itu | Poin Aktual |
 |---|---:|---:|---:|
-| Kerja normal | Ya | 12.000 | Sesuai input approved |
-| Masuk setengah hari | Ya | 12.000 | Sesuai input approved |
-| Alpa / tanpa izin | Ya | 12.000 | 0 |
+| Kerja normal | Ya | 13.000 default / 39.000 Offset | Sesuai input approved |
+| Masuk setengah hari | Ya | 13.000 default / 39.000 Offset | Sesuai input approved |
+| Alpa / tanpa izin | Ya | 13.000 default / 39.000 Offset | 0 |
 | Cuti approved | Tidak | 0 | 0 |
 | Sakit approved | Tidak | 0 | 0 |
 | Izin approved | Tidak | 0 | 0 |
@@ -373,13 +382,22 @@ Tanggal 26 bulan sebelumnya sampai tanggal 25 bulan berjalan
 Persentase Kinerja Bulanan = Total Poin Approved / Target Poin Bulanan x 100%
 ```
 
-Contoh:
+Contoh divisi non-Offset:
 
 ```text
 Hari masuk target = 22 hari
-Target bulanan = 22 x 12.000 = 264.000 poin
-Total poin approved = 237.600 poin
-Persentase = 237.600 / 264.000 x 100% = 90%
+Target bulanan = 22 x 13.000 = 286.000 poin
+Total poin approved = 257.400 poin
+Persentase = 257.400 / 286.000 x 100% = 90%
+```
+
+Contoh divisi Offset:
+
+```text
+Hari masuk target = 22 hari
+Target bulanan = 22 x 39.000 = 858.000 poin
+Total poin approved = 772.200 poin
+Persentase = 772.200 / 858.000 x 100% = 90%
 ```
 
 ---
@@ -552,14 +570,14 @@ Aturan:
 
 ```text
 Input pekerjaan mengikuti aktivitas aktual harian.
-Payroll/bonus tetap memakai snapshot divisi awal periode.
+Payroll/bonus/performa target tetap memakai snapshot divisi awal periode.
 ```
 
 Jika karyawan pindah divisi di tengah periode:
 
 ```text
-Perhitungan bonus tetap mengikuti divisi sebelumnya sampai periode berjalan selesai.
-Divisi baru efektif untuk periode payroll berikutnya.
+Perhitungan bonus dan target poin tetap mengikuti divisi snapshot sebelumnya sampai periode berjalan selesai.
+Divisi baru efektif untuk target performa dan payroll di periode berikutnya.
 ```
 
 ---
@@ -655,7 +673,7 @@ Jenis tiket:
 | Sakit | Target 0 jika approved | Paid atau unpaid tergantung kuota/rule |
 | Izin | Target 0 jika approved | Paid atau unpaid tergantung pilihan/rule |
 | Emergency | Target 0 jika approved | Tergantung validasi HRD/SPV |
-| Setengah Hari | Tetap target 12.000 | Tergantung rule payroll |
+| Setengah Hari | Tetap target penuh sesuai hasil resolusi divisi | Tergantung rule payroll |
 
 ### Workflow Ticketing
 
@@ -1352,35 +1370,36 @@ Payroll harus menampilkan exception sebelum finalisasi:
 1. Dashboard dibagi menjadi 3 ekosistem utama: Profiling Karyawan, Manajemen Poin Kinerja, dan Payroll System.
 2. Modul poin hanya untuk TEAMWORK/TW/Operator.
 3. Managerial memakai KPI, bukan poin.
-4. Target harian poin adalah 12.000.
-5. Periode payroll dan performa adalah tanggal 26 sampai 25.
-6. Target bulanan mengikuti jadwal kerja masing-masing karyawan.
-7. Cuti/sakit/izin approved tidak masuk target poin.
-8. Alpa tetap masuk target dan poin aktual 0.
-9. Setengah hari tetap target 12.000.
-10. Poin harus approved SPV agar masuk rekap.
-11. SPV hanya approve/tolak, tidak mengubah data.
-12. HRD boleh override dengan alasan wajib.
-13. Master poin dikunci dengan versioning dan snapshot.
-14. Bonus kinerja TW memakai level 80/90/100.
-15. Bonus prestasi aktif di 140% dan 165%.
-16. Jika 165%, hanya dapat bonus prestasi 165%.
-17. Persentase tidak dibulatkan untuk menentukan level bonus.
-18. Training gaji Rp1.000.000/bulan dan prorate jika masuk tengah periode.
-19. Lulus training di tengah periode efektif reguler periode berikutnya.
-20. Pindah divisi tengah periode: input mengikuti aktivitas aktual, payroll mengikuti snapshot awal periode.
-21. Review karyawan memakai 5 aspek utama.
-22. Ticketing izin/sakit/cuti memengaruhi target poin dan payroll impact.
-23. Secara default izin/sakit/cuti harian tidak dibayar.
-24. Karyawan > 1 tahun dengan tunjangan tahunan mendapat kuota cuti bulanan 1 kali dan cuti tahunan sampai 3 kali.
-25. Izin/sakit pertama otomatis mengambil kuota cuti bulanan jika eligible.
-26. Izin berikutnya bisa memilih cuti tahunan atau izin biasa/unpaid.
-27. Gaji pokok reguler default Rp1.200.000.
-28. Bonus fulltime hanya jika benar-benar hadir penuh tanpa izin/sakit/cuti.
-29. Bonus disiplin butuh tidak telat, tidak alpa, dan performa minimal 80%.
-30. Overtime logic dipertahankan sesuai code finance.
-31. SP penalty diterapkan ke bonus saja, bukan gaji pokok.
-32. Jika payroll sudah dibayar, adjustment masuk periode berikutnya.
+4. Default target harian poin adalah 13.000.
+5. Divisi Offset memakai target harian khusus 39.000.
+6. Periode payroll dan performa adalah tanggal 26 sampai 25.
+7. Target bulanan mengikuti jadwal kerja masing-masing karyawan dan target harian hasil resolusi divisi snapshot.
+8. Cuti/sakit/izin approved tidak masuk target poin.
+9. Alpa tetap masuk target dan poin aktual 0.
+10. Setengah hari tetap memakai target penuh sesuai hasil resolusi target divisi.
+11. Poin harus approved SPV agar masuk rekap.
+12. SPV hanya approve/tolak, tidak mengubah data.
+13. HRD boleh override dengan alasan wajib.
+14. Master poin dikunci dengan versioning dan snapshot.
+15. Bonus kinerja TW memakai level 80/90/100.
+16. Bonus prestasi aktif di 140% dan 165%.
+17. Jika 165%, hanya dapat bonus prestasi 165%.
+18. Persentase tidak dibulatkan untuk menentukan level bonus.
+19. Training gaji Rp1.000.000/bulan dan prorate jika masuk tengah periode.
+20. Lulus training di tengah periode efektif reguler periode berikutnya.
+21. Pindah divisi tengah periode: input mengikuti aktivitas aktual, target performa dan payroll mengikuti snapshot awal periode.
+22. Review karyawan memakai 5 aspek utama.
+23. Ticketing izin/sakit/cuti memengaruhi target poin dan payroll impact.
+24. Secara default izin/sakit/cuti harian tidak dibayar.
+25. Karyawan > 1 tahun dengan tunjangan tahunan mendapat kuota cuti bulanan 1 kali dan cuti tahunan sampai 3 kali.
+26. Izin/sakit pertama otomatis mengambil kuota cuti bulanan jika eligible.
+27. Izin berikutnya bisa memilih cuti tahunan atau izin biasa/unpaid.
+28. Gaji pokok reguler default Rp1.200.000.
+29. Bonus fulltime hanya jika benar-benar hadir penuh tanpa izin/sakit/cuti.
+30. Bonus disiplin butuh tidak telat, tidak alpa, dan performa minimal 80%.
+31. Overtime logic dipertahankan sesuai code finance.
+32. SP penalty diterapkan ke bonus saja, bukan gaji pokok.
+33. Jika payroll sudah dibayar, adjustment masuk periode berikutnya.
 
 ---
 
@@ -1408,10 +1427,11 @@ Konteks utama:
 - Profiling Karyawan menjadi fondasi data karyawan, divisi, jabatan, grade, status kerja, jadwal, SPV, dan payroll snapshot.
 - TEAMWORK/TW/Operator dinilai menggunakan Manajemen Poin Kinerja.
 - MANAGERIAL seperti Kabag, SPV, TL, dan Staff dinilai menggunakan KPI, bukan poin.
-- Target poin harian adalah 12.000.
+- Default target poin harian adalah 13.000.
+- Divisi Offset memakai target poin harian 39.000.
 - Periode performa dan payroll adalah tanggal 26 sampai 25.
-- Target bulanan = 12.000 x jumlah hari masuk target sesuai jadwal karyawan.
-- Cuti/sakit/izin approved tidak masuk target. Alpa tetap masuk target dengan poin 0. Setengah hari tetap target 12.000.
+- Target bulanan = target harian hasil resolusi divisi snapshot x jumlah hari masuk target sesuai jadwal karyawan.
+- Cuti/sakit/izin approved tidak masuk target. Alpa tetap masuk target dengan poin 0. Setengah hari tetap target penuh sesuai hasil resolusi divisi.
 - TW input aktivitas maksimal H+1. SPV approve/tolak maksimal H+2. Jika ditolak, TW revisi maksimal H+1 setelah penolakan. SPV approve ulang maksimal H+1 setelah submit ulang.
 - Bonus kinerja TW: <80% tidak dapat, 80%-89,99% bonus 80%, 90%-99,99% bonus 90%, >=100% bonus 100%.
 - Bonus prestasi: 140%-164,99% mendapat prestasi 140%, >=165% mendapat prestasi 165% saja.

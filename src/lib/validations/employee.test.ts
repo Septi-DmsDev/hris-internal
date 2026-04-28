@@ -1,3 +1,4 @@
+import { POINT_TARGET_HARIAN } from "@/config/constants";
 import { describe, expect, it } from "vitest";
 import { employeeSchema, workScheduleSchema } from "./employee";
 
@@ -53,12 +54,12 @@ describe("workScheduleSchema", () => {
       isActive: true,
       days: [
         { dayOfWeek: 0, dayStatus: "OFF", isWorkingDay: false, targetPoints: 0 },
-        { dayOfWeek: 1, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: 12000 },
-        { dayOfWeek: 2, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: 12000 },
-        { dayOfWeek: 3, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: 12000 },
-        { dayOfWeek: 4, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: 12000 },
-        { dayOfWeek: 5, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: 12000 },
-        { dayOfWeek: 5, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: 12000 },
+        { dayOfWeek: 1, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
+        { dayOfWeek: 2, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
+        { dayOfWeek: 3, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
+        { dayOfWeek: 4, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
+        { dayOfWeek: 5, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
+        { dayOfWeek: 5, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
       ],
     });
 
@@ -79,7 +80,7 @@ describe("workScheduleSchema", () => {
         isWorkingDay: dayOfWeek !== 0,
         startTime: dayOfWeek === 1 ? "" : dayOfWeek === 0 ? undefined : "08:00",
         endTime: dayOfWeek === 1 ? "" : dayOfWeek === 0 ? undefined : "17:00",
-        targetPoints: dayOfWeek === 0 ? 0 : 12000,
+        targetPoints: dayOfWeek === 0 ? 0 : POINT_TARGET_HARIAN,
       })),
     });
 

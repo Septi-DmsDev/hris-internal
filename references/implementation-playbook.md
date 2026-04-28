@@ -57,6 +57,11 @@ Rule engine harus pure sebisa mungkin:
 - minim side effect;
 - mudah ditest.
 
+Untuk modul poin kinerja, pisahkan resolver rule berikut:
+- resolver target poin harian berbasis divisi snapshot;
+- resolver daftar pekerjaan berbasis divisi aktual harian;
+- resolver performa bulanan dari poin approved vs target snapshot.
+
 ## 5. Database Rules
 
 Gunakan snake_case untuk nama tabel/kolom database.
@@ -124,6 +129,7 @@ Risiko/catatan:
 ## 9. Larangan
 
 - Jangan hardcode rule payroll di komponen UI.
+- Jangan hardcode target poin divisi langsung di banyak tempat; gunakan satu resolver rule server-side.
 - Jangan menggunakan service role key di client.
 - Jangan menghapus histori payroll, aktivitas, approval, atau ticket tanpa audit.
 - Jangan mengubah master poin lama tanpa versioning.

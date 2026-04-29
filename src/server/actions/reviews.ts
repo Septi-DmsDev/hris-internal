@@ -6,11 +6,12 @@ import { divisions } from "@/lib/db/schema/master";
 import { employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { createReviewSchema, createIncidentSchema } from "@/lib/validations/hr";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
 const REVIEW_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const SELF_SERVICE_REVIEW_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
 
 // Bobot aspek review
 const WEIGHTS = {
@@ -62,8 +63,28 @@ export async function getReviews() {
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
 
-  if (!REVIEW_ROLES.includes(role)) {
+  const isSelfService = SELF_SERVICE_REVIEW_ROLES.includes(role);
+
+  // TEAMWORK/MANAGERIAL tanpa employeeId → tidak bisa melihat apapun
+  if (isSelfService && !roleRow.employeeId) {
     return { role, reviews: [], incidents: [] };
+  }
+
+  // Role lain yang tidak ada di daftar → kosong
+  if (!REVIEW_ROLES.includes(role) && !isSelfService) {
+    return { role, reviews: [], incidents: [] };
+  }
+
+  function reviewWhereClause() {
+    if (isSelfService) return eq(employeeReviews.employeeId, roleRow.employeeId!);
+    if (role === "SPV" && roleRow.divisionId) return eq(employees.divisionId, roleRow.divisionId);
+    return undefined;
+  }
+
+  function incidentWhereClause() {
+    if (isSelfService) return eq(incidentLogs.employeeId, roleRow.employeeId!);
+    if (role === "SPV" && roleRow.divisionId) return eq(employees.divisionId, roleRow.divisionId);
+    return undefined;
   }
 
   const rows = await db
@@ -89,11 +110,7 @@ export async function getReviews() {
     .from(employeeReviews)
     .leftJoin(employees, eq(employeeReviews.employeeId, employees.id))
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(
-      role === "SPV" && roleRow.divisionId
-        ? eq(employees.divisionId, roleRow.divisionId)
-        : undefined
-    )
+    .where(reviewWhereClause())
     .orderBy(desc(employeeReviews.createdAt));
 
   const incidents = await db
@@ -115,11 +132,7 @@ export async function getReviews() {
     .from(incidentLogs)
     .leftJoin(employees, eq(incidentLogs.employeeId, employees.id))
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(
-      role === "SPV" && roleRow.divisionId
-        ? eq(employees.divisionId, roleRow.divisionId)
-        : undefined
-    )
+    .where(incidentWhereClause())
     .orderBy(desc(incidentLogs.incidentDate));
 
   return { role, reviews: rows, incidents };

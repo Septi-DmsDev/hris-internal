@@ -46,6 +46,7 @@ import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
 const PERFORMANCE_ACTIVITY_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const PERFORMANCE_SELF_SERVICE_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
 const PERFORMANCE_GENERATE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
 const APPROVABLE_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG"] as const;
 const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const;
@@ -57,10 +58,7 @@ function toNumber(value: string | number | null | undefined) {
 }
 
 function ensurePerformanceReadRole(role: UserRole) {
-  if (!["SUPER_ADMIN", "HRD", "SPV"].includes(role)) {
-    return false;
-  }
-  return true;
+  return ["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL"].includes(role);
 }
 
 async function getScopedTeamworkEmployees(role: UserRole, divisionId: string | null) {
@@ -105,7 +103,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionId: string | n
     .orderBy(asc(employees.fullName));
 }
 
-async function getScopedActivityEntries(role: UserRole, divisionId: string | null) {
+async function getScopedActivityEntries(role: UserRole, divisionId: string | null, employeeId?: string | null) {
   const entryDivision = aliasedTable(divisions, "entry_division");
   const employeeDivision = aliasedTable(divisions, "employee_division");
 
@@ -144,10 +142,16 @@ async function getScopedActivityEntries(role: UserRole, divisionId: string | nul
       .orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
   }
 
+  if (PERFORMANCE_SELF_SERVICE_ROLES.includes(role) && employeeId) {
+    return baseQuery
+      .where(eq(dailyActivityEntries.employeeId, employeeId))
+      .orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
+  }
+
   return baseQuery.orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
 }
 
-async function getScopedMonthlyPerformance(role: UserRole, divisionId: string | null) {
+async function getScopedMonthlyPerformance(role: UserRole, divisionId: string | null, employeeId?: string | null) {
   const employeeDivision = aliasedTable(divisions, "employee_division");
   const baseQuery = db
     .select({
@@ -175,6 +179,12 @@ async function getScopedMonthlyPerformance(role: UserRole, divisionId: string | 
   if (role === "SPV" && divisionId) {
     return baseQuery
       .where(eq(employees.divisionId, divisionId))
+      .orderBy(desc(monthlyPointPerformances.periodStartDate), asc(employees.fullName));
+  }
+
+  if (PERFORMANCE_SELF_SERVICE_ROLES.includes(role) && employeeId) {
+    return baseQuery
+      .where(eq(monthlyPointPerformances.employeeId, employeeId))
       .orderBy(desc(monthlyPointPerformances.periodStartDate), asc(employees.fullName));
   }
 
@@ -307,22 +317,38 @@ export async function getPerformanceWorkspace() {
     };
   }
 
+  const isSelfService = PERFORMANCE_SELF_SERVICE_ROLES.includes(role);
+
+  // TEAMWORK tanpa employeeId tidak bisa melihat apapun
+  if (isSelfService && !roleRow.employeeId) {
+    return {
+      role,
+      canManageActivities: false,
+      canGenerateMonthly: false,
+      activeVersion: null,
+      employeeOptions: [],
+      divisionOptions: [],
+      catalogEntries: [],
+      activityEntries: [],
+      monthlyPerformances: [],
+    };
+  }
+
   const activeVersion = await getActivePointCatalogVersion();
   const [employeeOptions, divisionOptions, activityEntries, monthlyPerformances, catalogEntries] =
     await Promise.all([
-      getScopedTeamworkEmployees(role, roleRow.divisionId ?? null),
-      role === "SPV" && roleRow.divisionId
-        ? db
-            .select({ id: divisions.id, name: divisions.name })
-            .from(divisions)
-            .where(eq(divisions.id, roleRow.divisionId))
-        : db
-            .select({ id: divisions.id, name: divisions.name })
-            .from(divisions)
-            .where(eq(divisions.isActive, true))
-            .orderBy(asc(divisions.name)),
-      getScopedActivityEntries(role, roleRow.divisionId ?? null),
-      getScopedMonthlyPerformance(role, roleRow.divisionId ?? null),
+      // TEAMWORK tidak butuh dropdown karyawan lain — hanya diri sendiri
+      isSelfService
+        ? Promise.resolve([])
+        : getScopedTeamworkEmployees(role, roleRow.divisionId ?? null),
+      // TEAMWORK ambil divisi aktual dari data employee mereka sendiri
+      isSelfService
+        ? db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.isActive, true)).orderBy(asc(divisions.name))
+        : role === "SPV" && roleRow.divisionId
+          ? db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.id, roleRow.divisionId))
+          : db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.isActive, true)).orderBy(asc(divisions.name)),
+      getScopedActivityEntries(role, roleRow.divisionId ?? null, roleRow.employeeId),
+      getScopedMonthlyPerformance(role, roleRow.divisionId ?? null, roleRow.employeeId),
       activeVersion ? getPointCatalogEntriesByVersion(activeVersion.id) : Promise.resolve([]),
     ]);
 
@@ -340,7 +366,7 @@ export async function getPerformanceWorkspace() {
 }
 
 export async function saveDailyActivityEntry(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole([...PERFORMANCE_ACTIVITY_ROLES, ...PERFORMANCE_SELF_SERVICE_ROLES]);
   if (authError) return authError;
 
   const parsed = dailyActivityEntrySchema.safeParse(input);
@@ -351,6 +377,13 @@ export async function saveDailyActivityEntry(input: unknown) {
   const user = await getUser();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+
+  // TEAMWORK/MANAGERIAL hanya boleh input untuk diri sendiri
+  if (PERFORMANCE_SELF_SERVICE_ROLES.includes(role)) {
+    if (!roleRow.employeeId) return { error: "Akun Anda belum terhubung ke data karyawan. Hubungi HRD." };
+    parsed.data.employeeId = roleRow.employeeId;
+  }
+
   const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, parsed.data.employeeId);
   if (!inScope) {
     return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
@@ -446,7 +479,7 @@ export async function saveDailyActivityEntry(input: unknown) {
 }
 
 export async function submitDailyActivityEntry(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole([...PERFORMANCE_ACTIVITY_ROLES, ...PERFORMANCE_SELF_SERVICE_ROLES]);
   if (authError) return authError;
 
   const parsed = dailyActivityDecisionSchema.safeParse(input);
@@ -464,8 +497,17 @@ export async function submitDailyActivityEntry(input: unknown) {
     .limit(1);
 
   if (!existingEntry) return { error: "Aktivitas tidak ditemukan." };
-  const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
-  if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
+
+  // TEAMWORK hanya boleh submit entry milik sendiri
+  if (PERFORMANCE_SELF_SERVICE_ROLES.includes(role)) {
+    if (!roleRow.employeeId || existingEntry.employeeId !== roleRow.employeeId) {
+      return { error: "Anda hanya dapat mengajukan aktivitas milik sendiri." };
+    }
+  } else {
+    const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+    if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
+  }
+
   if (!MUTABLE_ACTIVITY_STATUSES.includes(existingEntry.status as (typeof MUTABLE_ACTIVITY_STATUSES)[number])) {
     return { error: "Aktivitas tidak berada pada status yang dapat diajukan." };
   }
@@ -685,7 +727,7 @@ export async function generateMonthlyPerformance(input: unknown) {
 }
 
 export async function deleteActivityEntry(activityEntryId: string) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole([...PERFORMANCE_ACTIVITY_ROLES, ...PERFORMANCE_SELF_SERVICE_ROLES]);
   if (authError) return authError;
 
   const roleRow = await getCurrentUserRoleRow();
@@ -701,8 +743,15 @@ export async function deleteActivityEntry(activityEntryId: string) {
   if (existingEntry.status !== "DRAFT") {
     return { error: "Hanya aktivitas berstatus DRAFT yang dapat dihapus." };
   }
-  const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
-  if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
+
+  if (PERFORMANCE_SELF_SERVICE_ROLES.includes(role)) {
+    if (!roleRow.employeeId || existingEntry.employeeId !== roleRow.employeeId) {
+      return { error: "Anda hanya dapat menghapus aktivitas milik sendiri." };
+    }
+  } else {
+    const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+    if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
+  }
 
   await db.delete(dailyActivityEntries).where(eq(dailyActivityEntries.id, activityEntryId));
 

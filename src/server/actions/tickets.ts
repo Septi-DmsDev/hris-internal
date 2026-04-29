@@ -110,11 +110,14 @@ export async function createTicket(input: unknown) {
   const user = await getUser();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+
+  // Self-service: TEAMWORK/MANAGERIAL wajib punya employeeId di userRoles
   if (SELF_SERVICE_TICKET_ROLES.includes(role)) {
-    return {
-      error:
-        "Self-service ticketing untuk role ini sementara diblokir karena relasi auth user ke employee belum tersedia di schema.",
-    };
+    if (!roleRow.employeeId) {
+      return { error: "Akun Anda belum terhubung ke data karyawan. Hubungi HRD." };
+    }
+    // Override employeeId dengan data diri sendiri — tidak boleh buat tiket atas nama orang lain
+    parsed.data.employeeId = roleRow.employeeId;
   }
 
   if (role === "SPV") {

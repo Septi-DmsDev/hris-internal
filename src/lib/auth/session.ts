@@ -37,6 +37,7 @@ export async function getCurrentUserRoleRow() {
       userId: userRoles.userId,
       role: userRoles.role,
       divisionId: userRoles.divisionId,
+      employeeId: userRoles.employeeId,
     })
     .from(userRoles)
     .where(eq(userRoles.userId, user.id))

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { userRoles } from "@/lib/db/schema/auth";
+import { userRoles, userRoleDivisions } from "@/lib/db/schema/auth";
 import { eq } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
@@ -19,11 +19,9 @@ export async function requireAuth() {
 
 export async function checkRole(allowed: UserRole[]): Promise<{ error: string } | null> {
   const roleRow = await getCurrentUserRoleRow();
-
   if (!allowed.includes(roleRow.role as UserRole)) {
     return { error: "Akses ditolak. Hanya HRD dan Super Admin yang dapat melakukan tindakan ini." };
   }
-
   return null;
 }
 
@@ -36,18 +34,23 @@ export async function getCurrentUserRoleRow() {
       id: userRoles.id,
       userId: userRoles.userId,
       role: userRoles.role,
-      divisionId: userRoles.divisionId,
       employeeId: userRoles.employeeId,
     })
     .from(userRoles)
     .where(eq(userRoles.userId, user.id))
     .limit(1);
 
-  if (!roleRow) {
-    redirect("/login");
-  }
+  if (!roleRow) redirect("/login");
 
-  return roleRow;
+  const divisionRows = await db
+    .select({ divisionId: userRoleDivisions.divisionId })
+    .from(userRoleDivisions)
+    .where(eq(userRoleDivisions.userRoleId, roleRow.id));
+
+  return {
+    ...roleRow,
+    divisionIds: divisionRows.map((r) => r.divisionId),
+  };
 }
 
 export async function getCurrentUserRole(): Promise<UserRole> {

@@ -52,10 +52,11 @@ export type TicketType = "CUTI" | "SAKIT" | "IZIN" | "EMERGENCY" | "SETENGAH_HAR
 export const USER_ROLES = [
   "SUPER_ADMIN",
   "HRD",
-  "FINANCE",
+  "KABAG",
   "SPV",
-  "TEAMWORK",
   "MANAGERIAL",
+  "FINANCE",
+  "TEAMWORK",
   "PAYROLL_VIEWER",
 ] as const;
 

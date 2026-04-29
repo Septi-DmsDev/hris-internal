@@ -42,6 +42,7 @@ import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-day
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { PayrollAdjustmentType, PayrollPeriodStatus, UserRole } from "@/types";
+import { canReadPayrollEmployeeDetail } from "./payroll.helpers";
 
 const PAYROLL_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"];
 const PAYROLL_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "FINANCE"];
@@ -396,8 +397,14 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
 }
 
 export async function getPayrollEmployeeDetail(periodId: string, employeeId: string) {
-  const access = await assertPayrollReadAccess();
-  if ("error" in access) return access;
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  const viewerCanReadPayrollWorkspace = PAYROLL_READ_ROLES.includes(role);
+
+  if (!canReadPayrollEmployeeDetail(role, roleRow.employeeId, employeeId)) {
+    return { error: "Akses payroll ditolak." };
+  }
 
   const [detail] = await db
     .select({
@@ -561,7 +568,8 @@ export async function getPayrollEmployeeDetail(periodId: string, employeeId: str
     .orderBy(desc(incidentLogs.incidentDate));
 
   return {
-    role: access.role,
+    role,
+    viewerCanReadPayrollWorkspace,
     detail,
     performance: performance ?? null,
     managerialKpi: managerialKpi ?? null,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPersonalQuickActions,
+  buildTeamworkActivitySummary,
   resolveMyAccessState,
 } from "./me.helpers";
 
@@ -44,5 +45,26 @@ describe("buildPersonalQuickActions", () => {
     expect(actions.some((item) => item.href === "/payroll")).toBe(true);
     expect(actions.some((item) => item.href === "/finance")).toBe(true);
     expect(actions.some((item) => item.href === "/performance")).toBe(false);
+  });
+});
+
+describe("buildTeamworkActivitySummary", () => {
+  it("groups teamwork activity statuses into personal summary buckets", () => {
+    const summary = buildTeamworkActivitySummary([
+      { status: "DRAFT", totalPoints: "1000.00" },
+      { status: "REVISI_TW", totalPoints: "2000.00" },
+      { status: "DIAJUKAN", totalPoints: "3000.00" },
+      { status: "DIAJUKAN_ULANG", totalPoints: "4000.00" },
+      { status: "DISETUJUI_SPV", totalPoints: "5000.00" },
+      { status: "OVERRIDE_HRD", totalPoints: "6000.00" },
+      { status: "DIKUNCI_PAYROLL", totalPoints: "7000.00" },
+      { status: "DITOLAK_SPV", totalPoints: "8000.00" },
+    ]);
+
+    expect(summary.needsSubmitCount).toBe(2);
+    expect(summary.pendingApprovalCount).toBe(2);
+    expect(summary.approvedCount).toBe(3);
+    expect(summary.rejectedCount).toBe(1);
+    expect(summary.approvedPoints).toBe(18000);
   });
 });

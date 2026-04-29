@@ -39,7 +39,9 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
     );
   }
 
-  const { detail, performance, adjustments, tickets, incidents } = detailResult;
+  const { detail, performance, adjustments, tickets, incidents, viewerCanReadPayrollWorkspace } = detailResult;
+  const backHref = viewerCanReadPayrollWorkspace ? `/payroll?periodId=${detail.periodId}` : "/me";
+  const backLabel = viewerCanReadPayrollWorkspace ? "Kembali ke Payroll" : "Kembali ke Saya";
   const periodStartDate = detail.periodStartDate;
   const periodEndDate = detail.periodEndDate;
   if (!periodStartDate || !periodEndDate) {
@@ -116,7 +118,7 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
             </a>
           </Button>
           <Button asChild variant="outline">
-            <Link href={`/payroll?periodId=${detail.periodId}`}>Kembali ke Payroll</Link>
+            <Link href={backHref}>{backLabel}</Link>
           </Button>
         </div>
       </div>

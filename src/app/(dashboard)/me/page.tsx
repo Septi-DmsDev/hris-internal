@@ -98,6 +98,7 @@ export default async function MePage() {
     latestReview,
     incidentSummary,
     latestPerformance,
+    teamworkActivitySummary,
     latestPayroll,
   } = result;
 
@@ -175,6 +176,41 @@ export default async function MePage() {
         />
       </section>
 
+      {employee.employeeGroup === "TEAMWORK" && teamworkActivitySummary ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Aktivitas Pribadi 30 Hari Terakhir
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Ringkasan aktivitas kerja yang perlu diajukan, menunggu approval, dan yang sudah approved.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              label="Perlu Diajukan"
+              value={teamworkActivitySummary.needsSubmitCount}
+              helper="Draft atau revisi yang masih perlu Anda ajukan."
+            />
+            <SummaryCard
+              label="Menunggu Approval"
+              value={teamworkActivitySummary.pendingApprovalCount}
+              helper="Aktivitas yang sudah diajukan dan masih menunggu approval."
+            />
+            <SummaryCard
+              label="Approved"
+              value={teamworkActivitySummary.approvedCount}
+              helper={`Poin approved ${teamworkActivitySummary.approvedPoints.toLocaleString("id-ID")}`}
+            />
+            <SummaryCard
+              label="Ditolak"
+              value={teamworkActivitySummary.rejectedCount}
+              helper="Aktivitas yang pernah ditolak SPV dan perlu ditinjau ulang."
+            />
+          </div>
+        </section>
+      ) : null}
+
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Incident Aktif</p>
@@ -212,6 +248,11 @@ export default async function MePage() {
               <p className="mt-2 text-sm text-slate-500">
                 {latestPayroll.periodCode} | {latestPayroll.periodStatus}
               </p>
+              <div className="mt-4">
+                <Button asChild variant="outline">
+                  <Link href={`/payroll/${latestPayroll.periodId}/${employee.id}`}>Lihat Slip Gaji</Link>
+                </Button>
+              </div>
             </>
           ) : (
             <p className="mt-3 text-sm text-slate-500">Belum ada ringkasan payroll yang dapat ditampilkan.</p>

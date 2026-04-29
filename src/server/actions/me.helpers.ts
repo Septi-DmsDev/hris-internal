@@ -6,6 +6,30 @@ export type PersonalQuickAction = {
   description: string;
 };
 
+type TeamworkActivityStatus =
+  | "DRAFT"
+  | "REVISI_TW"
+  | "DIAJUKAN"
+  | "DIAJUKAN_ULANG"
+  | "DISETUJUI_SPV"
+  | "OVERRIDE_HRD"
+  | "DIKUNCI_PAYROLL"
+  | "DITOLAK_SPV";
+
+export type TeamworkActivitySummary = {
+  needsSubmitCount: number;
+  pendingApprovalCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  approvedPoints: number;
+};
+
+function toNumber(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return 0;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export function resolveMyAccessState(role: UserRole, employeeId: string | null) {
   if (role === "SUPER_ADMIN" && !employeeId) {
     return {
@@ -104,4 +128,38 @@ export function buildPersonalQuickActions(role: UserRole): PersonalQuickAction[]
   }
 
   return commonActions;
+}
+
+export function buildTeamworkActivitySummary(
+  rows: Array<{ status: TeamworkActivityStatus; totalPoints: string | number | null }>
+): TeamworkActivitySummary {
+  return rows.reduce<TeamworkActivitySummary>(
+    (summary, row) => {
+      if (row.status === "DRAFT" || row.status === "REVISI_TW") {
+        summary.needsSubmitCount += 1;
+      }
+
+      if (row.status === "DIAJUKAN" || row.status === "DIAJUKAN_ULANG") {
+        summary.pendingApprovalCount += 1;
+      }
+
+      if (row.status === "DISETUJUI_SPV" || row.status === "OVERRIDE_HRD" || row.status === "DIKUNCI_PAYROLL") {
+        summary.approvedCount += 1;
+        summary.approvedPoints += toNumber(row.totalPoints);
+      }
+
+      if (row.status === "DITOLAK_SPV") {
+        summary.rejectedCount += 1;
+      }
+
+      return summary;
+    },
+    {
+      needsSubmitCount: 0,
+      pendingApprovalCount: 0,
+      approvedCount: 0,
+      rejectedCount: 0,
+      approvedPoints: 0,
+    }
+  );
 }

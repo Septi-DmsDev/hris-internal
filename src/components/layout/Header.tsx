@@ -1,5 +1,6 @@
 import { logoutAction } from "@/server/actions/auth";
 import { LogOut } from "lucide-react";
+import HeaderTitle from "./HeaderTitle";
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -47,7 +48,7 @@ export default function Header({ userEmail, userRole }: HeaderProps) {
   return (
     <header className="h-14 border-b border-slate-200/80 bg-white flex items-center justify-between px-6 shrink-0">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-slate-800">Dashboard</span>
+        <HeaderTitle />
       </div>
 
       <div className="flex items-center gap-3">

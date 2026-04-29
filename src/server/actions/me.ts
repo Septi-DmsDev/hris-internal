@@ -15,10 +15,16 @@ import {
 import { attendanceTickets, employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import { payrollPeriods, payrollResults } from "@/lib/db/schema/payroll";
-import { monthlyPointPerformances } from "@/lib/db/schema/point";
-import { aliasedTable, and, desc, eq } from "drizzle-orm";
+import { dailyActivityEntries, monthlyPointPerformances } from "@/lib/db/schema/point";
+import { aliasedTable, and, desc, eq, gte } from "drizzle-orm";
 import type { UserRole } from "@/types";
-import { buildPersonalQuickActions, type PersonalQuickAction, resolveMyAccessState } from "./me.helpers";
+import {
+  buildPersonalQuickActions,
+  buildTeamworkActivitySummary,
+  type PersonalQuickAction,
+  resolveMyAccessState,
+  type TeamworkActivitySummary,
+} from "./me.helpers";
 
 type MyEmployeeCore = {
   id: string;
@@ -81,6 +87,7 @@ type MyPerformanceSummary = {
 } | null;
 
 type MyPayrollSummary = {
+  periodId: string;
   periodCode: string;
   periodStatus: string;
   takeHomePay: string;
@@ -115,6 +122,7 @@ export type MyDashboardResult = {
   latestReview: MyReviewSummary;
   incidentSummary: MyIncidentSummary;
   latestPerformance: MyPerformanceSummary;
+  teamworkActivitySummary: TeamworkActivitySummary | null;
   latestPayroll: MyPayrollSummary;
   emptyReason: string | null;
 };
@@ -142,6 +150,7 @@ const PAYROLL_SUMMARY_ROLES: UserRole[] = [
   "PAYROLL_VIEWER",
   "SPV",
   "KABAG",
+  "TEAMWORK",
 ];
 
 async function getMyEmployeeCore(employeeId: string): Promise<MyEmployeeCore | null> {
@@ -270,6 +279,7 @@ async function getLatestPerformance(employeeId: string): Promise<MyPerformanceSu
 async function getLatestPayroll(employeeId: string): Promise<MyPayrollSummary> {
   const rows = await db
     .select({
+      periodId: payrollPeriods.id,
       periodCode: payrollPeriods.periodCode,
       periodStatus: payrollPeriods.status,
       takeHomePay: payrollResults.takeHomePay,
@@ -283,6 +293,27 @@ async function getLatestPayroll(employeeId: string): Promise<MyPayrollSummary> {
     .limit(1);
 
   return rows[0] ?? null;
+}
+
+async function getTeamworkActivitySummary(employeeId: string): Promise<TeamworkActivitySummary> {
+  const sinceDate = new Date();
+  sinceDate.setDate(sinceDate.getDate() - 30);
+
+  const rows = await db
+    .select({
+      status: dailyActivityEntries.status,
+      totalPoints: dailyActivityEntries.totalPoints,
+    })
+    .from(dailyActivityEntries)
+    .where(
+      and(
+        eq(dailyActivityEntries.employeeId, employeeId),
+        gte(dailyActivityEntries.workDate, sinceDate)
+      )
+    )
+    .orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
+
+  return buildTeamworkActivitySummary(rows);
 }
 
 async function getPersonalHistories(employeeId: string): Promise<MyProfileResult["histories"]> {
@@ -394,6 +425,7 @@ export async function getMyDashboard(): Promise<MyDashboardResult> {
       latestReview: null,
       incidentSummary: { activeCount: 0, latestIncidentType: null, latestIncidentDate: null },
       latestPerformance: null,
+      teamworkActivitySummary: null,
       latestPayroll: null,
       emptyReason: null,
     };
@@ -411,6 +443,7 @@ export async function getMyDashboard(): Promise<MyDashboardResult> {
       latestReview: null,
       incidentSummary: { activeCount: 0, latestIncidentType: null, latestIncidentDate: null },
       latestPerformance: null,
+      teamworkActivitySummary: null,
       latestPayroll: null,
       emptyReason: "Akun Anda belum terhubung ke data karyawan. Hubungi HRD.",
     };
@@ -429,18 +462,20 @@ export async function getMyDashboard(): Promise<MyDashboardResult> {
       latestReview: null,
       incidentSummary: { activeCount: 0, latestIncidentType: null, latestIncidentDate: null },
       latestPerformance: null,
+      teamworkActivitySummary: null,
       latestPayroll: null,
       emptyReason: "Data karyawan pribadi tidak ditemukan atau belum aktif.",
     };
   }
 
-  const [activeSchedule, latestTicket, latestReview, incidentSummary, latestPerformance, latestPayroll] =
+  const [activeSchedule, latestTicket, latestReview, incidentSummary, latestPerformance, teamworkActivitySummary, latestPayroll] =
     await Promise.all([
       getActiveSchedule(employee.id),
       getLatestTicket(employee.id),
       getLatestReview(employee.id),
       getIncidentSummary(employee.id),
       employee.employeeGroup === "TEAMWORK" ? getLatestPerformance(employee.id) : Promise.resolve(null),
+      employee.employeeGroup === "TEAMWORK" ? getTeamworkActivitySummary(employee.id) : Promise.resolve(null),
       PAYROLL_SUMMARY_ROLES.includes(role) ? getLatestPayroll(employee.id) : Promise.resolve(null),
     ]);
 
@@ -455,6 +490,7 @@ export async function getMyDashboard(): Promise<MyDashboardResult> {
     latestReview,
     incidentSummary,
     latestPerformance,
+    teamworkActivitySummary,
     latestPayroll,
     emptyReason: null,
   };

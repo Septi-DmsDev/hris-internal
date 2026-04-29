@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Read(//c/Users/P C/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/**)",
+      "Read(//c/Users/P C/.claude/plugins/**)",
+      "Bash(mkdir -p \"C:/Users/P C/.claude/plugins/cache/local/hrd-dashboard-skills/1.0.0/.claude-plugin\")",
+      "Bash(mkdir -p \"C:/Users/P C/.claude/plugins/cache/local/hrd-dashboard-skills/1.0.0/skills/hrd-setup-qa\")"
     ]
   }
 }

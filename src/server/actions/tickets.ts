@@ -11,8 +11,9 @@ import type { UserRole } from "@/types";
 import { divisions } from "@/lib/db/schema/master";
 
 const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
-const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
-const TICKET_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL"];
+// Semua role adalah karyawan yang bisa ajukan tiket untuk diri sendiri
+const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"];
+const TICKET_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"];
 
 function diffDays(start: Date, end: Date) {
   return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
@@ -99,7 +100,7 @@ export async function getTickets() {
 }
 
 export async function createTicket(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL"]);
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"]);
   if (authError) return authError;
 
   const parsed = createTicketSchema.safeParse(input);

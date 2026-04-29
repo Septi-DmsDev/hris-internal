@@ -9,6 +9,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 import { divisions } from "@/lib/db/schema/master";
+import { resolveLeaveQuotaEligibility } from "@/server/ticketing-engine/resolve-leave-quota-eligibility";
 
 const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
 const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["KABAG", "SPV", "MANAGERIAL", "FINANCE", "TEAMWORK", "PAYROLL_VIEWER"];
@@ -28,17 +29,13 @@ async function getEmployeeLeaveQuota(employeeId: string, year: number) {
   return quota ?? null;
 }
 
-async function hasLeaveEligibility(employeeId: string) {
+async function getEmployeeStartDate(employeeId: string) {
   const [emp] = await db
     .select({ startDate: employees.startDate })
     .from(employees)
     .where(eq(employees.id, employeeId))
     .limit(1);
-  if (!emp?.startDate) return false;
-  const months = Math.floor(
-    (Date.now() - new Date(emp.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30)
-  );
-  return months >= 12;
+  return emp?.startDate ?? null;
 }
 
 async function getEmployeeDivisionId(employeeId: string) {
@@ -177,6 +174,9 @@ export async function approveTicket(input: unknown) {
     .limit(1);
 
   if (!ticket) return { error: "Tiket tidak ditemukan." };
+  if (ticket.status === "LOCKED") {
+    return { error: "Tiket yang sudah LOCKED tidak dapat diproses lagi." };
+  }
   if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat disetujui." };
   }
@@ -186,7 +186,14 @@ export async function approveTicket(input: unknown) {
 
     if (!parsed.data.payrollImpact && ticket.ticketType !== "SETENGAH_HARI") {
       const year = new Date(ticket.startDate).getFullYear();
-      const eligible = await hasLeaveEligibility(ticket.employeeId);
+      const employeeStartDate = await getEmployeeStartDate(ticket.employeeId);
+      const eligible = employeeStartDate
+        ? resolveLeaveQuotaEligibility({
+            startDate: employeeStartDate,
+            requestedYear: year,
+            today: ticket.startDate,
+          }).eligible
+        : false;
 
       if (eligible) {
         const quota = await getEmployeeLeaveQuota(ticket.employeeId, year);
@@ -273,6 +280,9 @@ export async function rejectTicket(input: unknown) {
     .limit(1);
 
   if (!ticket) return { error: "Tiket tidak ditemukan." };
+  if (ticket.status === "LOCKED") {
+    return { error: "Tiket yang sudah LOCKED tidak dapat diproses lagi." };
+  }
   if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat ditolak." };
   }
@@ -305,6 +315,9 @@ export async function cancelTicket(ticketId: string) {
     .limit(1);
 
   if (!ticket) return { error: "Tiket tidak ditemukan." };
+  if (ticket.status === "LOCKED") {
+    return { error: "Tiket yang sudah LOCKED tidak dapat dibatalkan." };
+  }
   if (!["DRAFT", "SUBMITTED"].includes(ticket.status)) {
     return { error: "Tiket yang sudah diproses tidak bisa dibatalkan." };
   }
@@ -325,8 +338,20 @@ export async function generateLeaveQuota(employeeId: string, year: number) {
   const authError = await checkRole(["SUPER_ADMIN", "HRD"]);
   if (authError) return authError;
 
-  const eligible = await hasLeaveEligibility(employeeId);
-  if (!eligible) return { error: "Karyawan belum memenuhi syarat kuota cuti (minimal 1 tahun kerja)." };
+  const employeeStartDate = await getEmployeeStartDate(employeeId);
+  if (!employeeStartDate) {
+    return { error: "Tanggal mulai kerja karyawan tidak ditemukan." };
+  }
+
+  const eligibility = resolveLeaveQuotaEligibility({
+    startDate: employeeStartDate,
+    requestedYear: year,
+  });
+  if (!eligibility.eligible) {
+    return {
+      error: `Karyawan belum memenuhi syarat kuota cuti quarter rule. Efektif pada ${eligibility.effectiveDate.toISOString().slice(0, 10)}.`,
+    };
+  }
 
   const existing = await getEmployeeLeaveQuota(employeeId, year);
   if (existing) return { error: `Kuota cuti tahun ${year} sudah ada untuk karyawan ini.` };

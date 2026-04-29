@@ -9,6 +9,7 @@ import { createReviewSchema, createIncidentSchema } from "@/lib/validations/hr";
 import { desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
+import { resolveReviewerEmployeeId } from "@/server/review-engine/resolve-reviewer-employee-id";
 
 const REVIEW_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 const SELF_SERVICE_REVIEW_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
@@ -157,6 +158,7 @@ export async function createReview(input: unknown) {
   if (!inScope) {
     return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
   }
+  const reviewerEmployeeId = resolveReviewerEmployeeId(roleRow.employeeId);
 
   const scores = {
     sopQualityScore: parsed.data.sopQualityScore,
@@ -170,8 +172,7 @@ export async function createReview(input: unknown) {
   try {
     await db.insert(employeeReviews).values({
       employeeId: parsed.data.employeeId,
-      // Repo belum memiliki relasi auth user -> employee, jadi reviewer employee belum bisa diisi aman.
-      reviewerEmployeeId: null,
+      reviewerEmployeeId,
       periodStartDate: parsed.data.periodStartDate,
       periodEndDate: parsed.data.periodEndDate,
       ...scores,
@@ -202,6 +203,9 @@ export async function validateReview(reviewId: string) {
     .limit(1);
 
   if (!review) return { error: "Review tidak ditemukan." };
+  if (review.status === "LOCKED") {
+    return { error: "Review yang sudah LOCKED tidak dapat divalidasi ulang." };
+  }
   if (review.status !== "SUBMITTED") return { error: "Review tidak dalam status yang dapat divalidasi." };
 
   await db

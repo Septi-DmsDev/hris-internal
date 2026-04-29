@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
   HRD: "HRD",
+  KABAG: "Kabag",
   FINANCE: "Finance",
   SPV: "Supervisor",
   TEAMWORK: "Team Work",
@@ -14,6 +15,7 @@ const ROLE_LABEL: Record<string, string> = {
 const ROLE_COLOR: Record<string, string> = {
   SUPER_ADMIN: "bg-violet-100 text-violet-700",
   HRD: "bg-teal-100 text-teal-700",
+  KABAG: "bg-cyan-100 text-cyan-700",
   FINANCE: "bg-blue-100 text-blue-700",
   SPV: "bg-amber-100 text-amber-700",
   TEAMWORK: "bg-slate-100 text-slate-700",

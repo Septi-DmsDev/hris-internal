@@ -45,11 +45,12 @@ import {
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
-const PERFORMANCE_ACTIVITY_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const PERFORMANCE_ACTIVITY_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 const PERFORMANCE_SELF_SERVICE_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
 const PERFORMANCE_GENERATE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
 const APPROVABLE_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG"] as const;
 const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const;
+const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 
 function toNumber(value: string | number | null | undefined) {
   if (value === null || value === undefined) return 0;
@@ -58,11 +59,11 @@ function toNumber(value: string | number | null | undefined) {
 }
 
 function ensurePerformanceReadRole(role: UserRole) {
-  return ["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL"].includes(role);
+  return ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL"].includes(role);
 }
 
-async function getScopedTeamworkEmployees(role: UserRole, divisionId: string | null) {
-  if (role === "SPV" && divisionId) {
+async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[]) {
+  if (DIV_SCOPED_ROLES.includes(role) && divisionIds.length > 0) {
     return db
       .select({
         id: employees.id,
@@ -80,7 +81,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionId: string | n
         and(
           eq(employees.employeeGroup, "TEAMWORK"),
           eq(employees.isActive, true),
-          eq(employees.divisionId, divisionId)
+          inArray(employees.divisionId, divisionIds)
         )
       )
       .orderBy(asc(employees.fullName));
@@ -103,7 +104,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionId: string | n
     .orderBy(asc(employees.fullName));
 }
 
-async function getScopedActivityEntries(role: UserRole, divisionId: string | null, employeeId?: string | null) {
+async function getScopedActivityEntries(role: UserRole, divisionIds: string[], employeeId?: string | null) {
   const entryDivision = aliasedTable(divisions, "entry_division");
   const employeeDivision = aliasedTable(divisions, "employee_division");
 
@@ -136,9 +137,9 @@ async function getScopedActivityEntries(role: UserRole, divisionId: string | nul
     .leftJoin(entryDivision, eq(dailyActivityEntries.actualDivisionId, entryDivision.id))
     .leftJoin(employeeDivision, eq(employees.divisionId, employeeDivision.id));
 
-  if (role === "SPV" && divisionId) {
+  if (DIV_SCOPED_ROLES.includes(role) && divisionIds.length > 0) {
     return baseQuery
-      .where(eq(employees.divisionId, divisionId))
+      .where(inArray(employees.divisionId, divisionIds))
       .orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
   }
 
@@ -151,7 +152,7 @@ async function getScopedActivityEntries(role: UserRole, divisionId: string | nul
   return baseQuery.orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
 }
 
-async function getScopedMonthlyPerformance(role: UserRole, divisionId: string | null, employeeId?: string | null) {
+async function getScopedMonthlyPerformance(role: UserRole, divisionIds: string[], employeeId?: string | null) {
   const employeeDivision = aliasedTable(divisions, "employee_division");
   const baseQuery = db
     .select({
@@ -176,9 +177,9 @@ async function getScopedMonthlyPerformance(role: UserRole, divisionId: string | 
     .leftJoin(employees, eq(monthlyPointPerformances.employeeId, employees.id))
     .leftJoin(employeeDivision, eq(employees.divisionId, employeeDivision.id));
 
-  if (role === "SPV" && divisionId) {
+  if (DIV_SCOPED_ROLES.includes(role) && divisionIds.length > 0) {
     return baseQuery
-      .where(eq(employees.divisionId, divisionId))
+      .where(inArray(employees.divisionId, divisionIds))
       .orderBy(desc(monthlyPointPerformances.periodStartDate), asc(employees.fullName));
   }
 
@@ -191,9 +192,9 @@ async function getScopedMonthlyPerformance(role: UserRole, divisionId: string | 
   return baseQuery.orderBy(desc(monthlyPointPerformances.periodStartDate), asc(employees.fullName));
 }
 
-async function assertActivityScope(role: UserRole, divisionId: string | null, employeeId: string) {
-  if (role !== "SPV") return true;
-  if (!divisionId) return false;
+async function assertActivityScope(role: UserRole, divisionIds: string[], employeeId: string) {
+  if (!DIV_SCOPED_ROLES.includes(role)) return true;
+  if (divisionIds.length === 0) return false;
 
   const [employeeRow] = await db
     .select({ divisionId: employees.divisionId })
@@ -201,7 +202,7 @@ async function assertActivityScope(role: UserRole, divisionId: string | null, em
     .where(eq(employees.id, employeeId))
     .limit(1);
 
-  return employeeRow?.divisionId === divisionId;
+  return divisionIds.includes(employeeRow?.divisionId ?? "");
 }
 
 async function resolveDivisionSnapshotForPeriod(employeeId: string, periodStartDate: Date) {
@@ -340,15 +341,15 @@ export async function getPerformanceWorkspace() {
       // TEAMWORK tidak butuh dropdown karyawan lain — hanya diri sendiri
       isSelfService
         ? Promise.resolve([])
-        : getScopedTeamworkEmployees(role, roleRow.divisionId ?? null),
+        : getScopedTeamworkEmployees(role, roleRow.divisionIds),
       // TEAMWORK ambil divisi aktual dari data employee mereka sendiri
       isSelfService
         ? db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.isActive, true)).orderBy(asc(divisions.name))
-        : role === "SPV" && roleRow.divisionId
-          ? db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.id, roleRow.divisionId))
+        : DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0
+          ? db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(inArray(divisions.id, roleRow.divisionIds)).orderBy(asc(divisions.name))
           : db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.isActive, true)).orderBy(asc(divisions.name)),
-      getScopedActivityEntries(role, roleRow.divisionId ?? null, roleRow.employeeId),
-      getScopedMonthlyPerformance(role, roleRow.divisionId ?? null, roleRow.employeeId),
+      getScopedActivityEntries(role, roleRow.divisionIds, roleRow.employeeId),
+      getScopedMonthlyPerformance(role, roleRow.divisionIds, roleRow.employeeId),
       activeVersion ? getPointCatalogEntriesByVersion(activeVersion.id) : Promise.resolve([]),
     ]);
 
@@ -384,7 +385,7 @@ export async function saveDailyActivityEntry(input: unknown) {
     parsed.data.employeeId = roleRow.employeeId;
   }
 
-  const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, parsed.data.employeeId);
+  const inScope = await assertActivityScope(role, roleRow.divisionIds, parsed.data.employeeId);
   if (!inScope) {
     return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
   }
@@ -504,7 +505,7 @@ export async function submitDailyActivityEntry(input: unknown) {
       return { error: "Anda hanya dapat mengajukan aktivitas milik sendiri." };
     }
   } else {
-    const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+    const inScope = await assertActivityScope(role, roleRow.divisionIds, existingEntry.employeeId);
     if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
   }
 
@@ -540,7 +541,7 @@ export async function submitDailyActivityEntry(input: unknown) {
 }
 
 export async function approveDailyActivityEntry(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
   if (authError) return authError;
 
   const parsed = dailyActivityDecisionSchema.safeParse(input);
@@ -561,11 +562,11 @@ export async function approveDailyActivityEntry(input: unknown) {
   if (!APPROVABLE_STATUSES.includes(existingEntry.status as (typeof APPROVABLE_STATUSES)[number])) {
     return { error: "Aktivitas tidak berada pada status yang dapat disetujui." };
   }
-  const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+  const inScope = await assertActivityScope(role, roleRow.divisionIds, existingEntry.employeeId);
   if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
 
-  const nextStatus = role === "SPV" ? "DISETUJUI_SPV" : "OVERRIDE_HRD";
-  const logAction = role === "SPV" ? "APPROVE_SPV" : "OVERRIDE_HRD";
+  const nextStatus = DIV_SCOPED_ROLES.includes(role) ? "DISETUJUI_SPV" : "OVERRIDE_HRD";
+  const logAction = DIV_SCOPED_ROLES.includes(role) ? "APPROVE_SPV" : "OVERRIDE_HRD";
 
   await db.transaction(async (tx) => {
     await tx
@@ -592,7 +593,7 @@ export async function approveDailyActivityEntry(input: unknown) {
 }
 
 export async function rejectDailyActivityEntry(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
   if (authError) return authError;
 
   const parsed = dailyActivityDecisionSchema.safeParse(input);
@@ -613,7 +614,7 @@ export async function rejectDailyActivityEntry(input: unknown) {
   if (!APPROVABLE_STATUSES.includes(existingEntry.status as (typeof APPROVABLE_STATUSES)[number])) {
     return { error: "Aktivitas tidak berada pada status yang dapat ditolak." };
   }
-  const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+  const inScope = await assertActivityScope(role, roleRow.divisionIds, existingEntry.employeeId);
   if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
 
   await db.transaction(async (tx) => {
@@ -749,7 +750,7 @@ export async function deleteActivityEntry(activityEntryId: string) {
       return { error: "Anda hanya dapat menghapus aktivitas milik sendiri." };
     }
   } else {
-    const inScope = await assertActivityScope(role, roleRow.divisionId ?? null, existingEntry.employeeId);
+    const inScope = await assertActivityScope(role, roleRow.divisionIds, existingEntry.employeeId);
     if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
   }
 

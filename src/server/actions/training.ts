@@ -5,11 +5,11 @@ import { employees } from "@/lib/db/schema/employee";
 import { divisions } from "@/lib/db/schema/master";
 import { monthlyPointPerformances } from "@/lib/db/schema/point";
 import { checkRole, getCurrentUserRoleRow, requireAuth } from "@/lib/auth/session";
-import { asc, desc, eq, and } from "drizzle-orm";
+import { asc, desc, eq, and, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
-const TRAINING_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const TRAINING_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 
 function resolveCategory(pct: number, passPct: number) {
   if (pct >= passPct) return "LULUS";
@@ -45,8 +45,8 @@ export async function getTrainingEvaluations() {
         eq(employees.employeeGroup, "TEAMWORK"),
         eq(employees.employmentStatus, "TRAINING"),
         eq(employees.isActive, true),
-        role === "SPV" && roleRow.divisionId
-          ? eq(employees.divisionId, roleRow.divisionId)
+        ["SPV", "KABAG"].includes(role) && roleRow.divisionIds.length > 0
+          ? inArray(employees.divisionId, roleRow.divisionIds)
           : undefined,
       )
     )

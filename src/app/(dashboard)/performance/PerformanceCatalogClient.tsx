@@ -523,7 +523,7 @@ export default function PerformanceCatalogClient({
           const isMutable = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"].includes(entry.status);
           const isApprovable = ["DIAJUKAN", "DIAJUKAN_ULANG"].includes(entry.status);
           const canApprove =
-            role === "SPV" || role === "HRD" || role === "SUPER_ADMIN";
+            role === "SPV" || role === "KABAG" || role === "HRD" || role === "SUPER_ADMIN";
 
           return (
             <div className="flex flex-wrap gap-1.5">
@@ -585,12 +585,12 @@ export default function PerformanceCatalogClient({
                       setDecisionState({
                         action: "approve",
                         activityId: entry.id,
-                        title: role === "SPV" ? "Setujui Aktivitas" : "Override HRD",
+                        title: role === "SPV" || role === "KABAG" ? "Setujui Aktivitas" : "Override HRD",
                         rowLabel: `${entry.employeeName} · ${entry.workNameSnapshot}`,
                       })
                     }
                   >
-                    {role === "SPV" ? "Setujui" : "Override"}
+                    {role === "SPV" || role === "KABAG" ? "Setujui" : "Override"}
                   </Button>
                   <Button
                     type="button"

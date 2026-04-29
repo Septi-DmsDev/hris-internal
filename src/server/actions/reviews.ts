@@ -6,12 +6,13 @@ import { divisions } from "@/lib/db/schema/master";
 import { employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { createReviewSchema, createIncidentSchema } from "@/lib/validations/hr";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
-const REVIEW_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const REVIEW_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 const SELF_SERVICE_REVIEW_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
+const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 
 // Bobot aspek review
 const WEIGHTS = {
@@ -45,9 +46,9 @@ function computeReviewScore(scores: {
   return { total, category };
 }
 
-async function assertReviewScope(role: UserRole, divisionId: string | null, employeeId: string) {
-  if (role !== "SPV") return true;
-  if (!divisionId) return false;
+async function assertReviewScope(role: UserRole, divisionIds: string[], employeeId: string) {
+  if (!DIV_SCOPED_ROLES.includes(role)) return true;
+  if (divisionIds.length === 0) return false;
 
   const [employeeRow] = await db
     .select({ divisionId: employees.divisionId })
@@ -55,7 +56,7 @@ async function assertReviewScope(role: UserRole, divisionId: string | null, empl
     .where(eq(employees.id, employeeId))
     .limit(1);
 
-  return employeeRow?.divisionId === divisionId;
+  return divisionIds.includes(employeeRow?.divisionId ?? "");
 }
 
 export async function getReviews() {
@@ -77,13 +78,17 @@ export async function getReviews() {
 
   function reviewWhereClause() {
     if (isSelfService) return eq(employeeReviews.employeeId, roleRow.employeeId!);
-    if (role === "SPV" && roleRow.divisionId) return eq(employees.divisionId, roleRow.divisionId);
+    if (DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0) {
+      return inArray(employees.divisionId, roleRow.divisionIds);
+    }
     return undefined;
   }
 
   function incidentWhereClause() {
     if (isSelfService) return eq(incidentLogs.employeeId, roleRow.employeeId!);
-    if (role === "SPV" && roleRow.divisionId) return eq(employees.divisionId, roleRow.divisionId);
+    if (DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0) {
+      return inArray(employees.divisionId, roleRow.divisionIds);
+    }
     return undefined;
   }
 
@@ -139,7 +144,7 @@ export async function getReviews() {
 }
 
 export async function createReview(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
   if (authError) return authError;
 
   const parsed = createReviewSchema.safeParse(input);
@@ -148,7 +153,7 @@ export async function createReview(input: unknown) {
   }
 
   const roleRow = await getCurrentUserRoleRow();
-  const inScope = await assertReviewScope(roleRow.role as UserRole, roleRow.divisionId ?? null, parsed.data.employeeId);
+  const inScope = await assertReviewScope(roleRow.role as UserRole, roleRow.divisionIds, parsed.data.employeeId);
   if (!inScope) {
     return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
   }
@@ -209,7 +214,7 @@ export async function validateReview(reviewId: string) {
 }
 
 export async function createIncident(input: unknown) {
-  const authError = await checkRole(["SUPER_ADMIN", "HRD", "SPV"]);
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
   if (authError) return authError;
 
   const parsed = createIncidentSchema.safeParse(input);
@@ -220,7 +225,7 @@ export async function createIncident(input: unknown) {
   const user = await getUser();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
-  const inScope = await assertReviewScope(role, roleRow.divisionId ?? null, parsed.data.employeeId);
+  const inScope = await assertReviewScope(role, roleRow.divisionIds, parsed.data.employeeId);
   if (!inScope) {
     return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
   }

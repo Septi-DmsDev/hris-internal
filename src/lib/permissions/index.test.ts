@@ -18,7 +18,15 @@ describe("canAccess", () => {
   it("SPV bisa approve dan baca data divisinya", () => {
     expect(canAccess("SPV", "performance:approve")).toBe(true);
     expect(canAccess("SPV", "employees:read")).toBe(true);
+    expect(canAccess("SPV", "tickets:approve")).toBe(false);
     expect(canAccess("SPV", "payroll:finalize")).toBe(false);
+  });
+
+  it("KABAG punya akses scoped seperti manager divisi tanpa approval ticket", () => {
+    expect(canAccess("KABAG", "employees:read")).toBe(true);
+    expect(canAccess("KABAG", "reviews:write")).toBe(true);
+    expect(canAccess("KABAG", "tickets:read")).toBe(true);
+    expect(canAccess("KABAG", "tickets:approve")).toBe(false);
   });
 
   it("HRD bisa override dan baca semua data HR", () => {
@@ -61,6 +69,7 @@ describe("requireRole", () => {
 describe("isUserRole", () => {
   it("mengembalikan true untuk role yang valid", () => {
     expect(isUserRole("SUPER_ADMIN")).toBe(true);
+    expect(isUserRole("KABAG")).toBe(true);
     expect(isUserRole("TEAMWORK")).toBe(true);
     expect(isUserRole("PAYROLL_VIEWER")).toBe(true);
   });

@@ -5,13 +5,14 @@ import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
 import { divisions } from "@/lib/db/schema/master";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
 export default async function ReviewsPage() {
   const { role, reviews, incidents } = await getReviews();
   const roleRow = await getCurrentUserRoleRow();
-  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD", "SPV"].includes(role);
+  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"].includes(role);
+  const isDivScoped = ["SPV", "KABAG"].includes(role) && roleRow.divisionIds.length > 0;
 
   const employeeRows = canManageEmployeeOptions
     ? await db
@@ -26,9 +27,7 @@ export default async function ReviewsPage() {
         .where(
           and(
             eq(employees.isActive, true),
-            role === "SPV" && roleRow.divisionId
-              ? eq(employees.divisionId, roleRow.divisionId)
-              : undefined,
+            isDivScoped ? inArray(employees.divisionId, roleRow.divisionIds) : undefined,
           )
         )
         .orderBy(asc(employees.fullName))

@@ -51,7 +51,12 @@ export async function getCurrentUserRoleRow(): Promise<RoleRow> {
 
   if (rows.length === 0) redirect("/login");
 
-  const { divisionId: _ignored, ...baseRow } = rows[0];
+  const baseRow = {
+    id: rows[0].id,
+    userId: rows[0].userId,
+    role: rows[0].role,
+    employeeId: rows[0].employeeId,
+  };
   return {
     ...baseRow,
     divisionIds: rows.map((r) => r.divisionId).filter((id): id is string => id !== null),

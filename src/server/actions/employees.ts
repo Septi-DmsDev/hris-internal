@@ -19,12 +19,13 @@ import {
   requireAuth,
 } from "@/lib/auth/session";
 import { employeeSchema, type EmployeeInput } from "@/lib/validations/employee";
-import { aliasedTable, asc, desc, eq } from "drizzle-orm";
+import { aliasedTable, asc, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@/types";
 
-const EMPLOYEE_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "FINANCE"];
+const EMPLOYEE_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "FINANCE"];
+const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 
 type EmployeeDetailRow = {
   id: string;
@@ -166,10 +167,10 @@ export async function getEmployees() {
     .leftJoin(grades, eq(employees.gradeId, grades.id))
     .leftJoin(supervisor, eq(employees.supervisorEmployeeId, supervisor.id));
 
-  if (role === "SPV") {
-    if (!roleRow.divisionId) return [];
+  if (DIV_SCOPED_ROLES.includes(role)) {
+    if (roleRow.divisionIds.length === 0) return [];
     return (await baseQuery
-      .where(eq(employees.divisionId, roleRow.divisionId))
+      .where(inArray(employees.divisionId, roleRow.divisionIds))
       .orderBy(asc(employees.fullName))) as EmployeeListRow[];
   }
 
@@ -274,7 +275,7 @@ export async function getEmployeeById(id: string) {
     .leftJoin(grades, eq(employees.gradeId, grades.id))
     .leftJoin(supervisor, eq(employees.supervisorEmployeeId, supervisor.id));
 
-  if (role === "SPV" && !roleRow.divisionId) {
+  if (DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length === 0) {
     return null;
   }
 
@@ -284,7 +285,7 @@ export async function getEmployeeById(id: string) {
   const employeeRow = employeeRows[0];
 
   if (!employeeRow) return null;
-  if (role === "SPV" && roleRow.divisionId && employeeRow.divisionId !== roleRow.divisionId) {
+  if (DIV_SCOPED_ROLES.includes(role) && !roleRow.divisionIds.includes(employeeRow.divisionId ?? "")) {
     return null;
   }
 

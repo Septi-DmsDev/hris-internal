@@ -33,6 +33,14 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "payroll:read",
     "settings:read",
   ],
+  KABAG: [
+    "master:read",
+    "employees:read",
+    "performance:approve",
+    "reviews:read", "reviews:write",
+    "tickets:read", "tickets:write",
+    "payroll:read",
+  ],
   FINANCE: [
     "employees:read",
     "payroll:read", "payroll:write", "payroll:finalize",
@@ -43,7 +51,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "employees:read",
     "performance:approve",
     "reviews:read", "reviews:write",
-    "tickets:read", "tickets:approve",
+    "tickets:read", "tickets:write",
     "payroll:read",
   ],
   TEAMWORK: [

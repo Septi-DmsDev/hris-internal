@@ -8,6 +8,8 @@ import { requireAuth, getCurrentUserRoleRow } from "@/lib/auth/session";
 import { and, avg, count, eq, inArray, sql } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
+const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
+
 export type DashboardStats = {
   role: UserRole;
   employees: {
@@ -36,21 +38,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   await requireAuth();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
-  const isSPV = role === "SPV" && roleRow.divisionId;
+  const isDivScoped = DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0;
+  const divScope = isDivScoped ? inArray(employees.divisionId, roleRow.divisionIds) : undefined;
 
-  // ─── Employee counts ────────────────────────────────────────────────────────
   const empRows = await db
-    .select({
-      employmentStatus: employees.employmentStatus,
-      cnt: count(),
-    })
+    .select({ employmentStatus: employees.employmentStatus, cnt: count() })
     .from(employees)
-    .where(
-      and(
-        eq(employees.isActive, true),
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    )
+    .where(and(eq(employees.isActive, true), divScope))
     .groupBy(employees.employmentStatus);
 
   let totalAktif = 0;
@@ -62,54 +56,31 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     if (r.employmentStatus === "REGULER") reguler += Number(r.cnt);
   }
 
-  // ─── Pending approvals ──────────────────────────────────────────────────────
   const [ticketPending] = await db
     .select({ cnt: count() })
     .from(attendanceTickets)
     .leftJoin(employees, eq(attendanceTickets.employeeId, employees.id))
-    .where(
-      and(
-        inArray(attendanceTickets.status, ["SUBMITTED", "NEED_REVIEW"]),
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    );
+    .where(and(inArray(attendanceTickets.status, ["SUBMITTED", "NEED_REVIEW"]), divScope));
 
   const [activityPending] = await db
     .select({ cnt: count() })
     .from(dailyActivityEntries)
     .leftJoin(employees, eq(dailyActivityEntries.employeeId, employees.id))
-    .where(
-      and(
-        inArray(dailyActivityEntries.status, ["DIAJUKAN", "DIAJUKAN_ULANG"]),
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    );
+    .where(and(inArray(dailyActivityEntries.status, ["DIAJUKAN", "DIAJUKAN_ULANG"]), divScope));
 
   const [reviewPending] = await db
     .select({ cnt: count() })
     .from(employeeReviews)
     .leftJoin(employees, eq(employeeReviews.employeeId, employees.id))
-    .where(
-      and(
-        eq(employeeReviews.status, "SUBMITTED"),
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    );
+    .where(and(eq(employeeReviews.status, "SUBMITTED"), divScope));
 
-  // ─── Activity by status ─────────────────────────────────────────────────────
   const actStatusRows = await db
-    .select({
-      status: dailyActivityEntries.status,
-      jumlah: count(),
-    })
+    .select({ status: dailyActivityEntries.status, jumlah: count() })
     .from(dailyActivityEntries)
     .leftJoin(employees, eq(dailyActivityEntries.employeeId, employees.id))
-    .where(
-      isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined
-    )
+    .where(divScope)
     .groupBy(dailyActivityEntries.status);
 
-  // ─── Division performance (last recorded month per division) ────────────────
   const divPerfRows = await db
     .select({
       divisionName: monthlyPointPerformances.divisionSnapshotName,
@@ -118,38 +89,21 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     })
     .from(monthlyPointPerformances)
     .leftJoin(employees, eq(monthlyPointPerformances.employeeId, employees.id))
-    .where(
-      and(
-        eq(employees.isActive, true),
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    )
+    .where(and(eq(employees.isActive, true), divScope))
     .groupBy(monthlyPointPerformances.divisionSnapshotName)
     .orderBy(monthlyPointPerformances.divisionSnapshotName);
 
-  // ─── Incident summary ───────────────────────────────────────────────────────
   const [incTotal] = await db
     .select({ cnt: count() })
     .from(incidentLogs)
     .leftJoin(employees, eq(incidentLogs.employeeId, employees.id))
-    .where(
-      and(
-        eq(incidentLogs.isActive, true),
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    );
+    .where(and(eq(incidentLogs.isActive, true), divScope));
 
   const [incWithDeduction] = await db
     .select({ cnt: count() })
     .from(incidentLogs)
     .leftJoin(employees, eq(incidentLogs.employeeId, employees.id))
-    .where(
-      and(
-        eq(incidentLogs.isActive, true),
-        sql`${incidentLogs.payrollDeduction} is not null`,
-        isSPV ? eq(employees.divisionId, roleRow.divisionId!) : undefined,
-      )
-    );
+    .where(and(eq(incidentLogs.isActive, true), sql`${incidentLogs.payrollDeduction} is not null`, divScope));
 
   return {
     role,
@@ -159,10 +113,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       activities: Number(activityPending?.cnt ?? 0),
       reviews: Number(reviewPending?.cnt ?? 0),
     },
-    activityByStatus: actStatusRows.map((r) => ({
-      status: r.status,
-      jumlah: Number(r.jumlah),
-    })),
+    activityByStatus: actStatusRows.map((r) => ({ status: r.status, jumlah: Number(r.jumlah) })),
     divisionPerformance: divPerfRows.map((r) => ({
       divisionName: r.divisionName,
       avgPercent: r.avgPercent != null ? Number(Number(r.avgPercent).toFixed(1)) : null,

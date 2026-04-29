@@ -12,6 +12,7 @@ export function resolveHeaderTitle(pathname: string) {
   if (pathname.startsWith("/tickets")) return "Ticketing";
   if (pathname.startsWith("/reviews")) return "Review";
   if (pathname.startsWith("/master/")) return "Master Data";
+  if (pathname.startsWith("/users")) return "Manajemen Pengguna";
   if (pathname.startsWith("/settings")) return "Pengaturan";
   return "Dashboard";
 }

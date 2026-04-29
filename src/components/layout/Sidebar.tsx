@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Database,
   Settings,
+  UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
@@ -81,6 +82,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: TrendingUp,
     roles: ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
+  },
+  {
+    label: "Pengguna",
+    href: "/users",
+    icon: UserCog,
+    roles: ["SUPER_ADMIN", "HRD"],
+    group: "admin",
   },
   {
     label: "Master Data",

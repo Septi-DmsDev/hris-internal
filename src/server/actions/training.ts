@@ -9,6 +9,8 @@ import { asc, desc, eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
+const TRAINING_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+
 function resolveCategory(pct: number, passPct: number) {
   if (pct >= passPct) return "LULUS";
   if (pct >= passPct * 0.8) return "MENDEKATI";
@@ -19,6 +21,10 @@ export async function getTrainingEvaluations() {
   await requireAuth();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+
+  if (!TRAINING_ROLES.includes(role)) {
+    return { role, evaluations: [] };
+  }
 
   const trainees = await db
     .select({

@@ -5,12 +5,14 @@ import { employees } from "@/lib/db/schema/employee";
 import { attendanceTickets, leaveQuotas } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { createTicketSchema, ticketDecisionSchema } from "@/lib/validations/hr";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 import { divisions } from "@/lib/db/schema/master";
 
 const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
+const TICKET_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK", "MANAGERIAL"];
 
 function diffDays(start: Date, end: Date) {
   return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
@@ -38,10 +40,25 @@ async function hasLeaveEligibility(employeeId: string) {
   return months >= 12;
 }
 
+async function getEmployeeDivisionId(employeeId: string) {
+  const [employeeRow] = await db
+    .select({ divisionId: employees.divisionId })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+
+  return employeeRow?.divisionId ?? null;
+}
+
 export async function getTickets() {
   await requireAuth();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+  const user = await getUser();
+
+  if (!TICKET_READ_ROLES.includes(role)) {
+    return { role, tickets: [] };
+  }
 
   const employeeDivision = divisions;
 
@@ -72,7 +89,11 @@ export async function getTickets() {
       ? await baseQuery
           .where(eq(employees.divisionId, roleRow.divisionId))
           .orderBy(desc(attendanceTickets.createdAt))
-      : await baseQuery.orderBy(desc(attendanceTickets.createdAt));
+      : SELF_SERVICE_TICKET_ROLES.includes(role) && user
+        ? await baseQuery
+            .where(eq(attendanceTickets.createdByUserId, user.id))
+            .orderBy(desc(attendanceTickets.createdAt))
+        : await baseQuery.orderBy(desc(attendanceTickets.createdAt));
 
   return { role, tickets: rows };
 }
@@ -87,6 +108,26 @@ export async function createTicket(input: unknown) {
   }
 
   const user = await getUser();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  if (SELF_SERVICE_TICKET_ROLES.includes(role)) {
+    return {
+      error:
+        "Self-service ticketing untuk role ini sementara diblokir karena relasi auth user ke employee belum tersedia di schema.",
+    };
+  }
+
+  if (role === "SPV") {
+    if (!roleRow.divisionId) {
+      return { error: "SPV belum terhubung ke divisi." };
+    }
+
+    const employeeDivisionId = await getEmployeeDivisionId(parsed.data.employeeId);
+    if (!employeeDivisionId || employeeDivisionId !== roleRow.divisionId) {
+      return { error: "SPV hanya boleh membuat tiket untuk karyawan di divisinya." };
+    }
+  }
+
   const { startDate, endDate } = parsed.data;
   const daysCount = diffDays(startDate, endDate);
 
@@ -126,7 +167,13 @@ export async function approveTicket(input: unknown) {
   const role = roleRow.role as UserRole;
 
   const [ticket] = await db
-    .select()
+    .select({
+      id: attendanceTickets.id,
+      employeeId: attendanceTickets.employeeId,
+      ticketType: attendanceTickets.ticketType,
+      startDate: attendanceTickets.startDate,
+      status: attendanceTickets.status,
+    })
     .from(attendanceTickets)
     .where(eq(attendanceTickets.id, parsed.data.ticketId))
     .limit(1);
@@ -135,45 +182,80 @@ export async function approveTicket(input: unknown) {
   if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat disetujui." };
   }
+  if (role === "SPV") {
+    if (!roleRow.divisionId) {
+      return { error: "SPV belum terhubung ke divisi." };
+    }
 
-  const approvedStatus = role === "SPV" ? "APPROVED_SPV" : "APPROVED_HRD";
-
-  // Determine payroll impact
-  let payrollImpact = parsed.data.payrollImpact ?? "UNPAID";
-  if (!parsed.data.payrollImpact && ticket.ticketType !== "SETENGAH_HARI") {
-    const year = new Date(ticket.startDate).getFullYear();
-    const eligible = await hasLeaveEligibility(ticket.employeeId);
-    if (eligible) {
-      const quota = await getEmployeeLeaveQuota(ticket.employeeId, year);
-      if (quota) {
-        if (quota.monthlyQuotaUsed < quota.monthlyQuotaTotal) {
-          payrollImpact = "PAID_QUOTA_MONTHLY";
-          await db
-            .update(leaveQuotas)
-            .set({ monthlyQuotaUsed: quota.monthlyQuotaUsed + 1, updatedAt: new Date() })
-            .where(eq(leaveQuotas.id, quota.id));
-        } else if (quota.annualQuotaUsed < quota.annualQuotaTotal) {
-          payrollImpact = "PAID_QUOTA_ANNUAL";
-          await db
-            .update(leaveQuotas)
-            .set({ annualQuotaUsed: quota.annualQuotaUsed + 1, updatedAt: new Date() })
-            .where(eq(leaveQuotas.id, quota.id));
-        }
-      }
+    const employeeDivisionId = await getEmployeeDivisionId(ticket.employeeId);
+    if (!employeeDivisionId || employeeDivisionId !== roleRow.divisionId) {
+      return { error: "SPV hanya boleh menyetujui tiket di divisinya." };
     }
   }
 
-  await db
-    .update(attendanceTickets)
-    .set({
-      status: approvedStatus,
-      payrollImpact,
-      reviewNotes: parsed.data.notes,
-      approvedByUserId: user?.id ?? null,
-      approvedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(attendanceTickets.id, parsed.data.ticketId));
+  const approvedStatus = role === "SPV" ? "APPROVED_SPV" : "APPROVED_HRD";
+
+  await db.transaction(async (tx) => {
+    let payrollImpact = parsed.data.payrollImpact ?? "UNPAID";
+
+    if (!parsed.data.payrollImpact && ticket.ticketType !== "SETENGAH_HARI") {
+      const year = new Date(ticket.startDate).getFullYear();
+      const eligible = await hasLeaveEligibility(ticket.employeeId);
+
+      if (eligible) {
+        const quota = await getEmployeeLeaveQuota(ticket.employeeId, year);
+        if (quota) {
+          const [monthlyUpdated] = await tx
+            .update(leaveQuotas)
+            .set({
+              monthlyQuotaUsed: sql`${leaveQuotas.monthlyQuotaUsed} + 1`,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(leaveQuotas.id, quota.id),
+                sql`${leaveQuotas.monthlyQuotaUsed} < ${leaveQuotas.monthlyQuotaTotal}`
+              )
+            )
+            .returning({ id: leaveQuotas.id });
+
+          if (monthlyUpdated) {
+            payrollImpact = "PAID_QUOTA_MONTHLY";
+          } else {
+            const [annualUpdated] = await tx
+              .update(leaveQuotas)
+              .set({
+                annualQuotaUsed: sql`${leaveQuotas.annualQuotaUsed} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(leaveQuotas.id, quota.id),
+                  sql`${leaveQuotas.annualQuotaUsed} < ${leaveQuotas.annualQuotaTotal}`
+                )
+              )
+              .returning({ id: leaveQuotas.id });
+
+            if (annualUpdated) {
+              payrollImpact = "PAID_QUOTA_ANNUAL";
+            }
+          }
+        }
+      }
+    }
+
+    await tx
+      .update(attendanceTickets)
+      .set({
+        status: approvedStatus,
+        payrollImpact,
+        reviewNotes: parsed.data.notes,
+        approvedByUserId: user?.id ?? null,
+        approvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(attendanceTickets.id, parsed.data.ticketId));
+  });
 
   revalidatePath("/tickets");
   return { success: true };
@@ -195,7 +277,11 @@ export async function rejectTicket(input: unknown) {
   const user = await getUser();
 
   const [ticket] = await db
-    .select({ id: attendanceTickets.id, status: attendanceTickets.status })
+    .select({
+      id: attendanceTickets.id,
+      employeeId: attendanceTickets.employeeId,
+      status: attendanceTickets.status,
+    })
     .from(attendanceTickets)
     .where(eq(attendanceTickets.id, parsed.data.ticketId))
     .limit(1);
@@ -203,6 +289,18 @@ export async function rejectTicket(input: unknown) {
   if (!ticket) return { error: "Tiket tidak ditemukan." };
   if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat ditolak." };
+  }
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  if (role === "SPV") {
+    if (!roleRow.divisionId) {
+      return { error: "SPV belum terhubung ke divisi." };
+    }
+
+    const employeeDivisionId = await getEmployeeDivisionId(ticket.employeeId);
+    if (!employeeDivisionId || employeeDivisionId !== roleRow.divisionId) {
+      return { error: "SPV hanya boleh menolak tiket di divisinya." };
+    }
   }
 
   await db
@@ -223,6 +321,8 @@ export async function rejectTicket(input: unknown) {
 export async function cancelTicket(ticketId: string) {
   const user = await getUser();
   if (!user) return { error: "Sesi tidak valid." };
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
 
   const [ticket] = await db
     .select()
@@ -233,6 +333,9 @@ export async function cancelTicket(ticketId: string) {
   if (!ticket) return { error: "Tiket tidak ditemukan." };
   if (!["DRAFT", "SUBMITTED"].includes(ticket.status)) {
     return { error: "Tiket yang sudah diproses tidak bisa dibatalkan." };
+  }
+  if (ticket.createdByUserId !== user.id && !["SUPER_ADMIN", "HRD"].includes(role)) {
+    return { error: "Hanya pembuat tiket atau HRD/Super Admin yang dapat membatalkan tiket ini." };
   }
 
   await db

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 type DataTableProps<T extends Record<string, unknown>> = {
@@ -38,7 +39,8 @@ export function DataTable<T extends Record<string, unknown>>({
   const searchValue =
     searchKey === undefined
       ? ""
-      : ((columnFilters.find((filter) => filter.id === searchKey)?.value as string | undefined) ?? "");
+      : ((columnFilters.find((filter) => filter.id === searchKey)
+          ?.value as string | undefined) ?? "");
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -52,26 +54,41 @@ export function DataTable<T extends Record<string, unknown>>({
     initialState: { pagination: { pageSize: 20 } },
   });
 
+  const filteredCount = table.getFilteredRowModel().rows.length;
+  const totalCount = data.length;
+  const pageIndex = table.getState().pagination.pageIndex;
+  const pageCount = table.getPageCount();
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {searchKey !== undefined && (
-        <Input
-          placeholder={searchPlaceholder}
-          value={searchValue}
-          onChange={(e) => {
-            const value = e.target.value;
-            setColumnFilters(value ? [{ id: searchKey, value }] : []);
-          }}
-          className="max-w-xs"
-        />
+        <div className="relative max-w-xs">
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+          />
+          <Input
+            placeholder={searchPlaceholder}
+            value={searchValue}
+            onChange={(e) => {
+              const value = e.target.value;
+              setColumnFilters(value ? [{ id: searchKey, value }] : []);
+            }}
+            className="pl-9 h-9 text-sm bg-white border-slate-200 focus-visible:ring-teal-500 placeholder:text-slate-400"
+          />
+        </div>
       )}
-      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+
+      <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id} className="bg-slate-50">
+              <TableRow key={hg.id} className="bg-slate-50/80 border-b border-slate-200/80 hover:bg-slate-50/80">
                 {hg.headers.map((header) => (
-                  <TableHead key={header.id} className="text-slate-600 text-xs font-semibold uppercase tracking-wide">
+                  <TableHead
+                    key={header.id}
+                    className="text-[11px] font-bold uppercase tracking-wider text-slate-400 h-11 px-4"
+                  >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
@@ -81,15 +98,29 @@ export function DataTable<T extends Record<string, unknown>>({
           <TableBody>
             {table.getRowModel().rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="text-center text-slate-400 py-10">
-                  Tidak ada data
+                <TableCell
+                  colSpan={columns.length}
+                  className="text-center text-slate-400 py-14 text-sm"
+                >
+                  <div className="flex flex-col items-center gap-1.5">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                      <Search size={14} className="text-slate-400" />
+                    </div>
+                    <span>Tidak ada data</span>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="hover:bg-slate-50">
+                <TableRow
+                  key={row.id}
+                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors"
+                >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="text-sm">
+                    <TableCell
+                      key={cell.id}
+                      className="text-sm text-slate-700 px-4 py-3.5"
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
@@ -99,26 +130,42 @@ export function DataTable<T extends Record<string, unknown>>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between text-sm text-slate-500">
-        <span>{table.getFilteredRowModel().rows.length} data</span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Sebelumnya
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Berikutnya
-          </Button>
-        </div>
+
+      {/* Pagination footer */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-400 font-medium">
+          {searchKey !== undefined && filteredCount !== totalCount
+            ? `${filteredCount} dari ${totalCount} data`
+            : `${totalCount} data`}
+        </span>
+
+        {pageCount > 1 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">
+              Halaman {pageIndex + 1} / {pageCount}
+            </span>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+                className="h-8 w-8 p-0 border-slate-200"
+              >
+                <ChevronLeft size={14} />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+                className="h-8 w-8 p-0 border-slate-200"
+              >
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,8 @@ import { desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 
+const REVIEW_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+
 // Bobot aspek review
 const WEIGHTS = {
   sopQuality: 0.25,
@@ -42,10 +44,27 @@ function computeReviewScore(scores: {
   return { total, category };
 }
 
+async function assertReviewScope(role: UserRole, divisionId: string | null, employeeId: string) {
+  if (role !== "SPV") return true;
+  if (!divisionId) return false;
+
+  const [employeeRow] = await db
+    .select({ divisionId: employees.divisionId })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+
+  return employeeRow?.divisionId === divisionId;
+}
+
 export async function getReviews() {
   await requireAuth();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+
+  if (!REVIEW_ROLES.includes(role)) {
+    return { role, reviews: [], incidents: [] };
+  }
 
   const rows = await db
     .select({
@@ -116,6 +135,10 @@ export async function createReview(input: unknown) {
   }
 
   const roleRow = await getCurrentUserRoleRow();
+  const inScope = await assertReviewScope(roleRow.role as UserRole, roleRow.divisionId ?? null, parsed.data.employeeId);
+  if (!inScope) {
+    return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
+  }
 
   const scores = {
     sopQualityScore: parsed.data.sopQualityScore,
@@ -129,7 +152,8 @@ export async function createReview(input: unknown) {
   try {
     await db.insert(employeeReviews).values({
       employeeId: parsed.data.employeeId,
-      reviewerEmployeeId: roleRow.id,
+      // Repo belum memiliki relasi auth user -> employee, jadi reviewer employee belum bisa diisi aman.
+      reviewerEmployeeId: null,
       periodStartDate: parsed.data.periodStartDate,
       periodEndDate: parsed.data.periodEndDate,
       ...scores,
@@ -182,6 +206,11 @@ export async function createIncident(input: unknown) {
 
   const user = await getUser();
   const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  const inScope = await assertReviewScope(role, roleRow.divisionId ?? null, parsed.data.employeeId);
+  if (!inScope) {
+    return { error: "Akses ditolak untuk karyawan di luar scope divisi Anda." };
+  }
 
   const [emp] = await db
     .select({ divisionId: employees.divisionId })
@@ -199,7 +228,7 @@ export async function createIncident(input: unknown) {
       impact: parsed.data.impact,
       payrollDeduction: parsed.data.payrollDeduction?.toFixed(2) ?? null,
       recordedByUserId: user?.id ?? parsed.data.employeeId,
-      recordedByRole: (roleRow.role as UserRole),
+      recordedByRole: role,
       notes: parsed.data.notes,
     });
   } catch (e) {

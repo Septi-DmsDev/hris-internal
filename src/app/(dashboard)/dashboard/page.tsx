@@ -1,5 +1,6 @@
 import { getDashboardStats } from "@/server/actions/dashboard";
 import { Badge } from "@/components/ui/badge";
+import { ArrowRight } from "lucide-react";
 
 const ACTIVITY_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Draft",
@@ -12,25 +13,73 @@ const ACTIVITY_STATUS_LABEL: Record<string, string> = {
   DIKUNCI_PAYROLL: "Dikunci Payroll",
 };
 
-function StatCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
+const ACTIVITY_STATUS_COLOR: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-600",
+  DIAJUKAN: "bg-blue-50 text-blue-700",
+  DITOLAK_SPV: "bg-red-50 text-red-700",
+  REVISI_TW: "bg-amber-50 text-amber-700",
+  DIAJUKAN_ULANG: "bg-orange-50 text-orange-700",
+  DISETUJUI_SPV: "bg-teal-50 text-teal-700",
+  OVERRIDE_HRD: "bg-violet-50 text-violet-700",
+  DIKUNCI_PAYROLL: "bg-green-50 text-green-700",
+};
+
+function StatCard({
+  label,
+  value,
+  sub,
+  highlight = false,
+}: {
+  label: string;
+  value: number | string;
+  sub?: string;
+  highlight?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-slate-800">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+    <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md transition-shadow duration-200">
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        {label}
+      </p>
+      <p
+        className={`mt-2 text-3xl font-extrabold tracking-tight ${
+          highlight ? "text-teal-600" : "text-slate-800"
+        }`}
+      >
+        {value}
+      </p>
+      {sub && <p className="mt-1.5 text-xs text-slate-400">{sub}</p>}
     </div>
   );
 }
 
-function AlertCard({ label, value, href }: { label: string; value: number; href: string }) {
+function AlertCard({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: number;
+  href: string;
+}) {
   return (
-    <a href={href} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm hover:bg-slate-50 transition-colors">
-      <span className="text-sm text-slate-600">{label}</span>
-      {value > 0 ? (
-        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">{value}</span>
-      ) : (
-        <span className="text-xs text-slate-400">Tidak ada</span>
-      )}
+    <a
+      href={href}
+      className="group flex items-center justify-between rounded-xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm hover:border-teal-200 hover:shadow-md transition-all duration-150"
+    >
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <div className="flex items-center gap-2">
+        {value > 0 ? (
+          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-200">
+            {value}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400 font-medium">Selesai</span>
+        )}
+        <ArrowRight
+          size={14}
+          className="text-slate-300 group-hover:text-teal-500 transition-colors"
+        />
+      </div>
     </a>
   );
 }
@@ -44,70 +93,118 @@ export default async function DashboardPage() {
     stats.pendingApprovals.reviews;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-6xl">
+      {/* Page header */}
       <div>
-        <h1 className="text-xl font-bold text-slate-800">Dashboard HRD</h1>
-        <p className="text-sm text-slate-500">Ringkasan performa dan status operasional karyawan.</p>
+        <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+          Dashboard HRD
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Ringkasan performa dan status operasional karyawan.
+        </p>
       </div>
 
-      {/* Employee Overview */}
+      {/* Employee overview */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Karyawan</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard label="Total Aktif" value={stats.employees.totalAktif} />
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+          Karyawan
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Total Aktif"
+            value={stats.employees.totalAktif}
+            highlight
+          />
           <StatCard label="Status Reguler" value={stats.employees.reguler} />
           <StatCard label="Status Training" value={stats.employees.training} />
         </div>
       </section>
 
-      {/* Pending Approvals */}
+      {/* Pending approvals */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
           Menunggu Tindakan
           {totalPending > 0 && (
-            <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+            <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
               {totalPending}
             </span>
           )}
         </h2>
         <div className="space-y-2">
-          <AlertCard label="Tiket Izin / Sakit / Cuti" value={stats.pendingApprovals.tickets} href="/tickets" />
-          <AlertCard label="Aktivitas Harian Perlu Disetujui" value={stats.pendingApprovals.activities} href="/performance" />
-          <AlertCard label="Review Karyawan Perlu Divalidasi" value={stats.pendingApprovals.reviews} href="/reviews" />
+          <AlertCard
+            label="Tiket Izin / Sakit / Cuti"
+            value={stats.pendingApprovals.tickets}
+            href="/tickets"
+          />
+          <AlertCard
+            label="Aktivitas Harian Perlu Disetujui"
+            value={stats.pendingApprovals.activities}
+            href="/performance"
+          />
+          <AlertCard
+            label="Review Karyawan Perlu Divalidasi"
+            value={stats.pendingApprovals.reviews}
+            href="/reviews"
+          />
         </div>
       </section>
 
-      {/* Division Performance */}
+      {/* Division performance */}
       {stats.divisionPerformance.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Performa per Divisi</h2>
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+            Performa per Divisi
+          </h2>
+          <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  <th className="px-4 py-3 text-left">Divisi</th>
-                  <th className="px-4 py-3 text-right">Avg Performa</th>
-                  <th className="px-4 py-3 text-right">Status</th>
+                <tr className="border-b border-slate-100 bg-slate-50/80">
+                  <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Divisi
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Avg Performa
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {stats.divisionPerformance.map((d) => {
                   const pct = d.avgPercent ?? 0;
                   const color =
-                    pct >= 100 ? "text-emerald-700" : pct >= 80 ? "text-amber-700" : "text-red-700";
-                  const badge =
                     pct >= 100
-                      ? <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Tercapai</Badge>
+                      ? "text-teal-600 font-bold"
                       : pct >= 80
-                      ? <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Mendekati</Badge>
-                      : <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Di bawah target</Badge>;
+                      ? "text-amber-600 font-bold"
+                      : "text-red-600 font-bold";
+                  const badge =
+                    pct >= 100 ? (
+                      <Badge className="bg-teal-100 text-teal-800 border border-teal-200 hover:bg-teal-100 font-semibold">
+                        Tercapai
+                      </Badge>
+                    ) : pct >= 80 ? (
+                      <Badge className="bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-100 font-semibold">
+                        Mendekati
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-red-100 text-red-800 border border-red-200 hover:bg-red-100 font-semibold">
+                        Di bawah target
+                      </Badge>
+                    );
                   return (
-                    <tr key={d.divisionName} className="border-b border-slate-100 last:border-0">
-                      <td className="px-4 py-3 font-medium text-slate-800">{d.divisionName}</td>
-                      <td className={`px-4 py-3 text-right font-semibold ${color}`}>
-                        {d.avgPercent != null ? `${d.avgPercent}%` : "-"}
+                    <tr
+                      key={d.divisionName}
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors"
+                    >
+                      <td className="px-5 py-3.5 font-semibold text-slate-800">
+                        {d.divisionName}
                       </td>
-                      <td className="px-4 py-3 text-right">{badge}</td>
+                      <td className={`px-5 py-3.5 text-right ${color}`}>
+                        {d.avgPercent != null ? `${d.avgPercent}%` : "—"}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">{badge}</td>
                     </tr>
                   );
                 })}
@@ -117,29 +214,48 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* Activity by Status */}
+      {/* Activity by status */}
       {stats.activityByStatus.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Aktivitas Harian per Status</h2>
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+            Aktivitas Harian per Status
+          </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {stats.activityByStatus
               .sort((a, b) => b.jumlah - a.jumlah)
-              .map((s) => (
-                <StatCard
-                  key={s.status}
-                  label={ACTIVITY_STATUS_LABEL[s.status] ?? s.status}
-                  value={s.jumlah}
-                />
-              ))}
+              .map((s) => {
+                const colorClass =
+                  ACTIVITY_STATUS_COLOR[s.status] ?? "bg-slate-100 text-slate-600";
+                return (
+                  <div
+                    key={s.status}
+                    className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm"
+                  >
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${colorClass}`}
+                    >
+                      {ACTIVITY_STATUS_LABEL[s.status] ?? s.status}
+                    </span>
+                    <p className="mt-2.5 text-2xl font-extrabold text-slate-800">
+                      {s.jumlah}
+                    </p>
+                  </div>
+                );
+              })}
           </div>
         </section>
       )}
 
-      {/* Incident Summary */}
+      {/* Incident summary */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Incident Log</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Total Incident Aktif" value={stats.incidentSummary.total} />
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+          Incident Log
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            label="Total Incident Aktif"
+            value={stats.incidentSummary.total}
+          />
           <StatCard
             label="Berpotensi Potong Payroll"
             value={stats.incidentSummary.withDeduction}

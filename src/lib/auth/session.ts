@@ -5,6 +5,14 @@ import { userRoles, userRoleDivisions } from "@/lib/db/schema/auth";
 import { eq } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
+export type RoleRow = {
+  id: string;
+  userId: string;
+  role: string;
+  employeeId: string | null;
+  divisionIds: string[];
+};
+
 export async function getUser() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -25,31 +33,28 @@ export async function checkRole(allowed: UserRole[]): Promise<{ error: string } 
   return null;
 }
 
-export async function getCurrentUserRoleRow() {
+export async function getCurrentUserRoleRow(): Promise<RoleRow> {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const [roleRow] = await db
+  const rows = await db
     .select({
       id: userRoles.id,
       userId: userRoles.userId,
       role: userRoles.role,
       employeeId: userRoles.employeeId,
+      divisionId: userRoleDivisions.divisionId,
     })
     .from(userRoles)
-    .where(eq(userRoles.userId, user.id))
-    .limit(1);
+    .leftJoin(userRoleDivisions, eq(userRoleDivisions.userRoleId, userRoles.id))
+    .where(eq(userRoles.userId, user.id));
 
-  if (!roleRow) redirect("/login");
+  if (rows.length === 0) redirect("/login");
 
-  const divisionRows = await db
-    .select({ divisionId: userRoleDivisions.divisionId })
-    .from(userRoleDivisions)
-    .where(eq(userRoleDivisions.userRoleId, roleRow.id));
-
+  const { divisionId: _ignored, ...baseRow } = rows[0];
   return {
-    ...roleRow,
-    divisionIds: divisionRows.map((r) => r.divisionId),
+    ...baseRow,
+    divisionIds: rows.map((r) => r.divisionId).filter((id): id is string => id !== null),
   };
 }
 

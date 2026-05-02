@@ -13,9 +13,6 @@ export default async function BranchesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-800">Master Cabang</h1>
-      </div>
       <BranchesTable data={rows} />
     </div>
   );

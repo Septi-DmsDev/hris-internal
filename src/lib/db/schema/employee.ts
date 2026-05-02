@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -126,6 +127,21 @@ export const workSchedules = pgTable("work_schedules", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
+export const workShiftMasters = pgTable("work_shift_masters", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: varchar("code", { length: 20 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  startTime: varchar("start_time", { length: 5 }).notNull(),
+  endTime: varchar("end_time", { length: 5 }).notNull(),
+  isOvernight: boolean("is_overnight").notNull().default(false),
+  applicableDivisionCodes: jsonb("applicable_division_codes").$type<string[]>().notNull().default([]),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
 export const workScheduleDays = pgTable("work_schedule_days", {
   id: uuid("id").defaultRandom().primaryKey(),
   scheduleId: uuid("schedule_id").notNull().references(() => workSchedules.id, { onDelete: "cascade" }),
@@ -163,6 +179,8 @@ export type EmployeeStatusHistory = typeof employeeStatusHistories.$inferSelect;
 export type NewEmployeeStatusHistory = typeof employeeStatusHistories.$inferInsert;
 export type WorkSchedule = typeof workSchedules.$inferSelect;
 export type NewWorkSchedule = typeof workSchedules.$inferInsert;
+export type WorkShiftMaster = typeof workShiftMasters.$inferSelect;
+export type NewWorkShiftMaster = typeof workShiftMasters.$inferInsert;
 export type WorkScheduleDay = typeof workScheduleDays.$inferSelect;
 export type NewWorkScheduleDay = typeof workScheduleDays.$inferInsert;
 export type EmployeeScheduleAssignment = typeof employeeScheduleAssignments.$inferSelect;

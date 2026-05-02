@@ -1,9 +1,9 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { workScheduleDays, workSchedules } from "@/lib/db/schema/employee";
+import { workScheduleDays, workSchedules, workShiftMasters } from "@/lib/db/schema/employee";
 import { checkRole, requireAuth } from "@/lib/auth/session";
-import { workScheduleSchema, type WorkScheduleInput } from "@/lib/validations/employee";
+import { workScheduleSchema, workShiftMasterSchema, type WorkScheduleInput } from "@/lib/validations/employee";
 import { asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -42,6 +42,91 @@ export async function getActiveWorkSchedules() {
     .from(workSchedules)
     .where(eq(workSchedules.isActive, true))
     .orderBy(asc(workSchedules.name));
+}
+
+export async function getWorkShiftMasters() {
+  await requireAuth();
+  return db.select().from(workShiftMasters).orderBy(asc(workShiftMasters.sortOrder), asc(workShiftMasters.name));
+}
+
+export async function createWorkShiftMaster(input: unknown) {
+  const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const parsed = workShiftMasterSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input shift tidak valid." };
+  }
+
+  try {
+    await db.insert(workShiftMasters).values({
+      code: parsed.data.code,
+      name: parsed.data.name,
+      startTime: parsed.data.startTime,
+      endTime: parsed.data.endTime,
+      isOvernight: parsed.data.isOvernight,
+      applicableDivisionCodes: parsed.data.applicableDivisionCodes,
+      notes: parsed.data.notes,
+      sortOrder: parsed.data.sortOrder,
+      isActive: parsed.data.isActive,
+    });
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "23505") return { error: "Kode shift sudah digunakan, pakai kode lain." };
+    throw error;
+  }
+
+  revalidatePath("/master/work-schedules");
+  return { success: true };
+}
+
+export async function updateWorkShiftMaster(id: string, input: unknown) {
+  const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const parsed = workShiftMasterSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input shift tidak valid." };
+  }
+
+  try {
+    const result = await db
+      .update(workShiftMasters)
+      .set({
+        code: parsed.data.code,
+        name: parsed.data.name,
+        startTime: parsed.data.startTime,
+        endTime: parsed.data.endTime,
+        isOvernight: parsed.data.isOvernight,
+        applicableDivisionCodes: parsed.data.applicableDivisionCodes,
+        notes: parsed.data.notes,
+        sortOrder: parsed.data.sortOrder,
+        isActive: parsed.data.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(workShiftMasters.id, id))
+      .returning({ id: workShiftMasters.id });
+
+    if (!result.length) {
+      return { error: "Shift tidak ditemukan." };
+    }
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "23505") return { error: "Kode shift sudah digunakan, pakai kode lain." };
+    throw error;
+  }
+
+  revalidatePath("/master/work-schedules");
+  return { success: true };
+}
+
+export async function deleteWorkShiftMaster(id: string) {
+  const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  await db.delete(workShiftMasters).where(eq(workShiftMasters.id, id));
+  revalidatePath("/master/work-schedules");
+  return { success: true };
 }
 
 export async function createWorkSchedule(input: unknown) {

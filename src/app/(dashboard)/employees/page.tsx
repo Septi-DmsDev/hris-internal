@@ -60,18 +60,6 @@ export default async function EmployeesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">
-            Profil Karyawan
-          </h1>
-          <p className="text-sm text-slate-500">
-            Fondasi data employee, status, supervisor, dan jadwal kerja untuk
-            Phase 1.
-          </p>
-        </div>
-      </div>
-
       <EmployeesTable data={rows} options={formOptions} />
     </div>
   );

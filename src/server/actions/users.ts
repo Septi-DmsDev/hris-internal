@@ -196,3 +196,68 @@ export async function removeUserAccess(userRoleId: string) {
   revalidatePath("/users");
   return { success: true };
 }
+
+export async function getEmployeeLoginInfo(employeeId: string) {
+  await requireAuth();
+  const guard = await checkRole(MANAGE_ROLES);
+  if (guard) return null;
+
+  const [roleRow] = await db
+    .select({ userId: userRoles.userId })
+    .from(userRoles)
+    .where(eq(userRoles.employeeId, employeeId))
+    .limit(1);
+
+  if (!roleRow) return { hasAccount: false, email: null };
+
+  const admin = createAdminClient();
+  const { data } = await admin.auth.admin.getUserById(roleRow.userId);
+  return { hasAccount: true, email: data?.user?.email ?? null };
+}
+
+const employeeLoginSchema = z.object({
+  employeeId: z.string().uuid(),
+  email: z.string().email("Email tidak valid"),
+  password: z.string().min(8, "Password minimal 8 karakter").optional(),
+});
+
+export async function upsertEmployeeLogin(input: unknown) {
+  await requireAuth();
+  const guard = await checkRole(MANAGE_ROLES);
+  if (guard) return { error: guard.error };
+
+  const parsed = employeeLoginSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const { employeeId, email, password } = parsed.data;
+  const admin = createAdminClient();
+
+  const [existing] = await db
+    .select({ userId: userRoles.userId })
+    .from(userRoles)
+    .where(eq(userRoles.employeeId, employeeId))
+    .limit(1);
+
+  if (existing) {
+    const updates: { email?: string; password?: string } = { email };
+    if (password) updates.password = password;
+    const { error } = await admin.auth.admin.updateUserById(existing.userId, updates);
+    if (error) return { error: error.message };
+  } else {
+    if (!password) return { error: "Password wajib diisi untuk akun baru." };
+    const { data, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error) return { error: error.message };
+    await db
+      .insert(userRoles)
+      .values({ userId: data.user.id, role: "TEAMWORK", employeeId })
+      .onConflictDoNothing();
+  }
+
+  revalidatePath("/users");
+  revalidatePath("/employees");
+  return { success: true };
+}

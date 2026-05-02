@@ -44,8 +44,26 @@ export const salaryConfigSchema = z.object({
   notes: z.string().trim().max(500).optional(),
 });
 
+export const gradeCompensationConfigSchema = z.object({
+  gradeId: z.uuid(),
+  allowanceAmount: optionalMoney.optional(),
+  bonusKinerja80: optionalMoney.optional(),
+  bonusKinerja90: optionalMoney.optional(),
+  bonusKinerja100: optionalMoney.optional(),
+  bonusKinerjaTeam80: optionalMoney.optional(),
+  bonusKinerjaTeam90: optionalMoney.optional(),
+  bonusKinerjaTeam100: optionalMoney.optional(),
+  bonusDisiplin80: optionalMoney.optional(),
+  bonusDisiplin90: optionalMoney.optional(),
+  bonusDisiplin100: optionalMoney.optional(),
+  bonusPrestasi140: optionalMoney.optional(),
+  bonusPrestasi165: optionalMoney.optional(),
+  isActive: z.boolean().optional(),
+});
+
 export type CreatePayrollPeriodInput = z.infer<typeof createPayrollPeriodSchema>;
 export type PayrollPeriodActionInput = z.infer<typeof payrollPeriodActionSchema>;
 export type PayrollAdjustmentInput = z.infer<typeof payrollAdjustmentSchema>;
 export type ManagerialKpiSummaryInput = z.infer<typeof managerialKpiSummarySchema>;
 export type SalaryConfigInput = z.infer<typeof salaryConfigSchema>;
+export type GradeCompensationConfigInput = z.infer<typeof gradeCompensationConfigSchema>;

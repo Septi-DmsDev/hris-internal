@@ -12,12 +12,6 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Manajemen Pengguna</h1>
-        <p className="text-sm text-slate-500">
-          Undang pengguna baru, atur role, dan kelola akses sistem.
-        </p>
-      </div>
       <UsersClient data={users} options={options} />
     </div>
   );

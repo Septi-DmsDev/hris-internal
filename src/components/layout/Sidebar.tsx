@@ -14,9 +14,13 @@ import {
   Database,
   Settings,
   UserCog,
+  LogOut,
+  CalendarDays,
+  CalendarCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
+import { logoutAction } from "@/server/actions/auth";
 
 type NavItem = {
   label: string;
@@ -31,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Saya",
     href: "/me",
     icon: User,
-    roles: ["HRD", "KABAG", "FINANCE", "SPV", "TEAMWORK", "MANAGERIAL", "PAYROLL_VIEWER"],
+    roles: ["HRD", "KABAG", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
   },
   {
@@ -45,7 +49,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Karyawan",
     href: "/employees",
     icon: Users,
-    roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "FINANCE"],
+    roles: ["SUPER_ADMIN", "HRD", "KABAG", "FINANCE"],
     group: "main",
   },
   {
@@ -60,6 +64,20 @@ const NAV_ITEMS: NavItem[] = [
     href: "/tickets",
     icon: Ticket,
     roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"],
+    group: "main",
+  },
+  {
+    label: "Jadwal",
+    href: "/schedule",
+    icon: CalendarDays,
+    roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL"],
+    group: "main",
+  },
+  {
+    label: "Atur Jadwal",
+    href: "/scheduler",
+    icon: CalendarCog,
+    roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV"],
     group: "main",
   },
   {
@@ -101,21 +119,10 @@ const NAV_ITEMS: NavItem[] = [
     label: "Pengaturan",
     href: "/settings",
     icon: Settings,
-    roles: ["SUPER_ADMIN"],
+    roles: ["SUPER_ADMIN", "HRD", "KABAG", "FINANCE", "SPV", "TEAMWORK", "MANAGERIAL", "PAYROLL_VIEWER"],
     group: "admin",
   },
 ];
-
-const ROLE_LABEL: Record<UserRole, string> = {
-  SUPER_ADMIN: "Super Admin",
-  HRD: "HRD",
-  KABAG: "Kabag",
-  FINANCE: "Finance",
-  SPV: "Supervisor",
-  TEAMWORK: "Team Work",
-  MANAGERIAL: "Managerial",
-  PAYROLL_VIEWER: "Payroll Viewer",
-};
 
 type SidebarProps = {
   userRole: UserRole;
@@ -159,12 +166,11 @@ export default function Sidebar({ userRole }: SidebarProps) {
   const adminItems = visible.filter((i) => i.group === "admin");
 
   function isActive(item: NavItem) {
-    if (item.href === "/dashboard") return pathname === "/dashboard";
-    return pathname.startsWith(item.href);
+    return pathname === item.href || pathname.startsWith(item.href + "/");
   }
 
   return (
-    <aside className="w-60 min-h-screen bg-[#0f172a] flex flex-col shrink-0 border-r border-white/[0.05]">
+    <aside className="fixed left-0 top-0 z-40 w-60 h-screen bg-[#0f172a] flex flex-col shrink-0 border-r border-white/[0.05]">
       {/* Brand */}
       <div className="px-5 py-5 border-b border-white/[0.07]">
         <div className="flex items-center gap-3">
@@ -186,7 +192,7 @@ export default function Sidebar({ userRole }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto sidebar-scrollbar-hidden py-4 px-3 space-y-0.5">
         {mainItems.length > 0 && (
           <div className="space-y-0.5">
             <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-white/25">
@@ -210,11 +216,16 @@ export default function Sidebar({ userRole }: SidebarProps) {
         )}
       </nav>
 
-      {/* Role badge */}
       <div className="px-4 py-4 border-t border-white/[0.07]">
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-teal-500/[0.12] text-teal-300 border border-teal-500/20 tracking-wide">
-          {ROLE_LABEL[userRole]}
-        </span>
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-red-200 hover:bg-red-500/10 rounded-lg transition-colors duration-150 font-medium border border-white/10"
+          >
+            <LogOut size={14} />
+            <span>Keluar</span>
+          </button>
+        </form>
       </div>
     </aside>
   );

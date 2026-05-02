@@ -14,7 +14,6 @@ export default async function GradesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-800">Master Grade</h1>
       <GradesTable data={rows} />
     </div>
   );

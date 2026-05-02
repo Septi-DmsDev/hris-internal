@@ -1,6 +1,11 @@
+import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import { getDashboardStats } from "@/server/actions/dashboard";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight } from "lucide-react";
+import EmployeeDashboard from "./EmployeeDashboard";
+import type { UserRole } from "@/types";
+
+const ADMIN_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"];
 
 const ACTIVITY_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Draft",
@@ -84,7 +89,7 @@ function AlertCard({
   );
 }
 
-export default async function DashboardPage() {
+async function AdminDashboard() {
   const stats = await getDashboardStats();
 
   const totalPending =
@@ -94,16 +99,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8 max-w-6xl">
-      {/* Page header */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-          Dashboard HRD
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Ringkasan performa dan status operasional karyawan.
-        </p>
-      </div>
-
       {/* Employee overview */}
       <section>
         <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -265,4 +260,15 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+export default async function DashboardPage() {
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  if (ADMIN_ROLES.includes(role)) {
+    return <AdminDashboard />;
+  }
+
+  return <EmployeeDashboard />;
 }

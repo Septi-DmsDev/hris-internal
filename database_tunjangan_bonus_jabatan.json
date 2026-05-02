@@ -1,0 +1,1704 @@
+{
+  "database_tunjangan_bonus_jabatan": [
+    {
+      "jabatan": "Kabag Grade 1",
+      "tunjangan": 1700000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 160000,
+          "90": 180000,
+          "100": 200000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Kabag Grade 2",
+      "tunjangan": 1900000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "disiplin": {
+          "80": 160000,
+          "90": 180000,
+          "100": 200000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Kabag Grade 3",
+      "tunjangan": 2100000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "disiplin": {
+          "80": 160000,
+          "90": 180000,
+          "100": 200000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Kabag Grade 4",
+      "tunjangan": 2300000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "disiplin": {
+          "80": 160000,
+          "90": 180000,
+          "100": 200000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "SPV Grade 1",
+      "tunjangan": 900000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "SPV Grade 2",
+      "tunjangan": 1100000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "SPV Grade 3",
+      "tunjangan": 1300000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "SPV Grade 4",
+      "tunjangan": 1500000,
+      "bonus": {
+        "kinerja": {
+          "80": 200000,
+          "90": 400000,
+          "100": 700000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Grade 1",
+      "tunjangan": 500000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Grade 2",
+      "tunjangan": 600000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Grade 3",
+      "tunjangan": 700000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Grade 4",
+      "tunjangan": 800000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Printing Grade 1",
+      "tunjangan": 500000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Printing Grade 2",
+      "tunjangan": 600000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Printing Grade 3",
+      "tunjangan": 700000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Printing Grade 4",
+      "tunjangan": 800000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Desain Grade 1",
+      "tunjangan": 500000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Desain Grade 2",
+      "tunjangan": 600000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Desain Grade 3",
+      "tunjangan": 700000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Desain Grade 4",
+      "tunjangan": 800000,
+      "bonus": {
+        "kinerja": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "kinerja_team": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Offset Grade 1",
+      "tunjangan": 800000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Offset Grade 2",
+      "tunjangan": 900000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Offset Grade 3",
+      "tunjangan": 1000000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TL Offset Grade 4",
+      "tunjangan": 1100000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": 125000,
+          "90": 250000,
+          "100": 400000
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Grade 1",
+      "tunjangan": 300000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Grade 2",
+      "tunjangan": 350000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Grade 3",
+      "tunjangan": 400000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Grade 4",
+      "tunjangan": 450000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Desain Grade 1",
+      "tunjangan": 300000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Desain Grade 2",
+      "tunjangan": 350000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Desain Grade 3",
+      "tunjangan": 400000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Desain Grade 4",
+      "tunjangan": 450000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Printing Grade 1",
+      "tunjangan": 300000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Printing Grade 2",
+      "tunjangan": 350000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Printing Grade 3",
+      "tunjangan": 400000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Printing Grade 4",
+      "tunjangan": 450000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Offset Grade 1",
+      "tunjangan": 500000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Offset Grade 2",
+      "tunjangan": 550000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Offset Grade 3",
+      "tunjangan": 600000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Staff Offset Grade 4",
+      "tunjangan": 650000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "RnD, TPP Grade 1",
+      "tunjangan": 300000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "RnD, TPP Grade 2",
+      "tunjangan": 350000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "RnD, TPP Grade 3",
+      "tunjangan": 400000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "RnD, TPP Grade 4",
+      "tunjangan": 450000,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Grade 1",
+      "tunjangan": 200000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Grade 2",
+      "tunjangan": 250000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Grade 3",
+      "tunjangan": 300000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Grade 4",
+      "tunjangan": 350000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Printing Grade 1",
+      "tunjangan": 200000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Printing Grade 2",
+      "tunjangan": 250000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Printing Grade 3",
+      "tunjangan": 300000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Operator Printing Grade 4",
+      "tunjangan": 350000,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Pound Grade 1",
+      "tunjangan": 500000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Pound Grade 2",
+      "tunjangan": 550000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Pound Grade 3",
+      "tunjangan": 600000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Pound Grade 4",
+      "tunjangan": 650000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Offset Grade 1",
+      "tunjangan": 700000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Offset Grade 2",
+      "tunjangan": 800000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Offset Grade 3",
+      "tunjangan": 900000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Op. Offset Grade 4",
+      "tunjangan": 1000000,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "Admininstrasi",
+      "tunjangan": 150000,
+      "bonus": {
+        "kinerja": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TW Desain",
+      "tunjangan": null,
+      "bonus": {
+        "kinerja": {
+          "80": 300000,
+          "90": 500000,
+          "100": 1000000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "TW Offset",
+      "tunjangan": null,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "TW Printing",
+      "tunjangan": null,
+      "bonus": {
+        "kinerja": {
+          "80": 175000,
+          "90": 350000,
+          "100": 600000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "TW Produksi",
+      "tunjangan": null,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": 200000,
+          "165": 400000
+        }
+      }
+    },
+    {
+      "jabatan": "TW SM",
+      "tunjangan": null,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "TW Support",
+      "tunjangan": null,
+      "bonus": {
+        "kinerja": {
+          "80": 150000,
+          "90": 300000,
+          "100": 500000
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": 80000,
+          "90": 90000,
+          "100": 100000
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    },
+    {
+      "jabatan": "Training",
+      "tunjangan": 1000000,
+      "bonus": {
+        "kinerja": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "kinerja_team": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "disiplin": {
+          "80": null,
+          "90": null,
+          "100": null
+        },
+        "prestasi": {
+          "140": null,
+          "165": null
+        }
+      }
+    }
+  ]
+}

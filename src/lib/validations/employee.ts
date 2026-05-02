@@ -95,11 +95,11 @@ export const workScheduleDaySchema = z
       return;
     }
 
-    if (value.startTime >= value.endTime) {
+    if (value.startTime === value.endTime) {
       ctx.addIssue({
         code: "custom",
         path: ["endTime"],
-        message: "Jam pulang harus lebih besar dari jam masuk.",
+        message: "Jam pulang tidak boleh sama dengan jam masuk.",
       });
     }
   });
@@ -123,6 +123,29 @@ export const workScheduleSchema = z
     }
   });
 
+export const workShiftMasterSchema = z
+  .object({
+    code: z.string().trim().min(1, "Kode shift wajib diisi").max(20).toUpperCase(),
+    name: z.string().trim().min(1, "Nama shift wajib diisi").max(100),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format jam mulai harus HH:MM"),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format jam selesai harus HH:MM"),
+    isOvernight: z.boolean().default(false),
+    applicableDivisionCodes: z.array(z.string().trim().min(1).max(20)).default([]),
+    notes: optionalText,
+    sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+    isActive: z.boolean().default(true),
+  })
+  .superRefine((value, ctx) => {
+    if (value.startTime === value.endTime) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endTime"],
+        message: "Jam selesai tidak boleh sama dengan jam mulai.",
+      });
+    }
+  });
+
 export type EmployeeInput = z.infer<typeof employeeSchema>;
 export type WorkScheduleDayInput = z.infer<typeof workScheduleDaySchema>;
 export type WorkScheduleInput = z.infer<typeof workScheduleSchema>;
+export type WorkShiftMasterInput = z.infer<typeof workShiftMasterSchema>;

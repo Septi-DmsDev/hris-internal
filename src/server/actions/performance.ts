@@ -21,6 +21,7 @@ import {
   requireAuth,
 } from "@/lib/auth/session";
 import {
+  batchSubmitDraftSchema,
   dailyActivityDecisionSchema,
   dailyActivityEntrySchema,
   monthlyPerformanceGenerationSchema,
@@ -725,6 +726,338 @@ export async function generateMonthlyPerformance(input: unknown) {
 
   revalidatePath("/performance");
   return { success: true, generatedEmployees: targetEmployees.length };
+}
+
+export type TwActivityItem = {
+  id: string;
+  workDate: Date;
+  pointCatalogEntryId: string;
+  workNameSnapshot: string;
+  pointValueSnapshot: string | number;
+  quantity: string | number;
+  totalPoints: string | number;
+  status: string;
+  submittedAt: Date | null;
+  rejectedAt: Date | null;
+};
+
+export type TwCatalogEntry = {
+  id: string;
+  externalCode: string | null;
+  workName: string;
+  pointValue: string | number;
+  unitDescription: string | null;
+};
+
+export async function getTwPerformanceData(): Promise<{
+  error?: string;
+  catalogEntries: TwCatalogEntry[];
+  activities: TwActivityItem[];
+  divisionName: string | null;
+}> {
+  const authError = await checkRole(PERFORMANCE_SELF_SERVICE_ROLES);
+  if (authError) return { error: authError.error ?? "Akses ditolak.", catalogEntries: [], activities: [], divisionName: null };
+
+  const roleRow = await getCurrentUserRoleRow();
+  if (!roleRow.employeeId) {
+    return { error: "Akun belum terhubung ke data karyawan. Hubungi HRD.", catalogEntries: [], activities: [], divisionName: null };
+  }
+
+  const [emp] = await db
+    .select({ divisionId: employees.divisionId })
+    .from(employees)
+    .where(eq(employees.id, roleRow.employeeId))
+    .limit(1);
+
+  let divisionName: string | null = null;
+  if (emp?.divisionId) {
+    const [div] = await db
+      .select({ name: divisions.name })
+      .from(divisions)
+      .where(eq(divisions.id, emp.divisionId))
+      .limit(1);
+    divisionName = div?.name ?? null;
+  }
+
+  const activeVersion = await getActivePointCatalogVersion();
+  let catalogEntries: TwCatalogEntry[] = [];
+  if (activeVersion && divisionName) {
+    const rows = await db
+      .select({
+        id: pointCatalogEntries.id,
+        externalCode: pointCatalogEntries.externalCode,
+        workName: pointCatalogEntries.workName,
+        pointValue: pointCatalogEntries.pointValue,
+        unitDescription: pointCatalogEntries.unitDescription,
+        divisionName: pointCatalogEntries.divisionName,
+      })
+      .from(pointCatalogEntries)
+      .where(
+        and(
+          eq(pointCatalogEntries.versionId, activeVersion.id),
+          eq(pointCatalogEntries.isActive, true)
+        )
+      )
+      .orderBy(asc(pointCatalogEntries.externalRowNumber));
+    catalogEntries = rows
+      .filter((e) => e.divisionName.toUpperCase() === divisionName!.toUpperCase())
+      .map((e) => ({
+        id: e.id,
+        externalCode: e.externalCode ?? null,
+        workName: e.workName,
+        pointValue: e.pointValue,
+        unitDescription: e.unitDescription ?? null,
+      }));
+  }
+
+  const activities = await db
+    .select({
+      id: dailyActivityEntries.id,
+      workDate: dailyActivityEntries.workDate,
+      pointCatalogEntryId: dailyActivityEntries.pointCatalogEntryId,
+      workNameSnapshot: dailyActivityEntries.workNameSnapshot,
+      pointValueSnapshot: dailyActivityEntries.pointValueSnapshot,
+      quantity: dailyActivityEntries.quantity,
+      totalPoints: dailyActivityEntries.totalPoints,
+      status: dailyActivityEntries.status,
+      submittedAt: dailyActivityEntries.submittedAt,
+      rejectedAt: dailyActivityEntries.rejectedAt,
+    })
+    .from(dailyActivityEntries)
+    .where(eq(dailyActivityEntries.employeeId, roleRow.employeeId))
+    .orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
+
+  return { catalogEntries, activities, divisionName };
+}
+
+export async function batchSubmitDraft(input: unknown) {
+  const authError = await checkRole(PERFORMANCE_SELF_SERVICE_ROLES);
+  if (authError) return { error: authError.error ?? "Akses ditolak." };
+
+  const parsed = batchSubmitDraftSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+
+  const user = await getUser();
+  const roleRow = await getCurrentUserRoleRow();
+  if (!roleRow.employeeId) return { error: "Akun belum terhubung ke data karyawan." };
+
+  const [emp] = await db
+    .select({ divisionId: employees.divisionId })
+    .from(employees)
+    .where(eq(employees.id, roleRow.employeeId))
+    .limit(1);
+  if (!emp?.divisionId) return { error: "Data divisi karyawan tidak ditemukan." };
+
+  const activeVersion = await getActivePointCatalogVersion();
+  if (!activeVersion) return { error: "Belum ada versi katalog poin aktif." };
+
+  const catalogIds = [...new Set(parsed.data.items.map((i) => i.pointCatalogEntryId))];
+  const catalogRows = await db
+    .select()
+    .from(pointCatalogEntries)
+    .where(
+      and(
+        inArray(pointCatalogEntries.id, catalogIds),
+        eq(pointCatalogEntries.versionId, activeVersion.id),
+        eq(pointCatalogEntries.isActive, true)
+      )
+    );
+  if (catalogRows.length !== catalogIds.length) {
+    return { error: "Salah satu katalog pekerjaan tidak valid atau tidak aktif." };
+  }
+  const catalogMap = new Map(catalogRows.map((r) => [r.id, r]));
+
+  const existing = await db
+    .select({ id: dailyActivityEntries.id, status: dailyActivityEntries.status })
+    .from(dailyActivityEntries)
+    .where(
+      and(
+        eq(dailyActivityEntries.employeeId, roleRow.employeeId),
+        eq(dailyActivityEntries.workDate, parsed.data.workDate)
+      )
+    );
+
+  const hasPending = existing.some((e) => ["DIAJUKAN", "DIAJUKAN_ULANG"].includes(e.status));
+  if (hasPending) return { error: "Ada draft yang sedang menunggu review SPV untuk tanggal ini." };
+
+  const hasRejected = existing.some((e) => e.status === "DITOLAK_SPV");
+  const nextStatus = hasRejected ? "DIAJUKAN_ULANG" : "DIAJUKAN";
+  const logAction = hasRejected ? "RESUBMIT" : "SUBMIT";
+
+  await db.transaction(async (tx) => {
+    const deletableIds = existing
+      .filter((e) => ["DRAFT", "DITOLAK_SPV"].includes(e.status))
+      .map((e) => e.id);
+    if (deletableIds.length > 0) {
+      await tx.delete(dailyActivityEntries).where(inArray(dailyActivityEntries.id, deletableIds));
+    }
+
+    for (const item of parsed.data.items) {
+      const entry = catalogMap.get(item.pointCatalogEntryId)!;
+      const pointValue = toNumber(entry.pointValue);
+      const totalPoints = Number((pointValue * item.quantity).toFixed(2));
+
+      const [inserted] = await tx
+        .insert(dailyActivityEntries)
+        .values({
+          employeeId: roleRow.employeeId!,
+          workDate: parsed.data.workDate,
+          actualDivisionId: emp.divisionId!,
+          pointCatalogEntryId: entry.id,
+          pointCatalogVersionId: activeVersion.id,
+          pointCatalogDivisionName: entry.divisionName,
+          workNameSnapshot: entry.workName,
+          unitDescriptionSnapshot: entry.unitDescription,
+          pointValueSnapshot: pointValue.toFixed(2),
+          quantity: item.quantity.toFixed(2),
+          totalPoints: totalPoints.toFixed(2),
+          status: nextStatus,
+          submittedAt: new Date(),
+          createdByUserId: user?.id ?? roleRow.employeeId!,
+        })
+        .returning({ id: dailyActivityEntries.id });
+
+      await tx.insert(dailyActivityApprovalLogs).values({
+        activityEntryId: inserted.id,
+        action: logAction,
+        actorUserId: user?.id ?? roleRow.employeeId!,
+        actorRole: roleRow.role as UserRole,
+      });
+    }
+  });
+
+  revalidatePath("/performance");
+  return { success: true };
+}
+
+export type SpvPendingActivityItem = {
+  id: string;
+  employeeId: string;
+  employeeName: string | null;
+  employeeCode: string | null;
+  employeeDivisionName: string | null;
+  workDate: Date;
+  externalCode: string | null;
+  workNameSnapshot: string;
+  pointValueSnapshot: string | number;
+  quantity: string | number;
+  totalPoints: string | number;
+  status: string;
+  notes: string | null;
+  submittedAt: Date | null;
+};
+
+export async function getSpvPendingActivities(): Promise<{ activities: SpvPendingActivityItem[] }> {
+  const authError = await checkRole(["SPV", "KABAG"]);
+  if (authError) return { activities: [] };
+
+  const roleRow = await getCurrentUserRoleRow();
+  if (roleRow.divisionIds.length === 0) return { activities: [] };
+
+  const entryDivision = aliasedTable(divisions, "entry_division");
+  const employeeDivision = aliasedTable(divisions, "employee_division");
+
+  const rows = await db
+    .select({
+      id: dailyActivityEntries.id,
+      employeeId: dailyActivityEntries.employeeId,
+      employeeName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      employeeDivisionName: employeeDivision.name,
+      workDate: dailyActivityEntries.workDate,
+      externalCode: pointCatalogEntries.externalCode,
+      workNameSnapshot: dailyActivityEntries.workNameSnapshot,
+      pointValueSnapshot: dailyActivityEntries.pointValueSnapshot,
+      quantity: dailyActivityEntries.quantity,
+      totalPoints: dailyActivityEntries.totalPoints,
+      status: dailyActivityEntries.status,
+      notes: dailyActivityEntries.notes,
+      submittedAt: dailyActivityEntries.submittedAt,
+    })
+    .from(dailyActivityEntries)
+    .leftJoin(employees, eq(dailyActivityEntries.employeeId, employees.id))
+    .leftJoin(entryDivision, eq(dailyActivityEntries.actualDivisionId, entryDivision.id))
+    .leftJoin(employeeDivision, eq(employees.divisionId, employeeDivision.id))
+    .leftJoin(pointCatalogEntries, eq(dailyActivityEntries.pointCatalogEntryId, pointCatalogEntries.id))
+    .where(
+      and(
+        inArray(employees.divisionId, roleRow.divisionIds),
+        inArray(dailyActivityEntries.status, ["DIAJUKAN", "DIAJUKAN_ULANG"])
+      )
+    )
+    .orderBy(desc(dailyActivityEntries.submittedAt), desc(dailyActivityEntries.workDate));
+
+  return { activities: rows };
+}
+
+export async function batchDecideDraftActivities(input: {
+  ids: string[];
+  action: "approve" | "reject";
+  notes?: string;
+}) {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
+  if (authError) return authError;
+
+  if (!Array.isArray(input.ids) || input.ids.length === 0) {
+    return { error: "Tidak ada aktivitas yang dipilih." };
+  }
+
+  const user = await getUser();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  const entries = await db
+    .select()
+    .from(dailyActivityEntries)
+    .where(inArray(dailyActivityEntries.id, input.ids));
+
+  if (entries.length === 0) return { error: "Aktivitas tidak ditemukan." };
+
+  const notApprovable = entries.filter(
+    (e) => !APPROVABLE_STATUSES.includes(e.status as (typeof APPROVABLE_STATUSES)[number])
+  );
+  if (notApprovable.length > 0) {
+    return { error: "Beberapa aktivitas tidak berada pada status yang dapat diproses." };
+  }
+
+  const uniqueEmployeeIds = [...new Set(entries.map((e) => e.employeeId))];
+  for (const empId of uniqueEmployeeIds) {
+    const inScope = await assertActivityScope(role, roleRow.divisionIds, empId);
+    if (!inScope) return { error: "Akses ditolak untuk aktivitas di luar scope divisi Anda." };
+  }
+
+  const isApprove = input.action === "approve";
+  const nextStatus = isApprove
+    ? DIV_SCOPED_ROLES.includes(role) ? "DISETUJUI_SPV" : "OVERRIDE_HRD"
+    : "DITOLAK_SPV";
+  const logAction = (isApprove
+    ? DIV_SCOPED_ROLES.includes(role) ? "APPROVE_SPV" : "OVERRIDE_HRD"
+    : "REJECT_SPV") as "APPROVE_SPV" | "OVERRIDE_HRD" | "REJECT_SPV";
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(dailyActivityEntries)
+      .set({
+        status: nextStatus,
+        ...(isApprove ? { approvedAt: new Date() } : { rejectedAt: new Date() }),
+        updatedByUserId: user?.id ?? null,
+        updatedAt: new Date(),
+      })
+      .where(inArray(dailyActivityEntries.id, input.ids));
+
+    await tx.insert(dailyActivityApprovalLogs).values(
+      entries.map((entry) => ({
+        activityEntryId: entry.id,
+        action: logAction,
+        actorUserId: user?.id ?? entry.employeeId,
+        actorRole: role,
+        notes: input.notes,
+      }))
+    );
+  });
+
+  revalidatePath("/performance");
+  return { success: true, count: entries.length };
 }
 
 export async function deleteActivityEntry(activityEntryId: string) {

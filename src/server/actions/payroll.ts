@@ -15,6 +15,7 @@ import { attendanceTickets, incidentLogs } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import {
   employeeSalaryConfigs,
+  gradeCompensationConfigs,
   managerialKpiSummaries,
   payrollAdjustments,
   payrollAuditLogs,
@@ -31,6 +32,7 @@ import {
   createPayrollPeriodSchema,
   managerialKpiSummarySchema,
   payrollAdjustmentSchema,
+  gradeCompensationConfigSchema,
   payrollPeriodActionSchema,
   salaryConfigSchema,
 } from "@/lib/validations/payroll";
@@ -64,6 +66,18 @@ function toNumber(value: string | number | null | undefined) {
 
 function roundCurrency(amount: number) {
   return Number(amount.toFixed(2));
+}
+
+function resolveTieredBonusAmount(
+  performancePercent: number,
+  bonus80: number,
+  bonus90: number,
+  bonus100: number
+) {
+  if (performancePercent >= 100) return bonus100;
+  if (performancePercent >= 90) return bonus90;
+  if (performancePercent >= 80) return bonus80;
+  return 0;
 }
 
 function normalizeDate(value: string | Date) {
@@ -383,6 +397,29 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
         .orderBy(asc(employees.fullName))
     : [];
 
+  const gradeCompensations = await db
+    .select({
+      gradeId: grades.id,
+      gradeName: grades.name,
+      allowanceAmount: gradeCompensationConfigs.allowanceAmount,
+      bonusKinerja80: gradeCompensationConfigs.bonusKinerja80,
+      bonusKinerja90: gradeCompensationConfigs.bonusKinerja90,
+      bonusKinerja100: gradeCompensationConfigs.bonusKinerja100,
+      bonusKinerjaTeam80: gradeCompensationConfigs.bonusKinerjaTeam80,
+      bonusKinerjaTeam90: gradeCompensationConfigs.bonusKinerjaTeam90,
+      bonusKinerjaTeam100: gradeCompensationConfigs.bonusKinerjaTeam100,
+      bonusDisiplin80: gradeCompensationConfigs.bonusDisiplin80,
+      bonusDisiplin90: gradeCompensationConfigs.bonusDisiplin90,
+      bonusDisiplin100: gradeCompensationConfigs.bonusDisiplin100,
+      bonusPrestasi140: gradeCompensationConfigs.bonusPrestasi140,
+      bonusPrestasi165: gradeCompensationConfigs.bonusPrestasi165,
+      isActive: gradeCompensationConfigs.isActive,
+    })
+    .from(grades)
+    .leftJoin(gradeCompensationConfigs, eq(gradeCompensationConfigs.gradeId, grades.id))
+    .where(eq(grades.isActive, true))
+    .orderBy(asc(grades.name));
+
   return {
     role: access.role,
     canManage: PAYROLL_WRITE_ROLES.includes(access.role),
@@ -392,6 +429,7 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
     results,
     adjustments,
     salaryConfigs,
+    gradeCompensations,
     managerialKpiRows,
   };
 }
@@ -635,6 +673,61 @@ export async function upsertEmployeeSalaryConfig(input: unknown) {
       .where(eq(employeeSalaryConfigs.employeeId, parsed.data.employeeId));
   } else {
     await db.insert(employeeSalaryConfigs).values(payload);
+  }
+
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
+  return { success: true };
+}
+
+export async function upsertGradeCompensationConfig(input: unknown) {
+  const access = await assertPayrollWriteAccess();
+  if ("error" in access) return access;
+
+  const parsed = gradeCompensationConfigSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Konfigurasi kompensasi grade tidak valid." };
+  }
+
+  const [grade] = await db
+    .select({ id: grades.id, isActive: grades.isActive })
+    .from(grades)
+    .where(eq(grades.id, parsed.data.gradeId))
+    .limit(1);
+
+  if (!grade) return { error: "Grade tidak ditemukan." };
+  if (!grade.isActive) return { error: "Hanya grade aktif yang dapat diatur." };
+
+  const payload = {
+    gradeId: parsed.data.gradeId,
+    allowanceAmount: parsed.data.allowanceAmount?.toFixed(2) ?? null,
+    bonusKinerja80: parsed.data.bonusKinerja80?.toFixed(2) ?? null,
+    bonusKinerja90: parsed.data.bonusKinerja90?.toFixed(2) ?? null,
+    bonusKinerja100: parsed.data.bonusKinerja100?.toFixed(2) ?? null,
+    bonusKinerjaTeam80: parsed.data.bonusKinerjaTeam80?.toFixed(2) ?? null,
+    bonusKinerjaTeam90: parsed.data.bonusKinerjaTeam90?.toFixed(2) ?? null,
+    bonusKinerjaTeam100: parsed.data.bonusKinerjaTeam100?.toFixed(2) ?? null,
+    bonusDisiplin80: parsed.data.bonusDisiplin80?.toFixed(2) ?? null,
+    bonusDisiplin90: parsed.data.bonusDisiplin90?.toFixed(2) ?? null,
+    bonusDisiplin100: parsed.data.bonusDisiplin100?.toFixed(2) ?? null,
+    bonusPrestasi140: parsed.data.bonusPrestasi140?.toFixed(2) ?? null,
+    bonusPrestasi165: parsed.data.bonusPrestasi165?.toFixed(2) ?? null,
+    isActive: parsed.data.isActive ?? true,
+  };
+
+  const [existing] = await db
+    .select({ id: gradeCompensationConfigs.id })
+    .from(gradeCompensationConfigs)
+    .where(eq(gradeCompensationConfigs.gradeId, parsed.data.gradeId))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(gradeCompensationConfigs)
+      .set({ ...payload, updatedAt: new Date() })
+      .where(eq(gradeCompensationConfigs.gradeId, parsed.data.gradeId));
+  } else {
+    await db.insert(gradeCompensationConfigs).values(payload);
   }
 
   revalidatePath("/payroll");
@@ -905,6 +998,11 @@ export async function generatePayrollPreview(input: unknown) {
     : [];
 
   const salaryConfigMap = new Map(salaryConfigRows.map((row) => [row.employeeId, row]));
+  const gradeCompensationRows = await db
+    .select()
+    .from(gradeCompensationConfigs)
+    .where(eq(gradeCompensationConfigs.isActive, true));
+  const gradeCompensationMap = new Map(gradeCompensationRows.map((row) => [row.gradeId, row]));
 
   const performanceRows = await db
     .select()
@@ -1015,14 +1113,13 @@ export async function generatePayrollPreview(input: unknown) {
     const salaryConfig = salaryConfigMap.get(employee.id);
     const baseSalaryAmount = toNumber(salaryConfig?.baseSalaryAmount)
       || (employee.payrollStatus === "TRAINING" ? GAJI_TRAINING_DEFAULT : GAJI_POKOK_REGULER_DEFAULT);
-    const gradeAllowanceAmount = toNumber(salaryConfig?.gradeAllowanceAmount);
+    const gradeCompensation = gradeSnapshot.gradeSnapshotId
+      ? gradeCompensationMap.get(gradeSnapshot.gradeSnapshotId)
+      : undefined;
+    const gradeAllowanceAmount = toNumber(salaryConfig?.gradeAllowanceAmount)
+      || toNumber(gradeCompensation?.allowanceAmount);
     const tenureAllowanceAmount = toNumber(salaryConfig?.tenureAllowanceAmount);
-    const performanceBonusBaseAmount = toNumber(salaryConfig?.performanceBonusBaseAmount);
-    const achievementBonus140Amount = toNumber(salaryConfig?.achievementBonus140Amount);
-    const achievementBonus165Amount = toNumber(salaryConfig?.achievementBonus165Amount);
     const fulltimeBonusAmount = toNumber(salaryConfig?.fulltimeBonusAmount);
-    const disciplineBonusAmount = toNumber(salaryConfig?.disciplineBonusAmount);
-    const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount);
 
     const performance = performanceMap.get(employee.id);
     const managerialKpi = managerialKpiMap.get(employee.id);
@@ -1065,6 +1162,34 @@ export async function generatePayrollPreview(input: unknown) {
       employee.employeeGroup === "MANAGERIAL"
         ? toNumber(managerialKpi?.performancePercent)
         : teamworkPerformancePercent;
+    const performanceBonusByGrade = resolveTieredBonusAmount(
+      performancePercent,
+      toNumber(gradeCompensation?.bonusKinerja80),
+      toNumber(gradeCompensation?.bonusKinerja90),
+      toNumber(gradeCompensation?.bonusKinerja100)
+    );
+    const teamBonusByGrade = resolveTieredBonusAmount(
+      performancePercent,
+      toNumber(gradeCompensation?.bonusKinerjaTeam80),
+      toNumber(gradeCompensation?.bonusKinerjaTeam90),
+      toNumber(gradeCompensation?.bonusKinerjaTeam100)
+    );
+    const disciplineBonusByGrade = resolveTieredBonusAmount(
+      performancePercent,
+      toNumber(gradeCompensation?.bonusDisiplin80),
+      toNumber(gradeCompensation?.bonusDisiplin90),
+      toNumber(gradeCompensation?.bonusDisiplin100)
+    );
+    const achievementBonus140Amount = toNumber(salaryConfig?.achievementBonus140Amount)
+      || toNumber(gradeCompensation?.bonusPrestasi140);
+    const achievementBonus165Amount = toNumber(salaryConfig?.achievementBonus165Amount)
+      || toNumber(gradeCompensation?.bonusPrestasi165);
+    const performanceBonusBaseAmount = toNumber(salaryConfig?.performanceBonusBaseAmount)
+      || performanceBonusByGrade;
+    const disciplineBonusAmount = toNumber(salaryConfig?.disciplineBonusAmount)
+      || disciplineBonusByGrade;
+    const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount)
+      || teamBonusByGrade;
     const fulltimeEligible = !hasApprovedAbsence;
     const disciplineEligible = fulltimeEligible && !hasLateIncident && performancePercent >= 80;
 

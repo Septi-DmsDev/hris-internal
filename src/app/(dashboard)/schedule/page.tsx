@@ -1,0 +1,308 @@
+import { getMySchedule } from "@/server/actions/schedule";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Info } from "lucide-react";
+
+const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+const GRID_HEADERS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+
+const MONTH_NAMES = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+type DayStatus = string;
+
+function getDayBg(dayStatus: DayStatus, ticketOverride: string | null): string {
+  if (ticketOverride) {
+    switch (ticketOverride) {
+      case "CUTI":       return "bg-orange-50 border-orange-200";
+      case "SAKIT":      return "bg-blue-50 border-blue-200";
+      case "IZIN":       return "bg-yellow-50 border-yellow-200";
+      case "EMERGENCY":  return "bg-red-50 border-red-200";
+      case "SETENGAH_HARI": return "bg-purple-50 border-purple-200";
+      default:           return "bg-slate-50 border-slate-200";
+    }
+  }
+  switch (dayStatus) {
+    case "KERJA":       return "bg-white border-slate-200";
+    case "OFF":         return "bg-slate-50 border-slate-200";
+    case "CUTI":        return "bg-orange-50 border-orange-200";
+    case "SAKIT":       return "bg-blue-50 border-blue-200";
+    case "IZIN":        return "bg-yellow-50 border-yellow-200";
+    case "ALPA":        return "bg-red-50 border-red-200";
+    case "SETENGAH_HARI": return "bg-purple-50 border-purple-200";
+    default:            return "bg-white border-slate-200";
+  }
+}
+
+function getDayLabel(dayStatus: DayStatus, ticketOverride: string | null): string | null {
+  const status = ticketOverride ?? dayStatus;
+  switch (status) {
+    case "KERJA":       return null;
+    case "OFF":         return "OFF";
+    case "CUTI":        return "CUTI";
+    case "SAKIT":       return "SAKIT";
+    case "IZIN":        return "IZIN";
+    case "EMERGENCY":   return "EMRG";
+    case "ALPA":        return "ALPA";
+    case "SETENGAH_HARI": return "½ HARI";
+    default:            return status;
+  }
+}
+
+function getDayLabelColor(dayStatus: DayStatus, ticketOverride: string | null): string {
+  const status = ticketOverride ?? dayStatus;
+  switch (status) {
+    case "OFF":         return "text-slate-400";
+    case "CUTI":        return "text-orange-600";
+    case "SAKIT":       return "text-blue-600";
+    case "IZIN":        return "text-yellow-700";
+    case "EMERGENCY":   return "text-red-600";
+    case "ALPA":        return "text-red-500";
+    case "SETENGAH_HARI": return "text-purple-600";
+    default:            return "text-slate-400";
+  }
+}
+
+function getDotColor(dayStatus: DayStatus, ticketOverride: string | null): string {
+  if (ticketOverride) return "";
+  if (dayStatus === "KERJA") return "bg-teal-400";
+  return "";
+}
+
+// dayOfWeek: 0=Sun, 1=Mon, ..., 6=Sat
+// Grid is Mon=col0 ... Sun=col6
+// offset = (dayOfWeek === 0) ? 6 : dayOfWeek - 1
+function getGridOffset(dayOfWeek: number): number {
+  return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+}
+
+type PageProps = {
+  searchParams: Promise<{ year?: string; month?: string }>;
+};
+
+export default async function SchedulePage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const now = new Date();
+  const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
+  const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
+
+  // Clamp month
+  const safeYear = isNaN(year) ? now.getFullYear() : year;
+  const safeMonth = isNaN(month) || month < 1 || month > 12 ? now.getMonth() + 1 : month;
+
+  // Prev/next month URLs
+  let prevYear = safeYear;
+  let prevMonth = safeMonth - 1;
+  if (prevMonth < 1) { prevMonth = 12; prevYear -= 1; }
+
+  let nextYear = safeYear;
+  let nextMonth = safeMonth + 1;
+  if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
+
+  const prevUrl = `/schedule?year=${prevYear}&month=${prevMonth}`;
+  const nextUrl = `/schedule?year=${nextYear}&month=${nextMonth}`;
+
+  const result = await getMySchedule(safeYear, safeMonth);
+
+  if (!result) {
+    return (
+      <div className="max-w-2xl">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 flex gap-4">
+          <Info size={20} className="text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Jadwal Tidak Tersedia</p>
+            <p className="text-sm text-amber-700 mt-1">
+              Akun belum terhubung ke karyawan atau belum ada jadwal yang ditetapkan. Hubungi HRD.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Build calendar grid
+  // First, find the dayOfWeek of day 1
+  const firstDayOfMonth = new Date(safeYear, safeMonth - 1, 1);
+  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0=Sun..6=Sat
+  const gridOffset = getGridOffset(firstDayOfWeek);
+
+  // Today's date string
+  const todayStr = now.toISOString().slice(0, 10);
+  const todayDay = result.days.find((d) => d.date === todayStr);
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <CalendarDays size={18} className="text-teal-500" />
+            <h1 className="text-lg font-bold text-slate-900">Jadwal Saya</h1>
+          </div>
+          <p className="text-sm text-slate-500">
+            {result.employeeName} ·{" "}
+            <span className="font-semibold text-slate-700">{result.scheduleName}</span>{" "}
+            <span className="text-xs text-slate-400 font-mono">({result.scheduleCode})</span>
+          </p>
+        </div>
+
+        {/* Month navigation */}
+        <div className="flex items-center gap-3 shrink-0">
+          <a
+            href={prevUrl}
+            className="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
+          >
+            <ChevronLeft size={16} />
+          </a>
+          <span className="text-sm font-bold text-slate-800 min-w-[130px] text-center">
+            {MONTH_NAMES[safeMonth - 1]} {safeYear}
+          </span>
+          <a
+            href={nextUrl}
+            className="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
+          >
+            <ChevronRight size={16} />
+          </a>
+        </div>
+      </div>
+
+      {/* Today's info card */}
+      {todayDay && safeYear === now.getFullYear() && safeMonth === now.getMonth() + 1 && (
+        <div className="rounded-xl border border-teal-200 bg-teal-50 p-4 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-teal-500 flex items-center justify-center shrink-0">
+            <Clock size={16} className="text-white" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-teal-800 uppercase tracking-wide">Hari Ini</p>
+            <p className="text-sm text-teal-900 font-medium mt-0.5">
+              {todayDay.ticketOverride
+                ? `${getDayLabel(todayDay.dayStatus, todayDay.ticketOverride)} (${todayDay.ticketOverride})`
+                : todayDay.dayStatus === "KERJA"
+                ? todayDay.startTime && todayDay.endTime
+                  ? `Shift: ${todayDay.startTime} – ${todayDay.endTime}`
+                  : "Hari Kerja"
+                : getDayLabel(todayDay.dayStatus, null) ?? todayDay.dayStatus}
+              {todayDay.isWorkingDay && todayDay.targetPoints > 0 && !todayDay.ticketOverride && (
+                <span className="ml-2 text-teal-600 text-xs font-normal">
+                  Target: {todayDay.targetPoints} poin
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar */}
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        {/* Grid header */}
+        <div className="grid grid-cols-7 border-b border-slate-100">
+          {GRID_HEADERS.map((day) => (
+            <div
+              key={day}
+              className="py-2.5 text-center text-xs font-bold uppercase tracking-wide text-slate-400 border-r border-slate-100 last:border-r-0"
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar cells */}
+        <div className="grid grid-cols-7">
+          {/* Empty cells for offset */}
+          {Array.from({ length: gridOffset }).map((_, i) => (
+            <div
+              key={`empty-${i}`}
+              className="min-h-[80px] border-r border-b border-slate-100 last:border-r-0 bg-slate-50/50"
+            />
+          ))}
+
+          {/* Day cells */}
+          {result.days.map((day) => {
+            const isToday = day.date === todayStr;
+            const bgClass = getDayBg(day.dayStatus, day.ticketOverride);
+            const label = getDayLabel(day.dayStatus, day.ticketOverride);
+            const labelColor = getDayLabelColor(day.dayStatus, day.ticketOverride);
+            const dotColor = getDotColor(day.dayStatus, day.ticketOverride);
+            const dayNum = parseInt(day.date.slice(8, 10), 10);
+
+            // Grid column based on dayOfWeek
+            const colIndex = getGridOffset(day.dayOfWeek); // 0-based col in Mon-Sun grid
+            const isLastCol = colIndex === 6;
+
+            return (
+              <div
+                key={day.date}
+                className={`
+                  min-h-[80px] p-2 border-r border-b border-slate-100
+                  ${isLastCol ? "border-r-0" : ""}
+                  ${bgClass}
+                  transition-colors
+                `}
+              >
+                <div className="flex items-start justify-between mb-1">
+                  <span
+                    className={`
+                      text-xs font-bold leading-none
+                      ${isToday
+                        ? "w-5 h-5 rounded-full bg-teal-500 text-white flex items-center justify-center text-[11px]"
+                        : day.dayStatus === "OFF" || (day.ticketOverride === null && !day.isWorkingDay)
+                        ? "text-slate-300"
+                        : "text-slate-700"
+                      }
+                    `}
+                  >
+                    {dayNum}
+                  </span>
+                  {dotColor && (
+                    <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${dotColor}`} />
+                  )}
+                </div>
+
+                {label && (
+                  <span className={`block text-[10px] font-bold uppercase tracking-wide ${labelColor}`}>
+                    {label}
+                  </span>
+                )}
+
+                {day.dayStatus === "KERJA" && !day.ticketOverride && day.startTime && day.endTime && (
+                  <span className="block text-[10px] text-slate-400 mt-0.5 leading-tight">
+                    {day.startTime}–{day.endTime}
+                  </span>
+                )}
+
+                {day.isWorkingDay && day.targetPoints > 0 && !day.ticketOverride && day.dayStatus === "KERJA" && (
+                  <span className="block text-[10px] text-teal-500 font-semibold mt-1">
+                    {day.targetPoints}p
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 self-center">
+          Keterangan:
+        </p>
+        {[
+          { label: "Kerja", bg: "bg-white border-slate-200", dot: "bg-teal-400" },
+          { label: "OFF", bg: "bg-slate-50 border-slate-200", dot: "" },
+          { label: "Cuti", bg: "bg-orange-50 border-orange-200", dot: "" },
+          { label: "Sakit", bg: "bg-blue-50 border-blue-200", dot: "" },
+          { label: "Izin", bg: "bg-yellow-50 border-yellow-200", dot: "" },
+          { label: "Emergency", bg: "bg-red-50 border-red-200", dot: "" },
+          { label: "½ Hari", bg: "bg-purple-50 border-purple-200", dot: "" },
+        ].map(({ label, bg, dot }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <div className={`w-4 h-4 rounded border ${bg} flex items-center justify-center`}>
+              {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
+            </div>
+            <span className="text-xs text-slate-500">{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

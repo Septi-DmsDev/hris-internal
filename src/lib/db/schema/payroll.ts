@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   integer,
   jsonb,
@@ -63,6 +64,29 @@ export const employeeSalaryConfigs = pgTable("employee_salary_configs", {
   teamBonusAmount: numeric("team_bonus_amount", { precision: 12, scale: 2 }),
   overtimeRateAmount: numeric("overtime_rate_amount", { precision: 12, scale: 2 }),
   notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const gradeCompensationConfigs = pgTable("grade_compensation_configs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  gradeId: uuid("grade_id")
+    .notNull()
+    .unique()
+    .references(() => grades.id, { onDelete: "cascade" }),
+  allowanceAmount: numeric("allowance_amount", { precision: 12, scale: 2 }),
+  bonusKinerja80: numeric("bonus_kinerja_80", { precision: 12, scale: 2 }),
+  bonusKinerja90: numeric("bonus_kinerja_90", { precision: 12, scale: 2 }),
+  bonusKinerja100: numeric("bonus_kinerja_100", { precision: 12, scale: 2 }),
+  bonusKinerjaTeam80: numeric("bonus_kinerja_team_80", { precision: 12, scale: 2 }),
+  bonusKinerjaTeam90: numeric("bonus_kinerja_team_90", { precision: 12, scale: 2 }),
+  bonusKinerjaTeam100: numeric("bonus_kinerja_team_100", { precision: 12, scale: 2 }),
+  bonusDisiplin80: numeric("bonus_disiplin_80", { precision: 12, scale: 2 }),
+  bonusDisiplin90: numeric("bonus_disiplin_90", { precision: 12, scale: 2 }),
+  bonusDisiplin100: numeric("bonus_disiplin_100", { precision: 12, scale: 2 }),
+  bonusPrestasi140: numeric("bonus_prestasi_140", { precision: 12, scale: 2 }),
+  bonusPrestasi165: numeric("bonus_prestasi_165", { precision: 12, scale: 2 }),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
@@ -218,6 +242,8 @@ export const payrollAuditLogs = pgTable("payroll_audit_logs", {
 
 export type EmployeeSalaryConfig = typeof employeeSalaryConfigs.$inferSelect;
 export type NewEmployeeSalaryConfig = typeof employeeSalaryConfigs.$inferInsert;
+export type GradeCompensationConfig = typeof gradeCompensationConfigs.$inferSelect;
+export type NewGradeCompensationConfig = typeof gradeCompensationConfigs.$inferInsert;
 export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
 export type NewPayrollPeriod = typeof payrollPeriods.$inferInsert;
 export type ManagerialKpiSummary = typeof managerialKpiSummaries.$inferSelect;

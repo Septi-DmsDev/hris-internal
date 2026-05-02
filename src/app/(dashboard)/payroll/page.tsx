@@ -23,10 +23,7 @@ export default async function PayrollPage({ searchParams }: PageProps) {
   if ("error" in workspace) {
     return (
       <div className="space-y-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Payroll</h2>
-          <p className="text-sm text-slate-500">Akses payroll ditolak.</p>
-        </div>
+        <p className="text-sm text-slate-500">Akses payroll ditolak.</p>
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {workspace.error}
         </div>
@@ -139,14 +136,6 @@ export default async function PayrollPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Payroll</h2>
-        <p className="text-sm text-slate-500">
-          Preview dan finalisasi payroll berbasis snapshot periode 26-25, performa bulanan, ticket approved,
-          incident, dan adjustment manual.
-        </p>
-      </div>
-
       <PayrollClient
         role={workspace.role}
         canManage={workspace.canManage}

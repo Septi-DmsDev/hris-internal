@@ -32,6 +32,7 @@ import {
   getEmployeeById,
   updateEmployee,
 } from "@/server/actions/employees";
+import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
 
 const EMPLOYEE_GROUP_OPTIONS = [
   { value: "TEAMWORK", label: "Teamwork" },
@@ -150,6 +151,8 @@ type EmployeeDraft = {
 };
 
 type EmployeeDetailResult = Awaited<ReturnType<typeof getEmployeeById>>;
+
+type LoginDraft = { email: string; password: string; confirmPassword: string };
 
 function formatDateInput(value: Date | string | null | undefined) {
   if (!value) return "";
@@ -527,6 +530,8 @@ export default function EmployeesTable({
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
+  const [loginDraft, setLoginDraft] = useState<LoginDraft>({ email: "", password: "", confirmPassword: "" });
+  const [existingLoginEmail, setExistingLoginEmail] = useState<string | null>(null);
 
   function handleDraftChange(
     field: keyof EmployeeDraft,
@@ -562,12 +567,17 @@ export default function EmployeesTable({
     setLoadingEditId(row.id);
     setFormError(null);
     try {
-      const detail = await getEmployeeById(row.id);
+      const [detail, loginInfo] = await Promise.all([
+        getEmployeeById(row.id),
+        getEmployeeLoginInfo(row.id),
+      ]);
       if (!detail) {
         setFormError("Detail karyawan tidak ditemukan.");
         return;
       }
       setDraft(createDraftFromEmployee(detail));
+      setExistingLoginEmail(loginInfo?.email ?? null);
+      setLoginDraft({ email: loginInfo?.email ?? "", password: "", confirmPassword: "" });
       setEditingRow(row);
     } finally {
       setLoadingEditId(null);
@@ -583,6 +593,21 @@ export default function EmployeesTable({
       if (result && "error" in result) {
         setFormError(result.error);
         return;
+      }
+      if (loginDraft.email) {
+        if (loginDraft.password && loginDraft.password !== loginDraft.confirmPassword) {
+          setFormError("Konfirmasi password tidak cocok.");
+          return;
+        }
+        const loginResult = await upsertEmployeeLogin({
+          employeeId: editingRow.id,
+          email: loginDraft.email,
+          password: loginDraft.password || undefined,
+        });
+        if (loginResult?.error) {
+          setFormError(loginResult.error);
+          return;
+        }
       }
       setEditingRow(null);
       router.refresh();
@@ -766,6 +791,50 @@ export default function EmployeesTable({
               onChange={handleDraftChange}
               options={options}
             />
+
+            {options.canManage && (
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Akun Login Sistem</p>
+                  {existingLoginEmail ? (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Akun aktif: <span className="font-medium text-slate-700">{existingLoginEmail}</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-0.5">Karyawan ini belum memiliki akun login.</p>
+                  )}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <DraftField label="Email Login">
+                    <Input
+                      type="email"
+                      value={loginDraft.email}
+                      onChange={(e) => setLoginDraft((v) => ({ ...v, email: e.target.value }))}
+                      placeholder="email@perusahaan.com"
+                    />
+                  </DraftField>
+                  <DraftField label={existingLoginEmail ? "Password Baru (kosongkan jika tidak diubah)" : "Password"}>
+                    <Input
+                      type="password"
+                      value={loginDraft.password}
+                      onChange={(e) => setLoginDraft((v) => ({ ...v, password: e.target.value }))}
+                      placeholder="Min. 8 karakter"
+                    />
+                  </DraftField>
+                  {loginDraft.password && (
+                    <DraftField label="Konfirmasi Password">
+                      <Input
+                        type="password"
+                        value={loginDraft.confirmPassword}
+                        onChange={(e) => setLoginDraft((v) => ({ ...v, confirmPassword: e.target.value }))}
+                        placeholder="Ulangi password"
+                      />
+                    </DraftField>
+                  )}
+                </div>
+              </div>
+            )}
+
             {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
             <DialogFooter>
               <Button

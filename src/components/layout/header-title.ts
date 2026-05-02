@@ -1,18 +1,27 @@
-export function resolveHeaderTitle(pathname: string) {
-  if (pathname === "/me") return "Saya";
-  if (pathname === "/me/profile") return "Profil Saya";
-  if (pathname.startsWith("/payroll/") && pathname.endsWith("/payslip.pdf")) return "Slip Gaji";
-  if (/^\/payroll\/[^/]+\/[^/]+$/.test(pathname)) return "Detail Payroll";
-  if (pathname.startsWith("/payroll")) return "Payroll";
-  if (pathname.startsWith("/finance")) return "Finance";
-  if (pathname.startsWith("/performance/training")) return "Evaluasi Training";
-  if (pathname.startsWith("/performance")) return "Performa";
-  if (pathname.startsWith("/employees/")) return "Detail Karyawan";
-  if (pathname.startsWith("/employees")) return "Karyawan";
-  if (pathname.startsWith("/tickets")) return "Ticketing";
-  if (pathname.startsWith("/reviews")) return "Review";
-  if (pathname.startsWith("/master/")) return "Master Data";
-  if (pathname.startsWith("/users")) return "Manajemen Pengguna";
-  if (pathname.startsWith("/settings")) return "Pengaturan";
-  return "Dashboard";
+export function resolveHeaderMeta(pathname: string) {
+  if (pathname === "/me") return { title: "Saya", description: "Ringkasan akun pribadi" };
+  if (pathname === "/me/profile") return { title: "Profil Saya", description: "Detail data pribadi" };
+  if (pathname.startsWith("/payroll/") && pathname.endsWith("/payslip.pdf")) {
+    return { title: "Slip Gaji", description: "Dokumen pembayaran karyawan" };
+  }
+  if (/^\/payroll\/[^/]+\/[^/]+$/.test(pathname)) {
+    return { title: "Detail Payroll", description: "Rincian per karyawan" };
+  }
+  if (pathname.startsWith("/payroll")) return { title: "Payroll", description: "Preview dan finalisasi gaji" };
+  if (pathname.startsWith("/finance")) return { title: "Finance", description: "Ringkasan biaya payroll" };
+  if (pathname.startsWith("/performance/training")) return { title: "Evaluasi Training", description: "Penilaian masa training" };
+  if (pathname.startsWith("/performance")) return { title: "Performa", description: "Poin, target, dan aktivitas" };
+  if (pathname.startsWith("/employees/")) return { title: "Detail Karyawan", description: "Profil dan histori karyawan" };
+  if (pathname.startsWith("/employees")) return { title: "Karyawan", description: "Data karyawan aktif" };
+  if (pathname.startsWith("/tickets")) return { title: "Ticketing", description: "Izin, sakit, dan cuti" };
+  if (pathname.startsWith("/reviews")) return { title: "Review", description: "Review dan incident kerja" };
+  if (pathname.startsWith("/master/branches")) return { title: "Master Cabang", description: "Daftar cabang perusahaan" };
+  if (pathname.startsWith("/master/divisions")) return { title: "Master Divisi", description: "Daftar divisi aktif" };
+  if (pathname.startsWith("/master/positions")) return { title: "Master Jabatan", description: "Daftar jabatan kerja" };
+  if (pathname.startsWith("/master/grades")) return { title: "Master Grade", description: "Daftar grade karyawan" };
+  if (pathname.startsWith("/master/work-schedules")) return { title: "Jadwal Kerja", description: "Pengaturan jadwal dan shift" };
+  if (pathname.startsWith("/master/")) return { title: "Master Data", description: "Pengaturan data referensi" };
+  if (pathname.startsWith("/users")) return { title: "Manajemen Pengguna", description: "Role dan akses akun" };
+  if (pathname.startsWith("/settings")) return { title: "Pengaturan", description: "Profil akun login" };
+  return { title: "Dashboard", description: "Ringkasan operasional" };
 }

@@ -20,9 +20,6 @@ export default async function DivisionsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-800">Master Divisi</h1>
-      </div>
       <DivisionsTable data={rows} branches={branchOptions} />
     </div>
   );

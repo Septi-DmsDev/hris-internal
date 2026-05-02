@@ -14,7 +14,6 @@ export default async function PositionsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-800">Master Jabatan</h1>
       <PositionsTable data={rows} />
     </div>
   );

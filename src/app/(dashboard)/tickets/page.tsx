@@ -1,6 +1,8 @@
 import { format } from "date-fns";
 import { getTickets } from "@/server/actions/tickets";
 import TicketingClient from "./TicketingClient";
+import SPVTicketReviewClient from "./SPVTicketReviewClient";
+import type { SpvTicketRow } from "./SPVTicketReviewClient";
 import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
 import { divisions } from "@/lib/db/schema/master";
@@ -11,8 +13,33 @@ import type { UserRole } from "@/types";
 export default async function TicketingPage() {
   const { role, tickets } = await getTickets();
   const roleRow = await getCurrentUserRoleRow();
-  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"].includes(role);
-  const isDivScoped = ["SPV", "KABAG"].includes(role) && roleRow.divisionIds.length > 0;
+
+  if (["SPV", "KABAG"].includes(role)) {
+    const pending = tickets
+      .filter((t) => ["SUBMITTED", "NEED_REVIEW"].includes(t.status))
+      .map((t): SpvTicketRow => ({
+        id: t.id,
+        employeeId: t.employeeId ?? null,
+        employeeName: t.employeeName ?? "-",
+        employeeCode: t.employeeCode ?? "-",
+        divisionName: t.divisionName ?? "-",
+        ticketType: t.ticketType,
+        startDate: t.startDate instanceof Date ? format(t.startDate, "yyyy-MM-dd") : String(t.startDate),
+        endDate: t.endDate instanceof Date ? format(t.endDate, "yyyy-MM-dd") : String(t.endDate),
+        daysCount: t.daysCount,
+        reason: t.reason,
+        status: t.status,
+        createdAt: t.createdAt instanceof Date ? format(t.createdAt, "yyyy-MM-dd HH:mm") : String(t.createdAt),
+      }));
+    return (
+      <div className="space-y-4">
+        <SPVTicketReviewClient tickets={pending} />
+      </div>
+    );
+  }
+
+  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD"].includes(role);
+  const isDivScoped = false;
 
   const employeeRows = canManageEmployeeOptions
     ? await db
@@ -56,12 +83,6 @@ export default async function TicketingPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Ticketing Izin / Sakit / Cuti</h1>
-        <p className="text-sm text-slate-500">
-          Pengajuan izin, sakit, dan cuti yang memengaruhi target poin dan payroll.
-        </p>
-      </div>
       <TicketingClient
         role={role as UserRole}
         tickets={ticketRows}

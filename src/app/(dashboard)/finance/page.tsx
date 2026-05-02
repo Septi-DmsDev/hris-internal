@@ -1,13 +1,12 @@
 import { format } from "date-fns";
 import FinanceDashboardClient from "./FinanceDashboardClient";
-import {
-  type PayrollDivisionSummaryRow,
-  type PayrollFinanceSummary,
-  type PayrollPeriodRow,
-  type PayrollResultRow,
-} from "../payroll/PayrollClient";
 import { getPayrollWorkspace } from "@/server/actions/payroll";
-import { summarizePayrollResults } from "@/server/payroll-engine/summarize-payroll-results";
+import type {
+  PayrollSalaryConfigRow,
+  PayrollGradeCompensationRow,
+  PayrollPeriodRow,
+  PayrollAdjustmentRow,
+} from "../payroll/PayrollClient";
 
 type PageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -21,10 +20,7 @@ export default async function FinancePage({ searchParams }: PageProps) {
   if ("error" in workspace) {
     return (
       <div className="space-y-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Finance Dashboard</h2>
-          <p className="text-sm text-slate-500">Akses finance dashboard ditolak.</p>
-        </div>
+        <p className="text-sm text-slate-500">Akses finance ditolak.</p>
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {workspace.error}
         </div>
@@ -42,71 +38,64 @@ export default async function FinancePage({ searchParams }: PageProps) {
     finalizedAt: period.finalizedAt ? format(period.finalizedAt, "yyyy-MM-dd HH:mm") : "-",
   }));
 
-  const results: PayrollResultRow[] = workspace.results.map((row) => ({
+  const salaryConfigs: PayrollSalaryConfigRow[] = workspace.salaryConfigs.map((row) => ({
+    employeeId: row.employeeId,
+    employeeCode: row.employeeCode,
+    employeeName: row.employeeName,
+    divisionName: row.divisionName ?? "-",
+    employeeGroup: row.employeeGroup ?? "TEAMWORK",
+    payrollStatus: row.payrollStatus,
+    baseSalaryAmount: row.baseSalaryAmount != null ? Number(row.baseSalaryAmount) : null,
+    gradeAllowanceAmount: row.gradeAllowanceAmount != null ? Number(row.gradeAllowanceAmount) : null,
+    tenureAllowanceAmount: row.tenureAllowanceAmount != null ? Number(row.tenureAllowanceAmount) : null,
+    dailyAllowanceAmount: row.dailyAllowanceAmount != null ? Number(row.dailyAllowanceAmount) : null,
+    performanceBonusBaseAmount: row.performanceBonusBaseAmount != null ? Number(row.performanceBonusBaseAmount) : null,
+    achievementBonus140Amount: row.achievementBonus140Amount != null ? Number(row.achievementBonus140Amount) : null,
+    achievementBonus165Amount: row.achievementBonus165Amount != null ? Number(row.achievementBonus165Amount) : null,
+    fulltimeBonusAmount: row.fulltimeBonusAmount != null ? Number(row.fulltimeBonusAmount) : null,
+    disciplineBonusAmount: row.disciplineBonusAmount != null ? Number(row.disciplineBonusAmount) : null,
+    teamBonusAmount: row.teamBonusAmount != null ? Number(row.teamBonusAmount) : null,
+    overtimeRateAmount: row.overtimeRateAmount != null ? Number(row.overtimeRateAmount) : null,
+    notes: row.notes ?? "",
+    updatedAt: row.updatedAt ? format(row.updatedAt, "yyyy-MM-dd HH:mm") : "-",
+  }));
+
+  const gradeCompensations: PayrollGradeCompensationRow[] = workspace.gradeCompensations.map((row) => ({
+    gradeId: row.gradeId,
+    gradeName: row.gradeName,
+    allowanceAmount: row.allowanceAmount != null ? Number(row.allowanceAmount) : null,
+    bonusKinerja80: row.bonusKinerja80 != null ? Number(row.bonusKinerja80) : null,
+    bonusKinerja90: row.bonusKinerja90 != null ? Number(row.bonusKinerja90) : null,
+    bonusKinerja100: row.bonusKinerja100 != null ? Number(row.bonusKinerja100) : null,
+    bonusKinerjaTeam80: row.bonusKinerjaTeam80 != null ? Number(row.bonusKinerjaTeam80) : null,
+    bonusKinerjaTeam90: row.bonusKinerjaTeam90 != null ? Number(row.bonusKinerjaTeam90) : null,
+    bonusKinerjaTeam100: row.bonusKinerjaTeam100 != null ? Number(row.bonusKinerjaTeam100) : null,
+    bonusDisiplin80: row.bonusDisiplin80 != null ? Number(row.bonusDisiplin80) : null,
+    bonusDisiplin90: row.bonusDisiplin90 != null ? Number(row.bonusDisiplin90) : null,
+    bonusDisiplin100: row.bonusDisiplin100 != null ? Number(row.bonusDisiplin100) : null,
+    bonusPrestasi140: row.bonusPrestasi140 != null ? Number(row.bonusPrestasi140) : null,
+    bonusPrestasi165: row.bonusPrestasi165 != null ? Number(row.bonusPrestasi165) : null,
+    isActive: row.isActive ?? true,
+  }));
+
+  const adjustments: PayrollAdjustmentRow[] = workspace.adjustments.map((row) => ({
     id: row.id,
     employeeId: row.employeeId,
     employeeName: row.employeeName ?? "-",
-    employeeCode: row.employeeCode ?? "-",
-    divisionName: row.divisionName ?? "-",
-    positionName: row.positionName ?? "-",
-    gradeName: row.gradeName ?? "-",
-    employeeGroup: row.employeeGroup ?? "TEAMWORK",
-    payrollStatus: row.payrollStatus ?? "-",
-    performancePercent: Number(row.performancePercent),
-    approvedUnpaidLeaveDays: row.approvedUnpaidLeaveDays,
-    baseSalaryPaid: Number(row.baseSalaryPaid),
-    gradeAllowancePaid: Number(row.gradeAllowancePaid),
-    tenureAllowancePaid: Number(row.tenureAllowancePaid),
-    bonusKinerjaAmount: Number(row.bonusKinerjaAmount),
-    bonusPrestasiAmount: Number(row.bonusPrestasiAmount),
-    bonusFulltimeAmount: Number(row.bonusFulltimeAmount),
-    bonusDisciplineAmount: Number(row.bonusDisciplineAmount),
-    bonusTeamAmount: Number(row.bonusTeamAmount),
-    incidentDeductionAmount: Number(row.incidentDeductionAmount),
-    manualAdjustmentAmount: Number(row.manualAdjustmentAmount),
-    totalAdditionAmount: Number(row.totalAdditionAmount),
-    totalDeductionAmount: Number(row.totalDeductionAmount),
-    takeHomePay: Number(row.takeHomePay),
-    status: row.status,
+    adjustmentType: row.adjustmentType,
+    amount: Number(row.amount),
+    reason: row.reason,
+    createdAt: format(row.createdAt, "yyyy-MM-dd HH:mm"),
   }));
 
-  const summary = summarizePayrollResults(
-    results.map((row) => ({
-      employeeId: row.employeeId,
-      divisionName: row.divisionName,
-      takeHomePay: row.takeHomePay,
-      totalAdditionAmount: row.totalAdditionAmount,
-      totalDeductionAmount: row.totalDeductionAmount,
-      performancePercent: row.performancePercent,
-    }))
-  );
-
-  const financeSummary: PayrollFinanceSummary = {
-    employeeCount: summary.employeeCount,
-    totalTakeHomePay: summary.totalTakeHomePay,
-    totalAdditions: summary.totalAdditions,
-    totalDeductions: summary.totalDeductions,
-    averagePerformancePercent: summary.averagePerformancePercent,
-  };
-
-  const divisionSummaries: PayrollDivisionSummaryRow[] = summary.divisionSummaries;
-
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Finance Dashboard</h2>
-        <p className="text-sm text-slate-500">
-          Monitoring total payroll, ringkasan per divisi, dan export periode untuk Finance/HRD.
-        </p>
-      </div>
-
-      <FinanceDashboardClient
-        activePeriodId={workspace.activePeriodId}
-        periods={periods}
-        financeSummary={financeSummary}
-        divisionSummaries={divisionSummaries}
-        results={results}
-      />
-    </div>
+    <FinanceDashboardClient
+      canManage={workspace.canManage}
+      activePeriodId={workspace.activePeriodId}
+      periods={periods}
+      salaryConfigs={salaryConfigs}
+      gradeCompensations={gradeCompensations}
+      adjustments={adjustments}
+    />
   );
 }

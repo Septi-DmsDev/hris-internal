@@ -103,6 +103,24 @@ export type PayrollManagerialKpiRow = {
   updatedAt: string;
 };
 
+export type PayrollGradeCompensationRow = {
+  gradeId: string;
+  gradeName: string;
+  allowanceAmount: number | null;
+  bonusKinerja80: number | null;
+  bonusKinerja90: number | null;
+  bonusKinerja100: number | null;
+  bonusKinerjaTeam80: number | null;
+  bonusKinerjaTeam90: number | null;
+  bonusKinerjaTeam100: number | null;
+  bonusDisiplin80: number | null;
+  bonusDisiplin90: number | null;
+  bonusDisiplin100: number | null;
+  bonusPrestasi140: number | null;
+  bonusPrestasi165: number | null;
+  isActive: boolean;
+};
+
 export type PayrollFinanceSummary = {
   employeeCount: number;
   totalTakeHomePay: number;

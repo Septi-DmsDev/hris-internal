@@ -71,12 +71,6 @@ export default async function ReviewsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Review & Incident</h1>
-        <p className="text-sm text-slate-500">
-          Penilaian kualitas kerja karyawan dan pencatatan kejadian yang memengaruhi review dan payroll.
-        </p>
-      </div>
       <ReviewsClient
         role={role as UserRole}
         reviews={reviewRows}

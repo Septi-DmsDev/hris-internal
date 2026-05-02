@@ -11,7 +11,7 @@ import type { UserRole } from "@/types";
 import { divisions } from "@/lib/db/schema/master";
 import { resolveLeaveQuotaEligibility } from "@/server/ticketing-engine/resolve-leave-quota-eligibility";
 
-const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
+const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "KABAG"];
 const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["KABAG", "SPV", "MANAGERIAL", "FINANCE", "TEAMWORK", "PAYROLL_VIEWER"];
 const TICKET_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"];
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
@@ -160,6 +160,8 @@ export async function approveTicket(input: unknown) {
   }
 
   const user = await getUser();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
 
   const [ticket] = await db
     .select({
@@ -180,6 +182,16 @@ export async function approveTicket(input: unknown) {
   if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat disetujui." };
   }
+
+  if (DIV_SCOPED_ROLES.includes(role)) {
+    if (roleRow.divisionIds.length === 0) return { error: "Akun Anda belum terhubung ke divisi." };
+    const employeeDivisionId = await getEmployeeDivisionId(ticket.employeeId);
+    if (!employeeDivisionId || !roleRow.divisionIds.includes(employeeDivisionId)) {
+      return { error: "Anda hanya dapat menyetujui tiket karyawan di divisi Anda." };
+    }
+  }
+
+  const nextStatus = DIV_SCOPED_ROLES.includes(role) ? "APPROVED_SPV" : "APPROVED_HRD";
 
   await db.transaction(async (tx) => {
     let payrollImpact = parsed.data.payrollImpact ?? "UNPAID";
@@ -240,7 +252,7 @@ export async function approveTicket(input: unknown) {
     await tx
       .update(attendanceTickets)
       .set({
-        status: "APPROVED_HRD",
+        status: nextStatus,
         payrollImpact,
         reviewNotes: parsed.data.notes,
         approvedByUserId: user?.id ?? null,
@@ -268,6 +280,8 @@ export async function rejectTicket(input: unknown) {
   }
 
   const user = await getUser();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
 
   const [ticket] = await db
     .select({
@@ -285,6 +299,14 @@ export async function rejectTicket(input: unknown) {
   }
   if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat ditolak." };
+  }
+
+  if (DIV_SCOPED_ROLES.includes(role)) {
+    if (roleRow.divisionIds.length === 0) return { error: "Akun Anda belum terhubung ke divisi." };
+    const employeeDivisionId = await getEmployeeDivisionId(ticket.employeeId);
+    if (!employeeDivisionId || !roleRow.divisionIds.includes(employeeDivisionId)) {
+      return { error: "Anda hanya dapat menolak tiket karyawan di divisi Anda." };
+    }
   }
 
   await db

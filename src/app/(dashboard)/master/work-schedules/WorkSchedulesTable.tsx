@@ -27,7 +27,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   createWorkSchedule,
+  createWorkShiftMaster,
+  deleteWorkShiftMaster,
   deleteWorkSchedule,
+  updateWorkShiftMaster,
   updateWorkSchedule,
 } from "@/server/actions/work-schedules";
 
@@ -45,6 +48,7 @@ type WorkScheduleDayDraft = {
   dayOfWeek: number;
   dayStatus: "KERJA" | "OFF" | "CUTI" | "SAKIT" | "IZIN" | "ALPA" | "SETENGAH_HARI";
   isWorkingDay: boolean;
+  shiftId?: string;
   startTime: string;
   endTime: string;
   targetPoints: string;
@@ -71,11 +75,37 @@ export type WorkScheduleRow = {
   days: WorkScheduleDayRow[];
 };
 
+export type WorkShiftRow = {
+  id: string;
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  isOvernight: boolean;
+  applicableDivisionCodes: string[];
+  notes: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type WorkShiftDraft = {
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  isOvernight: boolean;
+  applicableDivisionCodes: string;
+  notes: string;
+  sortOrder: string;
+  isActive: boolean;
+};
+
 function createDefaultDays() {
   return Array.from({ length: 7 }, (_, dayOfWeek) => ({
     dayOfWeek,
     dayStatus: dayOfWeek === 0 ? "OFF" : "KERJA",
     isWorkingDay: dayOfWeek !== 0,
+    shiftId: "",
     startTime: dayOfWeek === 0 ? "" : "08:00",
     endTime: dayOfWeek === 0 ? "" : "17:00",
     targetPoints: dayOfWeek === 0 ? "0" : String(POINT_TARGET_HARIAN),
@@ -100,6 +130,7 @@ function createDraftFromRow(row: WorkScheduleRow): WorkScheduleDraft {
     isActive: row.isActive,
     days: row.days.map((day) => ({
       ...day,
+      shiftId: "",
       startTime: day.startTime ?? "",
       endTime: day.endTime ?? "",
       targetPoints: String(day.targetPoints),
@@ -124,12 +155,59 @@ function toActionInput(draft: WorkScheduleDraft) {
   };
 }
 
+function createShiftDraft(): WorkShiftDraft {
+  return {
+    code: "",
+    name: "",
+    startTime: "08:00",
+    endTime: "17:00",
+    isOvernight: false,
+    applicableDivisionCodes: "",
+    notes: "",
+    sortOrder: "0",
+    isActive: true,
+  };
+}
+
+function createShiftDraftFromRow(row: WorkShiftRow): WorkShiftDraft {
+  return {
+    code: row.code,
+    name: row.name,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    isOvernight: row.isOvernight,
+    applicableDivisionCodes: row.applicableDivisionCodes.join(", "),
+    notes: row.notes,
+    sortOrder: String(row.sortOrder),
+    isActive: row.isActive,
+  };
+}
+
+function toShiftInput(draft: WorkShiftDraft) {
+  return {
+    code: draft.code,
+    name: draft.name,
+    startTime: draft.startTime,
+    endTime: draft.endTime,
+    isOvernight: draft.isOvernight,
+    applicableDivisionCodes: draft.applicableDivisionCodes
+      .split(",")
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean),
+    notes: draft.notes,
+    sortOrder: Number(draft.sortOrder || 0),
+    isActive: draft.isActive,
+  };
+}
+
 function ScheduleForm({
   draft,
+  shifts,
   onChange,
   onDayChange,
 }: {
   draft: WorkScheduleDraft;
+  shifts: WorkShiftRow[];
   onChange: (field: keyof WorkScheduleDraft, value: string | boolean) => void;
   onDayChange: (
     index: number,
@@ -233,6 +311,32 @@ function ScheduleForm({
               </select>
             </div>
             <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Shift</p>
+              <select
+                value={day.shiftId}
+                disabled={!day.isWorkingDay}
+                onChange={(event) => {
+                  const shiftId = event.target.value;
+                  onDayChange(index, "shiftId", shiftId);
+                  const shift = shifts.find((item) => item.id === shiftId);
+                  if (shift) {
+                    onDayChange(index, "startTime", shift.startTime);
+                    onDayChange(index, "endTime", shift.endTime);
+                  }
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Manual</option>
+                {shifts
+                  .filter((shift) => shift.isActive)
+                  .map((shift) => (
+                    <option key={shift.id} value={shift.id}>
+                      {shift.code} ({shift.startTime}-{shift.endTime})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-slate-500">Jam Masuk</p>
               <Input
                 type="time"
@@ -274,15 +378,21 @@ function ScheduleForm({
 
 type WorkSchedulesTableProps = {
   data: WorkScheduleRow[];
+  shifts: WorkShiftRow[];
 };
 
 export default function WorkSchedulesTable({
   data,
+  shifts,
 }: WorkSchedulesTableProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<WorkScheduleRow | null>(null);
   const [deletingRow, setDeletingRow] = useState<WorkScheduleRow | null>(null);
+  const [shiftOpen, setShiftOpen] = useState(false);
+  const [editingShift, setEditingShift] = useState<WorkShiftRow | null>(null);
+  const [deletingShift, setDeletingShift] = useState<WorkShiftRow | null>(null);
+  const [shiftDraft, setShiftDraft] = useState<WorkShiftDraft>(createShiftDraft());
   const [draft, setDraft] = useState<WorkScheduleDraft>(createEmptyDraft());
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -352,6 +462,43 @@ export default function WorkSchedulesTable({
         return;
       }
       setDeletingRow(null);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function submitShift() {
+    setPending(true);
+    setFormError(null);
+    try {
+      const payload = toShiftInput(shiftDraft);
+      const result = editingShift
+        ? await updateWorkShiftMaster(editingShift.id, payload)
+        : await createWorkShiftMaster(payload);
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      setEditingShift(null);
+      setShiftDraft(createShiftDraft());
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleDeleteShift() {
+    if (!deletingShift) return;
+    setPending(true);
+    setFormError(null);
+    try {
+      const result = await deleteWorkShiftMaster(deletingShift.id);
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      setDeletingShift(null);
       router.refresh();
     } finally {
       setPending(false);
@@ -432,17 +579,91 @@ export default function WorkSchedulesTable({
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button
-          type="button"
-          onClick={() => {
-            setFormError(null);
-            setDraft(createEmptyDraft());
-            setCreateOpen(true);
-          }}
-        >
-          Tambah Jadwal
-        </Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => setShiftOpen(true)}>
+            Kelola Shift
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              setFormError(null);
+              setDraft(createEmptyDraft());
+              setCreateOpen(true);
+            }}
+          >
+            Tambah Jadwal
+          </Button>
+        </div>
       </div>
+
+      {shiftOpen ? (
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-800">Master Shift</h3>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setFormError(null);
+                setEditingShift(null);
+                setShiftDraft(createShiftDraft());
+              }}
+            >
+              Tambah Shift
+            </Button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input value={shiftDraft.code} onChange={(event) => setShiftDraft((v) => ({ ...v, code: event.target.value }))} placeholder="Kode shift" />
+            <Input value={shiftDraft.name} onChange={(event) => setShiftDraft((v) => ({ ...v, name: event.target.value }))} placeholder="Nama shift" />
+            <Input type="time" value={shiftDraft.startTime} onChange={(event) => setShiftDraft((v) => ({ ...v, startTime: event.target.value }))} />
+            <Input type="time" value={shiftDraft.endTime} onChange={(event) => setShiftDraft((v) => ({ ...v, endTime: event.target.value }))} />
+            <Input value={shiftDraft.sortOrder} onChange={(event) => setShiftDraft((v) => ({ ...v, sortOrder: event.target.value }))} type="number" placeholder="Urutan" />
+            <select
+              value={shiftDraft.isActive ? "true" : "false"}
+              onChange={(event) => setShiftDraft((v) => ({ ...v, isActive: event.target.value === "true" }))}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="true">Aktif</option>
+              <option value="false">Nonaktif</option>
+            </select>
+          </div>
+          <Input
+            value={shiftDraft.applicableDivisionCodes}
+            onChange={(event) => setShiftDraft((v) => ({ ...v, applicableDivisionCodes: event.target.value }))}
+            placeholder="Divisi berlaku (pisahkan koma), contoh: FINISHING, PRINTING"
+          />
+          <textarea
+            value={shiftDraft.notes}
+            onChange={(event) => setShiftDraft((v) => ({ ...v, notes: event.target.value }))}
+            rows={2}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            placeholder="Catatan shift"
+          />
+          <div className="grid gap-2">
+            {shifts.map((shift) => (
+              <div key={shift.id} className="flex items-center justify-between rounded border border-slate-200 p-2 text-sm">
+                <span>{shift.code} - {shift.name} ({shift.startTime}-{shift.endTime})</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => { setEditingShift(shift); setShiftDraft(createShiftDraftFromRow(shift)); }}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => setDeletingShift(shift)}>
+                    Hapus
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => { setShiftOpen(false); setEditingShift(null); }}>
+              Tutup
+            </Button>
+            <Button type="button" onClick={() => void submitShift()} disabled={pending}>
+              {pending ? "Menyimpan..." : editingShift ? "Simpan Shift" : "Tambah Shift"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <DataTable
         data={data}
@@ -459,6 +680,7 @@ export default function WorkSchedulesTable({
           <div className="space-y-4">
             <ScheduleForm
               draft={draft}
+              shifts={shifts}
               onChange={handleDraftChange}
               onDayChange={handleDayChange}
             />
@@ -493,6 +715,7 @@ export default function WorkSchedulesTable({
           <div className="space-y-4">
             <ScheduleForm
               draft={draft}
+              shifts={shifts}
               onChange={handleDraftChange}
               onDayChange={handleDayChange}
             />
@@ -534,6 +757,35 @@ export default function WorkSchedulesTable({
               onClick={(event) => {
                 event.preventDefault();
                 void handleDelete();
+              }}
+              disabled={pending}
+            >
+              {pending ? "Menghapus..." : "Hapus"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deletingShift !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingShift(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Master Shift</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Shift "${deletingShift?.name ?? ""}" akan dihapus.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteShift();
               }}
               disabled={pending}
             >

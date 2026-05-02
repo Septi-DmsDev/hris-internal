@@ -38,6 +38,29 @@ export const monthlyPerformanceGenerationSchema = z.object({
   }
 });
 
+export const upsertCatalogEntrySchema = z.object({
+  id: z.string().uuid().optional(),
+  divisionName: z.string().trim().min(1, "Divisi wajib diisi."),
+  workName: z.string().trim().min(1, "Nama pekerjaan wajib diisi."),
+  pointValue: z.coerce.number().positive("Nilai poin harus lebih besar dari 0."),
+  unitDescription: z.string().trim().optional().transform((v) => v || undefined),
+});
+
+export type UpsertCatalogEntryInput = z.infer<typeof upsertCatalogEntrySchema>;
+
+export const batchSubmitDraftSchema = z.object({
+  workDate: z.coerce.date({ message: "Tanggal kerja wajib diisi." }),
+  items: z
+    .array(
+      z.object({
+        pointCatalogEntryId: z.string().uuid("Katalog pekerjaan tidak valid."),
+        quantity: z.coerce.number().positive("Qty harus lebih besar dari 0."),
+      })
+    )
+    .min(1, "Tambahkan minimal 1 aktivitas."),
+});
+
 export type DailyActivityEntryInput = z.infer<typeof dailyActivityEntrySchema>;
 export type DailyActivityDecisionInput = z.infer<typeof dailyActivityDecisionSchema>;
 export type MonthlyPerformanceGenerationInput = z.infer<typeof monthlyPerformanceGenerationSchema>;
+export type BatchSubmitDraftInput = z.infer<typeof batchSubmitDraftSchema>;

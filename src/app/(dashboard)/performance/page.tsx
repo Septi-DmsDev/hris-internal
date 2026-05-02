@@ -1,6 +1,12 @@
 import { format } from "date-fns";
 import { getPointCatalogOverview } from "@/server/actions/point-catalog";
-import { getPerformanceWorkspace } from "@/server/actions/performance";
+import {
+  getPerformanceWorkspace,
+  getSpvPendingActivities,
+  getTwPerformanceData,
+} from "@/server/actions/performance";
+import { getCurrentUserRoleRow } from "@/lib/auth/session";
+import TwPerformanceClient from "./TwPerformanceClient";
 import PerformanceCatalogClient, {
   type PerformanceActivityRow,
   type PerformanceCatalogEntryRow,
@@ -10,8 +16,60 @@ import PerformanceCatalogClient, {
   type PerformanceVersionRow,
   type PerformanceDivisionOption,
 } from "./PerformanceCatalogClient";
+import SPVReviewClient from "./SPVReviewClient";
+import type { SpvActivityRow } from "./SPVReviewClient";
 
 export default async function PerformancePage() {
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role;
+
+  if (["TEAMWORK", "MANAGERIAL"].includes(role)) {
+    const data = await getTwPerformanceData();
+    if (data.error) {
+      return (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {data.error}
+        </div>
+      );
+    }
+    const activityItems = data.activities.map((a) => ({
+      ...a,
+      workDate: a.workDate instanceof Date ? a.workDate : new Date(String(a.workDate)),
+    }));
+    return (
+      <div className="space-y-4">
+        <TwPerformanceClient
+          catalogEntries={data.catalogEntries}
+          activities={activityItems}
+          divisionName={data.divisionName}
+        />
+      </div>
+    );
+  }
+
+  if (["SPV", "KABAG"].includes(role)) {
+    const { activities } = await getSpvPendingActivities();
+    const activityRows: SpvActivityRow[] = activities.map((a) => ({
+      id: a.id,
+      employeeId: a.employeeId,
+      employeeName: a.employeeName ?? "-",
+      employeeCode: a.employeeCode ?? "-",
+      employeeDivisionName: a.employeeDivisionName ?? "-",
+      workDate: format(a.workDate, "yyyy-MM-dd"),
+      externalCode: a.externalCode ?? null,
+      workNameSnapshot: a.workNameSnapshot,
+      pointValueSnapshot: String(a.pointValueSnapshot),
+      quantity: String(a.quantity),
+      totalPoints: String(a.totalPoints),
+      status: a.status,
+      submittedAt: a.submittedAt ? format(a.submittedAt, "yyyy-MM-dd HH:mm") : "-",
+    }));
+    return (
+      <div className="space-y-4">
+        <SPVReviewClient activities={activityRows} />
+      </div>
+    );
+  }
   const [overview, workspace] = await Promise.all([
     getPointCatalogOverview(),
     getPerformanceWorkspace(),
@@ -173,17 +231,6 @@ export default async function PerformancePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">
-            Performance Management
-          </h1>
-          <p className="text-sm text-slate-500">
-            Fondasi Phase 2 untuk katalog poin, target divisi, dan sinkronisasi workbook.
-          </p>
-        </div>
-      </div>
-
       <PerformanceCatalogClient
         role={workspace.role}
         canManageCatalog={overview.canManageCatalog}

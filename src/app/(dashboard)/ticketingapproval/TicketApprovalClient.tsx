@@ -110,7 +110,7 @@ export default function TicketApprovalClient({ tickets, role }: Props) {
         <div>
           <p className="font-medium text-slate-900">{row.original.employeeName}</p>
           <p className="text-xs text-slate-500">
-            {row.original.employeeCode} · {row.original.divisionName}
+            {row.original.employeeCode} - {row.original.divisionName}
           </p>
         </div>
       ),
@@ -188,7 +188,7 @@ export default function TicketApprovalClient({ tickets, role }: Props) {
                 setDecision({
                   action: "approve",
                   ticketId: t.id,
-                  label: `${t.employeeName} · ${TICKET_TYPE_LABEL[t.ticketType] ?? t.ticketType}`,
+                  label: `${t.employeeName} - ${TICKET_TYPE_LABEL[t.ticketType] ?? t.ticketType}`,
                 })
               }
             >
@@ -201,7 +201,7 @@ export default function TicketApprovalClient({ tickets, role }: Props) {
                 setDecision({
                   action: "reject",
                   ticketId: t.id,
-                  label: `${t.employeeName} · ${TICKET_TYPE_LABEL[t.ticketType] ?? t.ticketType}`,
+                  label: `${t.employeeName} - ${TICKET_TYPE_LABEL[t.ticketType] ?? t.ticketType}`,
                 })
               }
             >
@@ -214,7 +214,7 @@ export default function TicketApprovalClient({ tickets, role }: Props) {
   ];
 
   const subtitle = isHrd
-    ? "Tiket dari TeamWork (sudah disetujui SPV) dan tiket langsung dari SPV/Kabag"
+    ? "Tiket TEAMWORK yang sudah disetujui SPV/KABAG dan tiket langsung dari SPV/KABAG"
     : "Tiket dari anggota divisi Anda yang menunggu persetujuan";
 
   return (
@@ -223,7 +223,7 @@ export default function TicketApprovalClient({ tickets, role }: Props) {
         <h2 className="text-base font-semibold text-slate-900">Antrian Review Izin</h2>
         <p className="text-sm text-slate-500">
           {tickets.length > 0
-            ? `${tickets.length} pengajuan menunggu — ${subtitle}`
+            ? `${tickets.length} pengajuan menunggu - ${subtitle}`
             : subtitle}
         </p>
       </div>

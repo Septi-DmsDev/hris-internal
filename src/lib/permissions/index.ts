@@ -38,7 +38,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "employees:read",
     "performance:approve",
     "reviews:read", "reviews:write",
-    "tickets:read", "tickets:write",
+    "tickets:read", "tickets:write", "tickets:approve",
     "payroll:read",
   ],
   FINANCE: [
@@ -51,7 +51,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "employees:read",
     "performance:approve",
     "reviews:read", "reviews:write",
-    "tickets:read", "tickets:write",
+    "tickets:read", "tickets:write", "tickets:approve",
     "payroll:read",
   ],
   TEAMWORK: [

@@ -68,6 +68,13 @@ const NAV_ITEMS: NavItem[] = [
     group: "main",
   },
   {
+    label: "Approval Izin",
+    href: "/ticketingapproval",
+    icon: ClipboardCheck,
+    roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV"],
+    group: "main",
+  },
+  {
     label: "Jadwal",
     href: "/schedule",
     icon: CalendarDays,

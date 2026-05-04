@@ -18,15 +18,15 @@ describe("canAccess", () => {
   it("SPV bisa approve dan baca data divisinya", () => {
     expect(canAccess("SPV", "performance:approve")).toBe(true);
     expect(canAccess("SPV", "employees:read")).toBe(true);
-    expect(canAccess("SPV", "tickets:approve")).toBe(false);
+    expect(canAccess("SPV", "tickets:approve")).toBe(true);
     expect(canAccess("SPV", "payroll:finalize")).toBe(false);
   });
 
-  it("KABAG punya akses scoped seperti manager divisi tanpa approval ticket", () => {
+  it("KABAG punya akses scoped seperti manager divisi", () => {
     expect(canAccess("KABAG", "employees:read")).toBe(true);
     expect(canAccess("KABAG", "reviews:write")).toBe(true);
     expect(canAccess("KABAG", "tickets:read")).toBe(true);
-    expect(canAccess("KABAG", "tickets:approve")).toBe(false);
+    expect(canAccess("KABAG", "tickets:approve")).toBe(true);
   });
 
   it("HRD bisa override dan baca semua data HR", () => {

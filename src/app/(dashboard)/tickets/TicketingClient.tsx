@@ -14,12 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  approveTicket,
-  cancelTicket,
-  createTicket,
-  rejectTicket,
-} from "@/server/actions/tickets";
+import { cancelTicket, createTicket } from "@/server/actions/tickets";
 import type { UserRole } from "@/types";
 
 type TicketRow = {
@@ -41,32 +36,18 @@ type TicketRow = {
   createdAt: string;
 };
 
-type EmployeeOption = {
-  id: string;
-  employeeCode: string;
-  fullName: string;
-  divisionName: string;
-};
-
 type Props = {
   role: UserRole;
+  hasEmployeeLink: boolean;
   tickets: TicketRow[];
-  employeeOptions: EmployeeOption[];
 };
 
 type TicketDraft = {
-  employeeId: string;
   ticketType: string;
   startDate: string;
   endDate: string;
   reason: string;
   attachmentUrl: string;
-};
-
-type DecisionState = {
-  action: "approve" | "reject";
-  ticketId: string;
-  label: string;
 };
 
 const TICKET_TYPE_LABEL: Record<string, string> = {
@@ -115,7 +96,6 @@ const PAYROLL_IMPACT_LABEL: Record<string, string> = {
 function createDraft(): TicketDraft {
   const today = new Date().toISOString().slice(0, 10);
   return {
-    employeeId: "",
     ticketType: "IZIN",
     startDate: today,
     endDate: today,
@@ -138,24 +118,20 @@ function getDurationDays(startDate: string, endDate: string) {
 
 export default function TicketingClient({
   role,
+  hasEmployeeLink,
   tickets,
-  employeeOptions,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
-  const [decision, setDecision] = useState<DecisionState | null>(null);
   const [draft, setDraft] = useState<TicketDraft>(createDraft());
-  const [decisionNotes, setDecisionNotes] = useState("");
-  const [rejectionReason, setRejectionReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const canApprove = ["SUPER_ADMIN", "HRD", "SPV"].includes(role);
-  const showEmployeePicker = ["SUPER_ADMIN", "HRD"].includes(role);
   const needsAttachment =
     draft.ticketType === "SAKIT" &&
     getDurationDays(draft.startDate, draft.endDate) > 1;
+  const canSubmit = hasEmployeeLink;
 
   function update(field: keyof TicketDraft, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -173,38 +149,6 @@ export default function TicketingClient({
       setSuccess("Tiket berhasil diajukan.");
       setCreateOpen(false);
       setDraft(createDraft());
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleDecision() {
-    if (!decision) return;
-    setPending(true);
-    setError(null);
-    try {
-      const payload = {
-        ticketId: decision.ticketId,
-        notes: decisionNotes || undefined,
-        rejectionReason: rejectionReason || undefined,
-      };
-      const result =
-        decision.action === "approve"
-          ? await approveTicket(payload)
-          : await rejectTicket(payload);
-      if (result && "error" in result) {
-        setError(result.error ?? "Gagal memproses tiket.");
-        return;
-      }
-      setSuccess(
-        decision.action === "approve"
-          ? "Tiket disetujui."
-          : "Tiket ditolak.",
-      );
-      setDecision(null);
-      setDecisionNotes("");
-      setRejectionReason("");
       router.refresh();
     } finally {
       setPending(false);
@@ -275,7 +219,7 @@ export default function TicketingClient({
         header: "Alasan",
         accessorKey: "reason",
         cell: ({ row }) => (
-          <p className="max-w-[200px] truncate text-sm">
+          <p className="max-w-[220px] truncate text-sm">
             {row.original.reason}
           </p>
         ),
@@ -304,7 +248,19 @@ export default function TicketingClient({
                 {PAYROLL_IMPACT_LABEL[row.original.payrollImpact]}
               </p>
             )}
+            {row.original.rejectionReason && (
+              <p className="max-w-[220px] truncate text-xs text-red-600">
+                {row.original.rejectionReason}
+              </p>
+            )}
           </div>
+        ),
+      },
+      {
+        header: "Diajukan",
+        accessorKey: "createdAt",
+        cell: ({ row }) => (
+          <span className="text-sm text-slate-500">{row.original.createdAt}</span>
         ),
       },
       {
@@ -312,59 +268,34 @@ export default function TicketingClient({
         id: "actions",
         cell: ({ row }) => {
           const t = row.original;
-          const isPending = ["SUBMITTED", "NEED_REVIEW"].includes(t.status);
           const isCancellable = ["DRAFT", "SUBMITTED"].includes(t.status);
-          return (
-            <div className="flex flex-wrap gap-1.5">
-              {canApprove && isPending && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      setDecision({
-                        action: "approve",
-                        ticketId: t.id,
-                        label: `${t.employeeName} - ${TICKET_TYPE_LABEL[t.ticketType]}`,
-                      })
-                    }
-                  >
-                    Setujui
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() =>
-                      setDecision({
-                        action: "reject",
-                        ticketId: t.id,
-                        label: `${t.employeeName} - ${TICKET_TYPE_LABEL[t.ticketType]}`,
-                      })
-                    }
-                  >
-                    Tolak
-                  </Button>
-                </>
-              )}
-              {isCancellable && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleCancel(t.id)}
-                  disabled={pending}
-                >
-                  Batalkan
-                </Button>
-              )}
-            </div>
-          );
+          return isCancellable ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleCancel(t.id)}
+              disabled={pending}
+            >
+              Batalkan
+            </Button>
+          ) : null;
         },
       },
     ],
-    [canApprove, handleCancel, pending],
+    [handleCancel, pending],
   );
 
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold text-slate-900">Ticketing Saya</h2>
+        <p className="text-sm text-slate-500">
+          {role === "TEAMWORK"
+            ? "Pengajuan masuk ke SPV/KABAG lalu HRD."
+            : "Pengajuan Anda masuk ke antrian HRD."}
+        </p>
+      </div>
+
       {success && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {success}
@@ -373,6 +304,11 @@ export default function TicketingClient({
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+      {!hasEmployeeLink && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          Akun belum terhubung ke data karyawan, jadi belum bisa mengajukan tiket pribadi.
         </div>
       )}
 
@@ -388,6 +324,7 @@ export default function TicketingClient({
               setDraft(createDraft());
               setCreateOpen(true);
             }}
+            disabled={!canSubmit}
           >
             Ajukan Tiket
           </Button>
@@ -400,29 +337,9 @@ export default function TicketingClient({
             <DialogTitle>Ajukan Tiket</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {showEmployeePicker ? (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">
-                  Karyawan
-                </label>
-                <select
-                  value={draft.employeeId}
-                  onChange={(e) => update("employeeId", e.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="">Pilih karyawan</option>
-                  {employeeOptions.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.employeeCode}) - {emp.divisionName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                Tiket akan diajukan untuk akun Anda sendiri.
-              </div>
-            )}
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Tiket akan diajukan untuk akun Anda sendiri.
+            </div>
 
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">
@@ -505,69 +422,6 @@ export default function TicketingClient({
             </Button>
             <Button onClick={() => void handleCreate()} disabled={pending}>
               {pending ? "Menyimpan..." : "Ajukan"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={decision !== null}
-        onOpenChange={(open) => !open && setDecision(null)}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {decision?.action === "approve"
-                ? "Setujui Tiket"
-                : "Tolak Tiket"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">{decision?.label}</p>
-            {decision?.action === "reject" && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">
-                  Alasan Penolakan <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">
-                Catatan (opsional)
-              </label>
-              <textarea
-                value={decisionNotes}
-                onChange={(e) => setDecisionNotes(e.target.value)}
-                rows={2}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDecision(null)}
-              disabled={pending}
-            >
-              Batal
-            </Button>
-            <Button
-              variant={decision?.action === "reject" ? "destructive" : "default"}
-              onClick={() => void handleDecision()}
-              disabled={pending}
-            >
-              {pending
-                ? "Memproses..."
-                : decision?.action === "approve"
-                  ? "Setujui"
-                  : "Tolak"}
             </Button>
           </DialogFooter>
         </DialogContent>

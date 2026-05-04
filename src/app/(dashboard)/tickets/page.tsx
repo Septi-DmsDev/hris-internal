@@ -1,32 +1,12 @@
 import { format } from "date-fns";
 import { getTickets } from "@/server/actions/tickets";
 import TicketingClient from "./TicketingClient";
-import { db } from "@/lib/db";
-import { employees } from "@/lib/db/schema/employee";
-import { divisions } from "@/lib/db/schema/master";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
-import { asc, eq } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
 export default async function TicketingPage() {
   const { role, tickets } = await getTickets();
   const roleRow = await getCurrentUserRoleRow();
-
-  const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD"].includes(role);
-
-  const employeeRows = canManageEmployeeOptions
-    ? await db
-        .select({
-          id: employees.id,
-          employeeCode: employees.employeeCode,
-          fullName: employees.fullName,
-          divisionName: divisions.name,
-        })
-        .from(employees)
-        .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-        .where(eq(employees.isActive, true))
-        .orderBy(asc(employees.fullName))
-    : [];
 
   const ticketRows = tickets.map((t) => ({
     ...t,
@@ -42,19 +22,12 @@ export default async function TicketingPage() {
     attachmentUrl: t.attachmentUrl ?? null,
   }));
 
-  const employeeOptions = employeeRows.map((e) => ({
-    id: e.id,
-    employeeCode: e.employeeCode,
-    fullName: e.fullName,
-    divisionName: e.divisionName ?? "-",
-  }));
-
   return (
     <div className="space-y-4">
       <TicketingClient
         role={role as UserRole}
+        hasEmployeeLink={Boolean(roleRow.employeeId)}
         tickets={ticketRows}
-        employeeOptions={employeeOptions}
       />
     </div>
   );

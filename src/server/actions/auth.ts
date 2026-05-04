@@ -4,7 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validations/auth";
 import { redirect } from "next/navigation";
 
-export async function loginAction(formData: FormData) {
+export type LoginActionState = {
+  error?: string;
+};
+
+export async function loginAction(
+  _prevState: LoginActionState,
+  formData: FormData
+): Promise<LoginActionState> {
   const raw = {
     email: formData.get("email")?.toString() ?? "",
     password: formData.get("password")?.toString() ?? "",

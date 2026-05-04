@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -43,6 +44,13 @@ export const ticketPayrollImpactEnum = pgEnum("ticket_payroll_impact", [
   "PAID_QUOTA_ANNUAL",
 ]);
 
+export const attendanceTicketAuditActionEnum = pgEnum("attendance_ticket_audit_action", [
+  "APPROVE_SPV",
+  "APPROVE_HRD",
+  "REJECT_SPV",
+  "REJECT_HRD",
+]);
+
 export const attendanceTickets = pgTable("attendance_tickets", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
@@ -63,6 +71,22 @@ export const attendanceTickets = pgTable("attendance_tickets", {
   createdByUserId: uuid("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const attendanceTicketAuditLogs = pgTable("attendance_ticket_audit_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ticketId: uuid("ticket_id")
+    .notNull()
+    .references(() => attendanceTickets.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  action: attendanceTicketAuditActionEnum("action").notNull(),
+  actorUserId: uuid("actor_user_id").notNull(),
+  actorRole: userRoleEnum("actor_role").notNull(),
+  notes: text("notes"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ─── Leave Quota ──────────────────────────────────────────────────────────────
@@ -151,6 +175,8 @@ export const incidentLogs = pgTable("incident_logs", {
 
 export type AttendanceTicket = typeof attendanceTickets.$inferSelect;
 export type NewAttendanceTicket = typeof attendanceTickets.$inferInsert;
+export type AttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferSelect;
+export type NewAttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferInsert;
 export type LeaveQuota = typeof leaveQuotas.$inferSelect;
 export type NewLeaveQuota = typeof leaveQuotas.$inferInsert;
 export type EmployeeReview = typeof employeeReviews.$inferSelect;

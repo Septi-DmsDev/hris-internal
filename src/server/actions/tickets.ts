@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
 import { userRoles } from "@/lib/db/schema/auth";
-import { attendanceTickets, leaveQuotas } from "@/lib/db/schema/hr";
+import { attendanceTicketAuditLogs, attendanceTickets, leaveQuotas } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { createTicketSchema, ticketDecisionSchema } from "@/lib/validations/hr";
 import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
@@ -239,6 +239,19 @@ export async function approveTicket(input: unknown) {
       })
       .where(eq(attendanceTickets.id, parsed.data.ticketId));
 
+    await db.insert(attendanceTicketAuditLogs).values({
+      ticketId: ticket.id,
+      employeeId: ticket.employeeId,
+      action: "APPROVE_SPV",
+      actorUserId: user?.id ?? roleRow.userId,
+      actorRole: role,
+      notes: parsed.data.notes ?? null,
+      payload: {
+        fromStatus: ticket.status,
+        toStatus: "APPROVED_SPV",
+      },
+    });
+
     revalidatePath("/tickets");
     revalidatePath("/ticketingapproval");
     return { success: true };
@@ -318,6 +331,20 @@ export async function approveTicket(input: unknown) {
         updatedAt: new Date(),
       })
       .where(eq(attendanceTickets.id, parsed.data.ticketId));
+
+    await tx.insert(attendanceTicketAuditLogs).values({
+      ticketId: ticket.id,
+      employeeId: ticket.employeeId,
+      action: "APPROVE_HRD",
+      actorUserId: user?.id ?? roleRow.userId,
+      actorRole: role,
+      notes: parsed.data.notes ?? null,
+      payload: {
+        fromStatus: ticket.status,
+        toStatus: "APPROVED_HRD",
+        payrollImpact,
+      },
+    });
   });
 
   revalidatePath("/tickets");
@@ -397,6 +424,20 @@ export async function rejectTicket(input: unknown) {
       updatedAt: new Date(),
     })
     .where(eq(attendanceTickets.id, parsed.data.ticketId));
+
+  await db.insert(attendanceTicketAuditLogs).values({
+    ticketId: ticket.id,
+    employeeId: ticket.employeeId,
+    action: DIV_SCOPED_ROLES.includes(role) ? "REJECT_SPV" : "REJECT_HRD",
+    actorUserId: user?.id ?? roleRow.userId,
+    actorRole: role,
+    notes: parsed.data.notes ?? null,
+    payload: {
+      fromStatus: ticket.status,
+      toStatus: "REJECTED",
+      rejectionReason: parsed.data.rejectionReason,
+    },
+  });
 
   revalidatePath("/tickets");
   revalidatePath("/ticketingapproval");
@@ -493,6 +534,56 @@ export async function getTicketsForApproval() {
           )
         )
         .orderBy(desc(attendanceTickets.createdAt));
+
+  return { role, tickets: rows };
+}
+
+export async function getTicketsForApprovalHistory() {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  if (!["SUPER_ADMIN", "HRD", "SPV", "KABAG"].includes(role)) {
+    return { role, tickets: [] };
+  }
+
+  const isDivScoped = DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0;
+
+  const baseQuery = db
+    .select({
+      id: attendanceTickets.id,
+      employeeId: attendanceTickets.employeeId,
+      employeeName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      divisionName: divisions.name,
+      ticketType: attendanceTickets.ticketType,
+      startDate: attendanceTickets.startDate,
+      endDate: attendanceTickets.endDate,
+      daysCount: attendanceTickets.daysCount,
+      reason: attendanceTickets.reason,
+      attachmentUrl: attendanceTickets.attachmentUrl,
+      status: attendanceTickets.status,
+      payrollImpact: attendanceTickets.payrollImpact,
+      reviewNotes: attendanceTickets.reviewNotes,
+      rejectionReason: attendanceTickets.rejectionReason,
+      approvedAt: attendanceTickets.approvedAt,
+      rejectedAt: attendanceTickets.rejectedAt,
+      createdAt: attendanceTickets.createdAt,
+    })
+    .from(attendanceTickets)
+    .leftJoin(employees, eq(attendanceTickets.employeeId, employees.id))
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id));
+
+  const rows = isDivScoped
+    ? await baseQuery
+        .where(
+          and(
+            inArray(employees.divisionId, roleRow.divisionIds),
+            roleRow.employeeId ? ne(attendanceTickets.employeeId, roleRow.employeeId) : undefined
+          )
+        )
+        .orderBy(desc(attendanceTickets.createdAt))
+    : await baseQuery.orderBy(desc(attendanceTickets.createdAt));
 
   return { role, tickets: rows };
 }

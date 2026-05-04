@@ -32,6 +32,14 @@ export type ApprovalTicketRow = {
   createdAt: string;
 };
 
+export type TicketHistoryRow = ApprovalTicketRow & {
+  payrollImpact: string | null;
+  reviewNotes: string | null;
+  rejectionReason: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+};
+
 type DecisionState = {
   action: "approve" | "reject";
   ticketId: string;
@@ -58,13 +66,43 @@ const QUEUE_STATUS_COLOR: Record<string, string> = {
   APPROVED_SPV: "bg-teal-100 text-teal-700",
 };
 
+const HISTORY_STATUS_LABEL: Record<string, string> = {
+  ...QUEUE_STATUS_LABEL,
+  APPROVED_HRD: "Disetujui HRD",
+  REJECTED: "Ditolak",
+  CANCELLED: "Dibatalkan",
+  LOCKED: "Terkunci",
+  AUTO_APPROVED: "Auto Approved",
+  AUTO_REJECTED: "Auto Rejected",
+  DRAFT: "Draft",
+};
+
+const HISTORY_STATUS_COLOR: Record<string, string> = {
+  ...QUEUE_STATUS_COLOR,
+  APPROVED_HRD: "bg-emerald-100 text-emerald-700",
+  REJECTED: "bg-red-100 text-red-700",
+  CANCELLED: "bg-slate-100 text-slate-600",
+  LOCKED: "bg-violet-100 text-violet-700",
+  AUTO_APPROVED: "bg-teal-100 text-teal-700",
+  AUTO_REJECTED: "bg-red-100 text-red-700",
+  DRAFT: "bg-slate-100 text-slate-500",
+};
+
+const PAYROLL_IMPACT_LABEL: Record<string, string> = {
+  UNPAID: "Unpaid",
+  PAID_QUOTA_MONTHLY: "Quota Bulanan",
+  PAID_QUOTA_ANNUAL: "Quota Tahunan",
+};
+
 type Props = {
   tickets: ApprovalTicketRow[];
+  historyTickets: TicketHistoryRow[];
   role: UserRole;
 };
 
-export default function TicketApprovalClient({ tickets, role }: Props) {
+export default function TicketApprovalClient({ tickets, historyTickets, role }: Props) {
   const router = useRouter();
+  const [tab, setTab] = useState<"QUEUE" | "HISTORY">("QUEUE");
   const [decision, setDecision] = useState<DecisionState | null>(null);
   const [notes, setNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -219,36 +257,153 @@ export default function TicketApprovalClient({ tickets, role }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Antrian Review Izin</h2>
-        <p className="text-sm text-slate-500">
-          {tickets.length > 0
-            ? `${tickets.length} pengajuan menunggu - ${subtitle}`
-            : subtitle}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">
+            {tab === "QUEUE" ? "Antrian Review Izin" : "Riwayat Pengajuan Izin"}
+          </h2>
+          <p className="text-sm text-slate-500">
+            {tab === "QUEUE"
+              ? tickets.length > 0
+                ? `${tickets.length} pengajuan menunggu - ${subtitle}`
+                : subtitle
+              : "Seluruh riwayat tiket dari divisi Anda."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            onClick={() => setTab("QUEUE")}
+            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors ${
+              tab === "QUEUE"
+                ? "bg-teal-600 text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            APPROVAL
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("HISTORY")}
+            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors ${
+              tab === "HISTORY"
+                ? "bg-teal-600 text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            HISTORY
+          </button>
+        </div>
       </div>
 
-      {success && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {success}
-        </div>
-      )}
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
+      {tab === "QUEUE" && (
+        <>
+          {success && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {success}
+            </div>
+          )}
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </>
       )}
 
-      {tickets.length === 0 ? (
+      {tab === "QUEUE" ? (
+        tickets.length === 0 ? (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
+            <p className="text-sm text-slate-500">Tidak ada pengajuan izin yang menunggu persetujuan.</p>
+          </div>
+        ) : (
+          <DataTable
+            data={tickets}
+            columns={columns}
+            globalSearch
+            searchPlaceholder="Cari karyawan, jenis, atau status..."
+          />
+        )
+      ) : historyTickets.length === 0 ? (
         <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
-          <p className="text-sm text-slate-500">Tidak ada pengajuan izin yang menunggu persetujuan.</p>
+          <p className="text-sm text-slate-500">Belum ada riwayat pengajuan izin.</p>
         </div>
       ) : (
         <DataTable
-          data={tickets}
-          columns={columns}
+          data={historyTickets}
+          columns={[
+            {
+              header: "Karyawan",
+              accessorKey: "employeeName",
+              cell: ({ row }) => (
+                <div>
+                  <p className="font-medium text-slate-900">{row.original.employeeName}</p>
+                  <p className="text-xs text-slate-500">
+                    {row.original.employeeCode} - {row.original.divisionName}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              header: "Jenis",
+              accessorKey: "ticketType",
+              cell: ({ row }) => (
+                <Badge variant="outline">
+                  {TICKET_TYPE_LABEL[row.original.ticketType] ?? row.original.ticketType}
+                </Badge>
+              ),
+            },
+            {
+              header: "Status",
+              accessorKey: "status",
+              cell: ({ row }) => (
+                <Badge variant="outline" className={HISTORY_STATUS_COLOR[row.original.status] ?? "bg-slate-100 text-slate-600"}>
+                  {HISTORY_STATUS_LABEL[row.original.status] ?? row.original.status}
+                </Badge>
+              ),
+            },
+            {
+              header: "Tanggal",
+              id: "dates",
+              cell: ({ row }) => (
+                <div className="text-sm">
+                  <p>{row.original.startDate}</p>
+                  {row.original.startDate !== row.original.endDate && (
+                    <p className="text-slate-400">s/d {row.original.endDate}</p>
+                  )}
+                  <p className="text-xs text-slate-400">{row.original.daysCount} hari</p>
+                </div>
+              ),
+            },
+            {
+              header: "Payroll",
+              accessorKey: "payrollImpact",
+              cell: ({ row }) => (
+                <span className="text-sm text-slate-500">
+                  {row.original.payrollImpact ? PAYROLL_IMPACT_LABEL[row.original.payrollImpact] ?? row.original.payrollImpact : "-"}
+                </span>
+              ),
+            },
+            {
+              header: "Keputusan",
+              accessorKey: "approvedAt",
+              cell: ({ row }) => (
+                <div className="text-xs text-slate-500">
+                  <p>Approve: {row.original.approvedAt ?? "-"}</p>
+                  <p>Reject: {row.original.rejectedAt ?? "-"}</p>
+                </div>
+              ),
+            },
+            {
+              header: "Diajukan",
+              accessorKey: "createdAt",
+              cell: ({ row }) => (
+                <span className="text-sm text-slate-500">{row.original.createdAt}</span>
+              ),
+            },
+          ]}
           globalSearch
-          searchPlaceholder="Cari karyawan, jenis, atau status..."
+          searchPlaceholder="Cari karyawan, status, atau jenis..."
         />
       )}
 

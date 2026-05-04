@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/tables/DataTable";
 import {
   Dialog,
   DialogContent,
@@ -11,9 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  batchDecideDraftActivities,
-} from "@/server/actions/performance";
+import { batchDecideDraftActivities } from "@/server/actions/performance";
 import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
 
 export type SpvActivityRow = {
@@ -32,6 +32,17 @@ export type SpvActivityRow = {
   totalPoints: string;
   status: string;
   submittedAt: string;
+};
+
+export type SpvTeamSummaryRow = {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  divisionName: string;
+  performancePercent: number;
+  approvedPoints: number;
+  attendanceCount: number;
+  lastDraftSubmittedAt: string;
 };
 
 type ActivityGroup = {
@@ -63,10 +74,16 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
   DIAJUKAN_ULANG: "outline",
 };
 
-export default function SPVReviewClient({ activities }: { activities: SpvActivityRow[] }) {
+type Props = {
+  activities: SpvActivityRow[];
+  teamSummaries: SpvTeamSummaryRow[];
+};
+
+export default function SPVReviewClient({ activities, teamSummaries }: Props) {
   const router = useRouter();
   const [detailGroup, setDetailGroup] = useState<ActivityGroup | null>(null);
   const [decision, setDecision] = useState<DecisionState | null>(null);
+  const [tab, setTab] = useState<"APPROVAL" | "TEAM">("APPROVAL");
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,11 +153,37 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Antrian Review Aktivitas</h2>
-        <p className="text-sm text-slate-500">
-          {groups.length} batch · {activities.length} aktivitas menunggu persetujuan
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Antrian Review Aktivitas</h2>
+          <p className="text-sm text-slate-500">
+            {groups.length} batch - {activities.length} aktivitas menunggu persetujuan
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            onClick={() => setTab("APPROVAL")}
+            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors ${
+              tab === "APPROVAL"
+                ? "bg-teal-600 text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            APPROVAL
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("TEAM")}
+            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors ${
+              tab === "TEAM"
+                ? "bg-teal-600 text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            TEAM
+          </button>
+        </div>
       </div>
 
       {success && (
@@ -154,87 +197,118 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
         </div>
       )}
 
-      {groups.length === 0 ? (
-        <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
-          <p className="text-sm text-slate-500">Tidak ada aktivitas yang menunggu persetujuan.</p>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-slate-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Karyawan</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tgl Kerja</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Job</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Poin</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Diajukan</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {groups.map((group) => (
-                <tr
-                  key={group.key}
-                  className="bg-white hover:bg-slate-50/60 cursor-pointer"
-                  onClick={() => setDetailGroup(group)}
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-slate-900">{group.employeeName}</p>
-                    <p className="text-xs text-slate-500">{group.employeeCode} · {group.employeeDivisionName}</p>
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{group.workDate}</td>
-                  <td className="px-4 py-3 text-center tabular-nums text-slate-700">{group.activities.length}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
-                    {group.totalPoints.toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[group.status] ?? "outline"}>
-                      {STATUS_LABEL[group.status] ?? group.status}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{group.submittedAt}</td>
-                  <td className="px-4 py-3">
-                    <div
-                      className="flex gap-1.5 justify-end"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button size="sm" onClick={() => openDecision("approve", group)}>
-                        Terima
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => openDecision("reject", group)}>
-                        Tolak
-                      </Button>
-                    </div>
-                  </td>
+      {tab === "APPROVAL" ? (
+        groups.length === 0 ? (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
+            <p className="text-sm text-slate-500">Tidak ada aktivitas yang menunggu persetujuan.</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Karyawan</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tgl Kerja</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Job</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Poin</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Diajukan</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
                 </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {groups.map((group) => (
+                  <tr
+                    key={group.key}
+                    className="cursor-pointer bg-white hover:bg-slate-50/60"
+                    onClick={() => setDetailGroup(group)}
+                  >
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-900">{group.employeeName}</p>
+                      <p className="text-xs text-slate-500">{group.employeeCode} - {group.employeeDivisionName}</p>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{group.workDate}</td>
+                    <td className="px-4 py-3 text-center tabular-nums text-slate-700">{group.activities.length}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{group.totalPoints.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={STATUS_VARIANT[group.status] ?? "outline"}>
+                        {STATUS_LABEL[group.status] ?? group.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{group.submittedAt}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <Button size="sm" onClick={() => openDecision("approve", group)}>Terima</Button>
+                        <Button size="sm" variant="destructive" onClick={() => openDecision("reject", group)}>Tolak</Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">Klik baris untuk melihat rincian aktivitas</p>
+          </div>
+        )
+      ) : (
+        <div className="space-y-3">
+          {teamSummaries.length === 0 ? (
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
+              <p className="text-sm text-slate-500">Tidak ada karyawan TEAMWORK di scope divisi Anda.</p>
+            </div>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {teamSummaries.map((item) => (
+                <div key={item.employeeId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-900">{item.employeeName}</p>
+                      <p className="text-[11px] text-slate-500">{item.employeeCode} - {item.divisionName}</p>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 px-2 py-0 text-[11px]">
+                      {item.performancePercent.toFixed(2)}%
+                    </Badge>
+                  </div>
+
+                  <div className="mt-3 overflow-hidden rounded-lg border border-slate-100">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5 text-[11px]">
+                      <span className="text-slate-500">PERFORMA</span>
+                      <span className="font-semibold text-slate-900">{item.performancePercent.toFixed(2)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5 text-[11px]">
+                      <span className="text-slate-500">POIN DISETUJUI</span>
+                      <span className="font-semibold text-slate-900">{item.approvedPoints.toLocaleString("id-ID")}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5 text-[11px]">
+                      <span className="text-slate-500">JUMLAH KEHADIRAN</span>
+                      <span className="font-semibold text-slate-900">{item.attendanceCount}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px]">
+                      <span className="text-slate-500">TGL TERAKHIR SUBMIT DRAFT</span>
+                      <span className="font-semibold text-slate-900">{item.lastDraftSubmittedAt}</span>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-          <p className="px-4 py-2 text-xs text-slate-400 border-t border-slate-100">
-            Klik baris untuk melihat rincian aktivitas
-          </p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Detail Modal */}
       <Dialog open={detailGroup !== null} onOpenChange={(open) => !open && setDetailGroup(null)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              Rincian Draft — {detailGroup?.employeeName}
-            </DialogTitle>
+            <DialogTitle>Rincian Draft - {detailGroup?.employeeName}</DialogTitle>
           </DialogHeader>
           {detailGroup && (
             <div className="space-y-3">
               <p className="text-xs text-slate-500">
-                {detailGroup.employeeCode} · {detailGroup.employeeDivisionName} · Tgl Kerja: {detailGroup.workDate} · Diajukan: {detailGroup.submittedAt}
+                {detailGroup.employeeCode} - {detailGroup.employeeDivisionName} - Tgl Kerja: {detailGroup.workDate} - Diajukan: {detailGroup.submittedAt}
               </p>
-              <div className="rounded-lg border border-slate-200 overflow-hidden">
+              <div className="overflow-hidden rounded-lg border border-slate-200">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+                  <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 w-8">No</th>
+                      <th className="w-8 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">No</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Job ID</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis Pekerjaan</th>
                       <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Qty</th>
@@ -245,7 +319,7 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
                   <tbody className="divide-y divide-slate-100">
                     {detailGroup.activities.map((a, idx) => (
                       <tr key={a.id} className="bg-white">
-                        <td className="px-3 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-400">{idx + 1}</td>
                         <td className="px-3 py-2.5 font-mono text-xs text-slate-600">
                           {resolveActivityJobIdLabel(a.jobIdSnapshot, a.externalCode, a.notes)}
                         </td>
@@ -258,10 +332,8 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
                   </tbody>
                   <tfoot className="border-t border-slate-200 bg-slate-50">
                     <tr>
-                      <td colSpan={5} className="px-3 py-2 text-sm font-semibold text-slate-700 text-right">Total</td>
-                      <td className="px-3 py-2 text-right font-bold text-teal-600 tabular-nums">
-                        {detailGroup.totalPoints.toFixed(2)}
-                      </td>
+                      <td colSpan={5} className="px-3 py-2 text-right text-sm font-semibold text-slate-700">Total</td>
+                      <td className="px-3 py-2 text-right font-bold tabular-nums text-teal-600">{detailGroup.totalPoints.toFixed(2)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -269,40 +341,23 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDetailGroup(null)}
-            >
-              Tutup
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => { openDecision("reject", detailGroup!); setDetailGroup(null); }}
-            >
-              Tolak
-            </Button>
-            <Button
-              onClick={() => { openDecision("approve", detailGroup!); setDetailGroup(null); }}
-            >
-              Terima
-            </Button>
+            <Button variant="outline" onClick={() => setDetailGroup(null)}>Tutup</Button>
+            <Button variant="destructive" onClick={() => { openDecision("reject", detailGroup!); setDetailGroup(null); }}>Tolak</Button>
+            <Button onClick={() => { openDecision("approve", detailGroup!); setDetailGroup(null); }}>Terima</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Decision Confirm Dialog */}
       <Dialog open={decision !== null} onOpenChange={(open) => !open && setDecision(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {decision?.action === "approve" ? "Terima Draft" : "Tolak Draft"}
-            </DialogTitle>
+            <DialogTitle>{decision?.action === "approve" ? "Terima Draft" : "Tolak Draft"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-slate-600">
               <span className="font-medium">{decision?.group.employeeName}</span>
-              {" · "}{decision?.group.workDate}
-              {" · "}{decision?.group.activities.length} aktivitas
+              {" - "}{decision?.group.workDate}
+              {" - "}{decision?.group.activities.length} aktivitas
             </p>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">
@@ -320,9 +375,7 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDecision(null)} disabled={pending}>
-              Batal
-            </Button>
+            <Button variant="outline" onClick={() => setDecision(null)} disabled={pending}>Batal</Button>
             <Button
               variant={decision?.action === "reject" ? "destructive" : "default"}
               onClick={() => void handleDecision()}

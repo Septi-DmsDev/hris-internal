@@ -259,7 +259,7 @@ async function getIncidentSummary(employeeId: string): Promise<MyIncidentSummary
   };
 }
 
-async function getLatestPerformance(employeeId: string): Promise<MyPerformanceSummary> {
+export async function getLatestPerformance(employeeId: string): Promise<MyPerformanceSummary> {
   // Periode berjalan: tgl 26 bulan lalu s/d tgl 25 bulan ini (atau 26 bulan ini s/d 25 bulan depan)
   const today = new Date();
   const day = today.getDate();

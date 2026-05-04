@@ -2,26 +2,19 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { isDatabaseConnectionError } from "@/lib/db/errors";
 import { userRoles } from "@/lib/db/schema/auth";
 import { eq } from "drizzle-orm";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 
 const getUserRole = cache(async (userId: string) => {
-  try {
-    const [row] = await db
-      .select()
-      .from(userRoles)
-      .where(eq(userRoles.userId, userId))
-      .limit(1);
-    return row ?? null;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ECONNREFUSED" || code === "ENOTFOUND") {
-      throw new Error("DB_UNREACHABLE");
-    }
-    throw err;
-  }
+  const [row] = await db
+    .select()
+    .from(userRoles)
+    .where(eq(userRoles.userId, userId))
+    .limit(1);
+  return row ?? null;
 });
 
 export default async function DashboardLayout({
@@ -35,17 +28,8 @@ export default async function DashboardLayout({
   try {
     userRoleRow = await getUserRole(user.id);
   } catch (err) {
-    if (err instanceof Error && err.message === "DB_UNREACHABLE") {
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-slate-50">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-8 py-6 text-center max-w-md">
-            <p className="text-base font-semibold text-amber-800">Database tidak dapat dijangkau</p>
-            <p className="mt-2 text-sm text-amber-700">
-              Koneksi ke database (localhost:5433) gagal. Pastikan SSH tunnel sudah aktif lalu muat ulang halaman.
-            </p>
-          </div>
-        </div>
-      );
+    if (isDatabaseConnectionError(err)) {
+      redirect("/database-unavailable");
     }
     throw err;
   }

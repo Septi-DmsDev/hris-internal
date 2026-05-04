@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { isDatabaseConnectionError } from "@/lib/db/errors";
 import { userRoles, userRoleDivisions } from "@/lib/db/schema/auth";
 import { eq } from "drizzle-orm";
 import type { UserRole } from "@/types";
@@ -37,17 +38,25 @@ export async function getCurrentUserRoleRow(): Promise<RoleRow> {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const rows = await db
-    .select({
-      id: userRoles.id,
-      userId: userRoles.userId,
-      role: userRoles.role,
-      employeeId: userRoles.employeeId,
-      divisionId: userRoleDivisions.divisionId,
-    })
-    .from(userRoles)
-    .leftJoin(userRoleDivisions, eq(userRoleDivisions.userRoleId, userRoles.id))
-    .where(eq(userRoles.userId, user.id));
+  let rows;
+  try {
+    rows = await db
+      .select({
+        id: userRoles.id,
+        userId: userRoles.userId,
+        role: userRoles.role,
+        employeeId: userRoles.employeeId,
+        divisionId: userRoleDivisions.divisionId,
+      })
+      .from(userRoles)
+      .leftJoin(userRoleDivisions, eq(userRoleDivisions.userRoleId, userRoles.id))
+      .where(eq(userRoles.userId, user.id));
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      redirect("/database-unavailable");
+    }
+    throw error;
+  }
 
   if (rows.length === 0) redirect("/login");
 

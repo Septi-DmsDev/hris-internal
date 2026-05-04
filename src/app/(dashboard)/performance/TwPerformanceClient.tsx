@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { batchSubmitDraft } from "@/server/actions/performance";
+import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
 import type { TwCatalogEntry, TwActivityItem } from "@/server/actions/performance";
 
 type DraftItem = {
@@ -146,7 +147,11 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
     try {
       const result = await batchSubmitDraft({
         workDate: selectedDate,
-        items: draftItems.map((i) => ({ pointCatalogEntryId: i.catalogEntryId, quantity: i.qty })),
+        items: draftItems.map((i) => ({
+          pointCatalogEntryId: i.catalogEntryId,
+          jobId: i.jobId === "-" ? undefined : i.jobId,
+          quantity: i.qty,
+        })),
       });
       if (result && "error" in result && result.error) {
         setError(result.error);
@@ -168,12 +173,12 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
       .map((e) => {
         const cat = catalogEntries.find((c) => c.id === e.pointCatalogEntryId);
         return {
-          key: `${e.id}-edit`,
-          catalogEntryId: e.pointCatalogEntryId,
-          jobId: cat?.externalCode ?? "-",
-          workName: e.workNameSnapshot,
-          pointValue: Number(e.pointValueSnapshot),
-          qty: Number(e.quantity),
+        key: `${e.id}-edit`,
+        catalogEntryId: e.pointCatalogEntryId,
+        jobId: resolveActivityJobIdLabel(e.jobIdSnapshot, cat?.externalCode ?? null, e.notes),
+        workName: e.workNameSnapshot,
+        pointValue: Number(e.pointValueSnapshot),
+        qty: Number(e.quantity),
         };
       });
     setSelectedDate(group.workDate);
@@ -221,18 +226,19 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900">Performa Saya</h2>
-        {divisionName && (
-          <p className="text-sm text-slate-500">Divisi: {divisionName}</p>
-        )}
-      </div>
-
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "submit" | "history")}>
-        <TabsList>
-          <TabsTrigger value="submit">Submit Draft</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-        </TabsList>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Performa Saya</h2>
+            {divisionName && (
+              <p className="text-sm text-slate-500">Divisi: {divisionName}</p>
+            )}
+          </div>
+          <TabsList>
+            <TabsTrigger value="submit">Submit Draft</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* ── TAB SUBMIT ── */}
         <TabsContent value="submit" className="space-y-4 pt-2">
@@ -254,17 +260,6 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
             </div>
           )}
 
-          {/* Date picker */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-medium text-slate-700 shrink-0">Tanggal Kerja</label>
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => { setSelectedDate(e.target.value); setEditingDate(null); }}
-              className="w-44"
-            />
-          </div>
-
           {catalogEntries.length === 0 ? (
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-10 text-center">
               <p className="text-sm text-slate-500">
@@ -275,9 +270,20 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
             <>
               {/* Input row */}
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Tambah Aktivitas
-                </p>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Tambah Aktivitas
+                  </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <label className="text-xs font-medium text-slate-600">Tanggal Kerja</label>
+                    <Input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => { setSelectedDate(e.target.value); setEditingDate(null); }}
+                      className="w-40 h-8 text-sm"
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-[120px_1fr_100px_auto] gap-2 items-end">
                   {/* JOB ID */}
                   <div className="space-y-1">

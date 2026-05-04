@@ -29,6 +29,7 @@ import {
   saveDailyActivityEntry,
   submitDailyActivityEntry,
 } from "@/server/actions/performance";
+import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
 import type { UserRole } from "@/types";
 
 export type PerformanceVersionRow = {
@@ -74,6 +75,7 @@ export type PerformanceActivityRow = {
   id: string;
   employeeId: string;
   pointCatalogEntryId: string;
+  jobIdSnapshot: string | null;
   employeeName: string;
   employeeCode: string;
   employeeDivisionId: string | null;
@@ -95,7 +97,7 @@ export type PerformanceActivityRow = {
     | "DISETUJUI_SPV"
     | "OVERRIDE_HRD"
     | "DIKUNCI_PAYROLL";
-  notes: string;
+  notes: string | null;
   submittedAt: string;
   approvedAt: string;
   rejectedAt: string;
@@ -146,7 +148,7 @@ type ActivityDraft = {
   actualDivisionId: string;
   pointCatalogEntryId: string;
   quantity: string;
-  notes: string;
+  notes: string | null;
 };
 
 type MonthlyDraft = {
@@ -574,6 +576,19 @@ export default function PerformanceCatalogClient({
         ),
       },
       { header: "Tanggal", accessorKey: "workDate" },
+      {
+        header: "Job ID",
+        accessorKey: "jobIdSnapshot",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs text-slate-600">
+            {resolveActivityJobIdLabel(
+              row.original.jobIdSnapshot,
+              null,
+              row.original.notes
+            )}
+          </span>
+        ),
+      },
       {
         header: "Aktivitas",
         accessorKey: "workNameSnapshot",
@@ -1066,7 +1081,7 @@ export default function PerformanceCatalogClient({
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium text-slate-700">Catatan</label>
               <textarea
-                value={activityDraft.notes}
+                value={activityDraft.notes ?? ""}
                 onChange={(event) => updateActivityDraft("notes", event.target.value)}
                 rows={3}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"

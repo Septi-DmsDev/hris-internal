@@ -2,253 +2,181 @@
 
 ## 1. Tujuan Dokumen
 
-Menjelaskan alur autentikasi dan otorisasi yang benar-benar dipakai code saat ini, termasuk:
+Menjelaskan alur autentikasi dan otorisasi yang dipakai code saat ini, termasuk:
 
-- helper auth utama,
-- role yang tersedia,
-- scope akses SPV,
-- server action yang sensitif,
+- helper auth utama;
+- role yang tersedia;
+- employee-linked self-service;
+- division scope SPV/KABAG;
+- server action yang sensitif;
 - risiko jika role check terlewat.
 
 ## 2. File dan Folder Terkait
 
-| File/Folder | Fungsi | Dipakai Oleh | Catatan |
-|---|---|---|---|
-| `src/proxy.ts` | redirect request berdasarkan session Supabase | semua route | pengganti `middleware.ts` pada Next.js 16 |
-| `src/lib/supabase/server.ts` | server client Supabase dengan cookie bridge | auth helper, server action | memakai `NEXT_PUBLIC_SUPABASE_URL` dan anon key |
-| `src/lib/supabase/client.ts` | browser client Supabase | client component jika perlu | saat ini jarang dipakai |
-| `src/lib/auth/session.ts` | helper auth dan role | hampir semua action/page server | pusat role check aktual |
-| `src/lib/permissions/index.ts` | matrix permission per role | test/helper | bukan enforcement utama |
-| `src/lib/db/schema/auth.ts` | enum role dan tabel `user_roles` | auth/session, layout, action | menyimpan `divisionId` untuk scope SPV |
-| `src/server/actions/auth.ts` | login dan logout | login form, header | memakai Supabase Auth |
-| `src/app/(auth)/login/*` | UI login | user | form submit ke `loginAction()` |
-| `src/app/(dashboard)/layout.tsx` | guard login + ambil role untuk sidebar/header | semua halaman dashboard | jika role row tidak ada, redirect ke login |
+| File/Folder | Fungsi | Catatan |
+|---|---|---|
+| `src/proxy.ts` | redirect request berdasarkan session Supabase | auth gate Next.js 16 |
+| `src/lib/supabase/server.ts` | server client Supabase dengan cookie bridge | memakai anon key |
+| `src/lib/supabase/client.ts` | browser client Supabase | jarang dipakai |
+| `src/lib/supabase/admin.ts` | Supabase service-role client | server-only, dipakai user management |
+| `src/lib/auth/session.ts` | helper auth dan role | pusat role check aktual |
+| `src/lib/permissions/index.ts` | matrix permission per role | helper/test, bukan satu-satunya enforcement |
+| `src/lib/db/schema/auth.ts` | enum role, `user_roles`, `user_role_divisions` | employee link dan division scope |
+| `src/server/actions/auth.ts` | login/logout | Supabase Auth |
+| `src/server/actions/users.ts` | user role management | invite/update/remove/upsert employee login |
+| `src/app/(auth)/login/*` | UI login | form submit ke `loginAction()` |
+| `src/app/(dashboard)/layout.tsx` | guard login + role UI | sidebar/header |
 
 ## 3. Alur Auth
 
 ```text
 Request page
-→ src/proxy.ts
-→ cek cookie Supabase
-→ jika belum login dan route private
-→ redirect /login
-→ jika login dan membuka /login
-→ redirect /dashboard
+-> src/proxy.ts
+-> cek cookie Supabase
+-> jika belum login dan route private, redirect /login
+-> jika login dan membuka /login, redirect /dashboard atau route internal yang sesuai
 ```
 
 ```text
 User submit login form
-→ loginAction(formData)
-→ validasi loginSchema
-→ supabase.auth.signInWithPassword()
-→ redirect /dashboard
+-> loginAction(formData)
+-> validasi loginSchema
+-> supabase.auth.signInWithPassword()
+-> redirect /dashboard
 ```
 
 ```text
 Server action dipanggil
-→ requireAuth()
-→ getUser()
-→ getCurrentUserRoleRow()
-→ optional checkRole([...])
-→ query / mutation sesuai role
+-> requireAuth()
+-> getUser()
+-> getCurrentUserRoleRow()
+-> optional checkRole([...])
+-> query/mutation sesuai role, employeeId, dan divisionIds
 ```
 
-## 4. Penjelasan Fungsi Kunci
+## 4. Fungsi Kunci
 
-### `getUser()`
+| Function | Path | Fungsi |
+|---|---|---|
+| `getUser()` | `src/lib/auth/session.ts` | mengambil user Supabase dari session cookie |
+| `requireAuth()` | `src/lib/auth/session.ts` | redirect ke `/login` bila belum login |
+| `getCurrentUserRoleRow()` | `src/lib/auth/session.ts` | mengambil role row, `employeeId`, deprecated `divisionId`, dan `divisionIds` |
+| `getCurrentUserRole()` | `src/lib/auth/session.ts` | mengambil string role |
+| `checkRole(allowed)` | `src/lib/auth/session.ts` | helper guard role untuk action |
 
-Path:
-`src/lib/auth/session.ts`
+Return penting `getCurrentUserRoleRow()`:
 
-Fungsi utama:
-mengambil object user Supabase dari session cookie.
-
-Input:
-tidak ada.
-
-Output:
-`Supabase user | null`
-
-Logika penting:
-
-- membuat client Supabase server-side,
-- memanggil `supabase.auth.getUser()`,
-- mengembalikan `user` tanpa validasi role.
-
-### `requireAuth()`
-
-Path:
-`src/lib/auth/session.ts`
-
-Fungsi utama:
-memastikan user login sebelum masuk ke action/page.
-
-Input:
-tidak ada.
-
-Output:
-`user`
-
-Logika penting:
-
-- memanggil `getUser()`,
-- jika `null`, langsung `redirect("/login")`.
-
-### `getCurrentUserRoleRow()`
-
-Path:
-`src/lib/auth/session.ts`
-
-Fungsi utama:
-mengambil record role aktual user dari tabel `user_roles`.
-
-Input:
-tidak ada.
-
-Output:
-`{ id, userId, role, divisionId }`
-
-Logika penting:
-
-- butuh user login,
-- query ke tabel `user_roles` berdasarkan `user.id`,
-- jika record tidak ada, user diarahkan ke `/login`.
-
-Catatan:
-fungsi ini adalah sumber data role nyata di runtime.
-
-### `getCurrentUserRole()`
-
-Path:
-`src/lib/auth/session.ts`
-
-Fungsi utama:
-mengambil string role saja.
-
-Output:
-`"SUPER_ADMIN" | "HRD" | "FINANCE" | "SPV" | "TEAMWORK" | "MANAGERIAL" | "PAYROLL_VIEWER"`
-
-### `checkRole(allowed)`
-
-Path:
-`src/lib/auth/session.ts`
-
-Fungsi utama:
-membatasi action berdasarkan role yang diizinkan.
-
-Input:
-array role yang boleh.
-
-Output:
-`null` bila lolos, atau `{ error: string }`
-
-Logika penting:
-
-- memanggil `getCurrentUserRoleRow()`,
-- mencocokkan role dengan daftar `allowed`,
-- jika tidak cocok, return object error.
-
-Risiko/catatan:
-
-- pesan error sekarang generik dan menyebut “HRD dan Super Admin”, walaupun dipakai juga untuk role lain.
+```ts
+{
+  id: string;
+  userId: string;
+  role: UserRole;
+  employeeId: string | null;
+  divisionId: string | null; // deprecated compatibility
+  divisionIds: string[];
+}
+```
 
 ## 5. Role yang Tersedia
 
-Role berasal dari enum `user_role` di `src/lib/db/schema/auth.ts`.
+Role berasal dari enum `user_role` di `src/lib/db/schema/auth.ts` dan `USER_ROLES` di `src/types/index.ts`.
 
-| Role | Akses aktual di code | Catatan |
-|---|---|---|
-| `SUPER_ADMIN` | hampir semua modul | paling luas |
-| `HRD` | master data, employee, review, ticket, payroll read, performance override | bisa lintas divisi |
-| `FINANCE` | employee read, payroll read/write/finalize | fokus payroll/finance |
-| `SPV` | employee read scoped, review scoped, ticket scoped, performance scoped | harus punya `divisionId` |
-| `TEAMWORK` | secara permission punya `performance:input` dan `tickets:write` | di code aktual belum bisa menjalankan self-service performance/ticket secara penuh |
-| `MANAGERIAL` | ticket read/write dan payroll read pada matrix permission | create ticket self-service juga masih diblokir di action |
-| `PAYROLL_VIEWER` | payroll read | tidak bisa mutate |
+| Role | Akses umum |
+|---|---|
+| `SUPER_ADMIN` | hampir semua modul, user management, payroll lifecycle |
+| `HRD` | master data, employee, performance HR flow, review, ticketing, training, payroll read |
+| `KABAG` | scoped division access untuk performance/review/ticket/employee read |
+| `SPV` | scoped division access untuk performance/review/ticket/employee read |
+| `FINANCE` | payroll/finance dan employee read |
+| `TEAMWORK` | self-service performance/ticket/profile/schedule bila linked ke employee |
+| `MANAGERIAL` | self-service ticket/profile/schedule/payroll detail bila linked ke employee, KPI source untuk payroll |
+| `PAYROLL_VIEWER` | payroll read |
 
-## 6. Matrix Role ke Modul
+## 6. Data Scope Penting
 
-| Modul | SUPER_ADMIN | HRD | FINANCE | SPV | TEAMWORK | MANAGERIAL | PAYROLL_VIEWER |
-|---|---|---|---|---|---|---|---|
-| Login/logout | ya | ya | ya | ya | ya | ya | ya |
-| Dashboard | ya | ya | ya | ya | ya | ya | ya |
-| Master Data | ya | ya | tidak | baca tidak langsung | tidak | tidak | tidak |
-| Employee list/detail | ya | ya | ya | ya, scoped divisi | tidak | tidak | tidak |
-| Performance workspace | ya | ya | tidak | ya, scoped divisi | tidak | tidak | tidak |
-| Ticket read | ya | ya | tidak | ya, scoped divisi | terbatas ke tiket buatan sendiri jika mapping ada | sama | tidak |
-| Ticket create | ya | ya | tidak | ya, scoped divisi | diblokir sementara | diblokir sementara | tidak |
-| Ticket approve/reject | ya | ya | tidak | ya, scoped divisi | tidak | tidak | tidak |
-| Review/incident | ya | ya | tidak | ya, scoped divisi | tidak | tidak | tidak |
-| Training evaluation | ya | ya | tidak | ya, scoped divisi | tidak | tidak | tidak |
-| Payroll | ya | baca | ya | tidak | tidak | tidak | baca |
-| Finance dashboard | ya | baca | baca | tidak | tidak | tidak | baca |
+### Employee-Linked Self-Service
 
-## 7. Pola Scope SPV Berdasarkan `divisionId`
+`user_roles.employee_id` menghubungkan akun Supabase dengan record `employees`.
 
-Scope SPV adalah pola paling penting di repo saat ini.
+Dipakai oleh:
+
+- `/me`
+- `/me/profile`
+- `/settings`
+- `/schedule`
+- personal payroll detail
+- TEAMWORK personal performance helpers
+- ticket create untuk role employee-linked
+
+Jika `employeeId` kosong, self-service harus menolak atau menampilkan state "akun belum terhubung".
+
+### Division Scope SPV/KABAG
+
+`user_role_divisions` adalah scope aktif untuk SPV/KABAG.
+
+Pola:
 
 ```text
-SPV login
-→ getCurrentUserRoleRow()
-→ role = SPV, divisionId harus terisi
-→ query data dibatasi dengan employees.divisionId = roleRow.divisionId
+SPV/KABAG login
+-> getCurrentUserRoleRow()
+-> roleRow.divisionIds
+-> query dibatasi ke employees.divisionId IN divisionIds
 ```
 
-Contoh nyata:
+`user_roles.division_id` masih ada sebagai field deprecated untuk compatibility, tetapi code baru harus memakai `divisionIds`.
 
-- `getEmployees()` di `employees.ts`
-- `getDashboardStats()` di `dashboard.ts`
-- `getReviews()` dan `createReview()` di `reviews.ts`
-- `getTickets()`, `createTicket()`, `approveTicket()`, `rejectTicket()` di `tickets.ts`
-- `getTrainingEvaluations()` di `training.ts`
-- `getPerformanceWorkspace()` dan approval activity di `performance.ts`
+## 7. Matrix Modul Ringkas
 
-Jika `SPV` tidak punya `divisionId`, beberapa action akan:
-
-- return error,
-- atau mengembalikan data kosong,
-- atau menolak approval.
+| Modul | Admin/HRD | KABAG/SPV | TEAMWORK/MANAGERIAL | FINANCE/PAYROLL_VIEWER |
+|---|---|---|---|---|
+| Dashboard | ya | scoped | personal/self where available | finance/payroll where allowed |
+| Users | admin only | tidak | tidak | tidak |
+| Master data | admin/HRD | read where needed | tidak | terbatas |
+| Employee | admin/HRD | scoped read | personal profile | read for payroll roles |
+| Performance | admin/HRD | scoped approval | TEAMWORK self-service | tidak |
+| Ticketing | admin/HRD | scoped flow | self ticket | read/payroll impact where allowed |
+| Review/Incident | admin/HRD | scoped | personal summary | tidak |
+| Training | admin/HRD | scoped read | tidak | tidak |
+| Payroll | admin/finance | generally no workspace | personal detail only | read/write by role |
+| Finance | admin/finance/viewer | tidak | tidak | read summary |
 
 ## 8. Server Action yang Perlu Dicek Ketat
 
 | File action | Kenapa sensitif |
 |---|---|
+| `src/server/actions/users.ts` | bisa membuka/menutup akses user dan employee link |
+| `src/server/actions/settings.ts` | update credential/profile akun aktif |
 | `src/server/actions/employees.ts` | mengubah profil, histori, dan jadwal kerja |
-| `src/server/actions/performance.ts` | mengubah aktivitas harian, approval, dan monthly performance |
-| `src/server/actions/tickets.ts` | mengubah status izin/sakit/cuti dan leave quota |
-| `src/server/actions/reviews.ts` | mengubah review dan incident yang bisa berdampak ke payroll |
-| `src/server/actions/training.ts` | mengubah status karyawan training/reguler/tidak lolos |
+| `src/server/actions/performance.ts` | mengubah aktivitas, approval, monthly performance |
+| `src/server/actions/tickets.ts` | mengubah ticket dan leave quota |
+| `src/server/actions/reviews.ts` | review/incident bisa berdampak ke HR/payroll |
+| `src/server/actions/training.ts` | mengubah status training/reguler/tidak lolos |
 | `src/server/actions/payroll.ts` | period, snapshot, preview, adjustment, finalisasi, paid, lock |
-| `src/server/actions/point-catalog.ts` | mengimpor versi master poin baru |
+| payroll PDF/XLSX route handlers | bisa bocor data payroll jika guard longgar |
 
 ## 9. Risiko Jika Lupa Role Check
 
-- SPV bisa melihat atau mengubah data di luar divisinya.
-- Role non-payroll bisa membuka data salary dan THP.
-- TEAMWORK/MANAGERIAL bisa mengakses data HRD lintas karyawan jika action tidak membatasi query.
+- SPV/KABAG bisa melihat atau mengubah data di luar divisinya.
+- Role non-payroll bisa membuka salary dan THP.
+- Akun employee-linked bisa melihat data karyawan lain.
+- Service-role operation bisa terpanggil dari context yang salah.
 - Finalisasi payroll bisa dijalankan pihak yang tidak berwenang.
 
-## 10. Catatan Implementasi yang Perlu Review Lanjutan
-
-### `status: sebagian`
+## 10. Catatan Implementasi
 
 Hal yang sudah ada:
 
-- guard request di `src/proxy.ts`,
-- auth helper server-side,
-- role enum dan tabel role,
-- scope SPV di banyak action,
-- permission matrix helper,
-- route dashboard login-protected.
+- guard request di `src/proxy.ts`;
+- auth helper server-side;
+- role enum dan tabel role;
+- `employeeId` untuk self-service;
+- `user_role_divisions` untuk multi-division scope;
+- permission matrix helper;
+- route dashboard login-protected;
+- user management dan employee login upsert.
 
-Gap yang perlu dibangun:
+Gap yang perlu review:
 
-- mapping langsung antara `auth.users` dan `employees`,
-- self-access yang benar untuk `TEAMWORK` dan `MANAGERIAL`,
-- RLS policy yang benar-benar versi repo,
-- error message `checkRole()` yang lebih spesifik.
-
-## 11. Catatan Inkonsistensi
-
-- `references/implementation-playbook.md` menekankan RLS, tetapi repo tidak menunjukkan migration/policy RLS.
-- `src/lib/permissions/index.ts` memberi `TEAMWORK` akses input performance dan ticket write, tetapi action performance/tickets aktual belum benar-benar membuka self-service untuk mereka.
+- RLS policy lengkap tidak terlihat jelas di migration repo;
+- error message `checkRole()` masih bisa dibuat lebih spesifik;
+- audit log user/credential changes bisa diperkuat bila dibutuhkan.

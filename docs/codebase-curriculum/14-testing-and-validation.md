@@ -4,8 +4,8 @@
 
 Menjelaskan:
 
-- test yang sudah ada,
-- cara menjalankan validasi repo,
+- test yang sudah ada;
+- cara menjalankan validasi repo;
 - area yang belum tercakup test.
 
 ## 2. Command yang Perlu Diketahui
@@ -13,15 +13,14 @@ Menjelaskan:
 ```bash
 pnpm vitest run
 pnpm lint
-pnpm tsc --noEmit
+pnpm exec tsc --noEmit
 pnpm build
 ```
 
 Catatan:
 
-- `package.json` hanya punya script `lint`, tetapi `pnpm vitest run` dan `pnpm tsc --noEmit` tetap bisa dijalankan langsung karena binary tersedia dari dependency.
-- `tsconfig.json` memasukkan `.next/types/**/*.ts` dan `.next/dev/types/**/*.ts`.
-  Jadi untuk `pnpm tsc --noEmit`, idealnya jalankan `pnpm dev` atau `pnpm build` dulu agar type file Next.js tersedia.
+- `package.json` hanya punya script `lint`, tetapi `vitest`, `tsc`, dan `next build` bisa dijalankan langsung dari dependency.
+- Untuk typecheck Next.js, jalankan `pnpm build` bila `.next/types` perlu diregenerasi.
 
 ## 3. Konfigurasi Test Aktual
 
@@ -34,13 +33,17 @@ Catatan:
 
 | File test | Fokus |
 |---|---|
-| `src/config/constants.test.ts` | resolver target poin divisi |
+| `src/config/constants.test.ts` | resolver target poin divisi, gaji/bonus constants |
 | `src/lib/permissions/index.test.ts` | permission matrix per role |
 | `src/lib/validations/employee.test.ts` | validasi employee dan work schedule |
 | `src/lib/validations/payroll.test.ts` | validasi salary config dan KPI managerial |
+| `src/server/actions/me.test.ts` | helper/state personal dashboard |
+| `src/server/actions/payroll.helpers.test.ts` | personal payroll detail access |
 | `src/server/point-engine/parse-master-point-workbook.test.ts` | parser workbook poin |
 | `src/server/point-engine/count-target-days-for-period.test.ts` | hitung target days |
 | `src/server/point-engine/calculate-monthly-point-performance.test.ts` | hitung performa bulanan |
+| `src/server/ticketing-engine/resolve-leave-quota-eligibility.test.ts` | eligibility leave quota berbasis quarter |
+| `src/server/review-engine/resolve-reviewer-employee-id.test.ts` | reviewer employee id helper |
 | `src/server/payroll-engine/resolve-payroll-period.test.ts` | periode payroll 26-25 |
 | `src/server/payroll-engine/resolve-bonus-level.test.ts` | level bonus kinerja/prestasi |
 | `src/server/payroll-engine/calculate-teamwork-payroll.test.ts` | payroll TEAMWORK |
@@ -52,88 +55,85 @@ Catatan:
 
 ## 5. Apa yang Sudah Dites
 
-### Rule Engine Point
+### Point Engine
 
-- target default `13.000`
-- override `OFFSET`
-- target day dari assignment tunggal dan assignment berganti
-- persentase bulanan dari target vs approved point
-- normalisasi workbook poin
+- target default `13.000`;
+- override `OFFSET` ke `39.000`;
+- target day dari assignment tunggal dan assignment berganti;
+- persentase bulanan dari target vs approved point;
+- normalisasi workbook poin.
 
-### Rule Engine Payroll
+### Payroll Engine
 
-- resolver periode anchor `YYYY-MM`
-- level bonus tanpa menumpuk bonus prestasi
-- payroll TEAMWORK training/reguler
-- payroll MANAGERIAL berbasis KPI
-- penalty SP ke bonus
-- unpaid leave, incident deduction, manual adjustment
-- status transition `FINALIZED → PAID → LOCKED`
-- breakdown slip
-- summary finance
+- resolver periode anchor `YYYY-MM`;
+- level bonus tanpa menumpuk bonus prestasi;
+- payroll TEAMWORK training/reguler;
+- payroll MANAGERIAL berbasis KPI;
+- penalty SP ke bonus;
+- unpaid leave, incident deduction, manual adjustment;
+- status transition `FINALIZED -> PAID -> LOCKED`;
+- breakdown slip;
+- summary finance;
+- export row shape.
 
-### Validation
+### Helpers dan Validation
 
-- supervisor wajib untuk employee `TEAMWORK`
-- transform string tanggal menjadi `Date`
-- jadwal kerja harus punya 7 hari unik
-- nominal payroll tidak boleh negatif
-- KPI managerial dibatasi 0–200
+- permission matrix role;
+- access detail payroll pribadi;
+- personal dashboard access state;
+- reviewer employee id helper;
+- leave quota quarter eligibility;
+- employee/work schedule validation;
+- nominal payroll tidak boleh negatif;
+- KPI managerial dibatasi 0-200.
 
 ## 6. Test yang Masih Kurang
 
 | Area | Gap |
 |---|---|
-| Server action auth | belum ada test login/logout |
-| Server action master | belum ada test CRUD branch/division/position/grade/work schedule |
+| Server action auth/users | belum ada test invite/update/remove access dan employee login upsert |
+| Server action master | belum ada test CRUD branch/division/position/grade/work schedule/shift |
 | Employee action | belum ada test histori create/update |
-| Performance action | belum ada test workflow save/submit/approve/reject/generate |
-| Ticketing action | belum ada test quota consume monthly/annual, cancel rule, scope SPV |
-| Review action | belum ada test formula review di level action dan scope SPV |
+| Schedule action | belum ada test assignment schedule dan scope |
+| Performance action | belum ada test workflow save/submit/approve/reject/generate/batch |
+| Ticketing action | belum ada test quota consume monthly/annual, cancel rule, scope SPV/KABAG |
+| Review action | belum ada test formula review di level action dan scope SPV/KABAG |
 | Training action | belum ada test kategori training dan keputusan lulus/gagal |
 | Payroll action | belum ada integration test preview/finalize/paid/lock |
 | Route handler | belum ada test export Excel dan payslip PDF |
 | RLS | belum ada test policy |
-| E2E | belum ada Playwright atau flow end-to-end |
+| E2E | belum ada Playwright flow end-to-end |
 
 ## 7. Rekomendasi Test Tambahan
 
-### Prioritas Tinggi
+Prioritas tinggi:
 
-- test `tickets.ts`:
-  - approve mengonsumsi monthly quota lebih dulu,
-  - fallback ke annual quota,
-  - fallback ke `UNPAID`,
-  - SPV tidak bisa approve lintas divisi.
-- test `employees.ts`:
-  - update divisi/jabatan/grade/status/supervisor benar-benar menulis history,
-  - pergantian schedule menutup assignment lama dengan benar.
-- test `performance.ts`:
-  - aktivitas beda divisi dengan katalog ditolak,
-  - generate monthly memakai divisi snapshot,
-  - only approved statuses dihitung.
+- test `payroll.ts` preview/finalize/paid/lock dengan fixture kecil;
+- test `tickets.ts` untuk quota monthly/annual/unpaid dan scope;
+- test `performance.ts` untuk self-service TEAMWORK, SPV/KABAG scope, dan generate monthly;
+- test `employees.ts` untuk history saat divisi/jabatan/grade/status/schedule berubah.
 
-### Prioritas Menengah
+Prioritas menengah:
 
-- test `payroll.ts`:
-  - preview gagal bila KPI managerial belum lengkap,
-  - finalize mengunci monthly performance dan activity,
-  - period `PAID`/`LOCKED` tidak bisa digenerate ulang.
-- test `training.ts`:
-  - SPV hanya melihat trainee divisinya,
-  - kategori evaluasi sesuai pass percent divisi.
+- test `users.ts` untuk employee login link dan multi-division scope;
+- test `settings.ts` untuk update account settings;
+- test route handler PDF/XLSX untuk access control;
+- test `training.ts` untuk gap business rule graduation period.
 
 ## 8. Checklist Validasi Sebelum Merge
 
 - `pnpm lint`
 - `pnpm vitest run`
-- `pnpm tsc --noEmit`
+- `pnpm exec tsc --noEmit`
 - `pnpm build`
-- cek role affected
-- cek table affected
-- cek business rule affected
+- cek role affected;
+- cek table affected;
+- cek snapshot/history affected;
+- cek business rule affected;
+- cek apakah dokumentasi perlu update.
 
 ## 9. Perlu Review Lanjutan
 
 - repo belum menunjukkan test untuk RLS.
-- karena payroll adalah modul paling sensitif, integration test server action layak jadi investasi berikutnya.
+- payroll action integration test layak jadi investasi berikutnya.
+- modul dengan audit gap perlu test setelah audit log ditambahkan.

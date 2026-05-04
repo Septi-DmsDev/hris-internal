@@ -57,6 +57,8 @@ export default async function PerformancePage() {
       employeeDivisionName: a.employeeDivisionName ?? "-",
       workDate: format(a.workDate, "yyyy-MM-dd"),
       externalCode: a.externalCode ?? null,
+      jobIdSnapshot: a.jobIdSnapshot ?? null,
+      notes: a.notes ?? null,
       workNameSnapshot: a.workNameSnapshot,
       pointValueSnapshot: String(a.pointValueSnapshot),
       quantity: String(a.quantity),
@@ -98,6 +100,7 @@ export default async function PerformancePage() {
     id: string;
     employeeId: string;
     pointCatalogEntryId: string | null;
+    jobIdSnapshot: string | null;
     employeeName: string | null;
     employeeCode: string | null;
     employeeDivisionId: string | null;
@@ -190,6 +193,8 @@ export default async function PerformancePage() {
     id: entry.id,
     employeeId: entry.employeeId,
     pointCatalogEntryId: entry.pointCatalogEntryId ?? "",
+    jobIdSnapshot: entry.jobIdSnapshot ?? null,
+    notes: entry.notes ?? null,
     employeeName: entry.employeeName ?? "-",
     employeeCode: entry.employeeCode ?? "-",
     employeeDivisionId: entry.employeeDivisionId,
@@ -203,7 +208,6 @@ export default async function PerformancePage() {
     quantity: String(entry.quantity),
     totalPoints: String(entry.totalPoints),
     status: entry.status,
-    notes: entry.notes ?? "",
     submittedAt: entry.submittedAt ? format(entry.submittedAt, "yyyy-MM-dd HH:mm") : "-",
     approvedAt: entry.approvedAt ? format(entry.approvedAt, "yyyy-MM-dd HH:mm") : "-",
     rejectedAt: entry.rejectedAt ? format(entry.rejectedAt, "yyyy-MM-dd HH:mm") : "-",

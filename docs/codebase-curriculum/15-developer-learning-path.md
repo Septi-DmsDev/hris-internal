@@ -74,7 +74,8 @@ Hal yang harus dipahami:
 
 - fungsi `requireAuth`, `checkRole`, `getCurrentUserRoleRow`,
 - role matrix,
-- scoping SPV berdasarkan `divisionId`.
+- employee-linked self-service lewat `user_roles.employee_id`,
+- scoping SPV/KABAG berdasarkan `user_role_divisions`.
 
 Latihan kecil:
 
@@ -82,7 +83,7 @@ Latihan kecil:
 
 Checklist selesai:
 
-- paham kenapa mapping `auth user -> employee` masih jadi gap
+- paham kenapa employee link dan division scope wajib dicek di server action
 
 ## Hari 4
 
@@ -208,7 +209,7 @@ Hal yang harus dipahami:
 
 - role siapa boleh create/approve,
 - cara quota dikonsumsi,
-- kenapa self-service diblokir saat ini.
+- bagaimana self-service memakai `user_roles.employee_id`.
 
 Latihan kecil:
 

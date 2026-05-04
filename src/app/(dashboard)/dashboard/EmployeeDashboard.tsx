@@ -16,7 +16,6 @@ import {
   TrendingUp,
   XCircle,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 function formatCurrency(amount: string | number | null | undefined): string {
   if (amount == null) return "—";
@@ -92,23 +91,6 @@ function QuickLinkCard({
   );
 }
 
-const EMPLOYMENT_STATUS_LABEL: Record<string, string> = {
-  TRAINING: "Training",
-  REGULER: "Reguler",
-  DIALIHKAN_TRAINING: "Dialihkan Training",
-  TIDAK_LOLOS: "Tidak Lolos",
-  NONAKTIF: "Nonaktif",
-  RESIGN: "Resign",
-};
-
-const EMPLOYMENT_STATUS_COLOR: Record<string, string> = {
-  TRAINING: "bg-amber-100 text-amber-800 border-amber-200",
-  REGULER: "bg-teal-100 text-teal-800 border-teal-200",
-  DIALIHKAN_TRAINING: "bg-orange-100 text-orange-800 border-orange-200",
-  TIDAK_LOLOS: "bg-red-100 text-red-800 border-red-200",
-  NONAKTIF: "bg-slate-100 text-slate-600 border-slate-200",
-  RESIGN: "bg-red-100 text-red-700 border-red-200",
-};
 
 export default async function EmployeeDashboard() {
   const data = await getMyDashboard();
@@ -161,50 +143,8 @@ export default async function EmployeeDashboard() {
 
   const activeIncidents = incidentSummary?.activeCount ?? 0;
 
-  const employmentStatus = employee?.employmentStatus ?? "TRAINING";
-  const statusLabel = EMPLOYMENT_STATUS_LABEL[employmentStatus] ?? employmentStatus;
-  const statusColor = EMPLOYMENT_STATUS_COLOR[employmentStatus] ?? "bg-slate-100 text-slate-600 border-slate-200";
-
   return (
     <div className="space-y-8 max-w-6xl">
-      {/* Welcome Card */}
-      <section className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center shrink-0">
-              <span className="text-2xl font-black text-teal-600">
-                {employee?.fullName?.charAt(0) ?? "?"}
-              </span>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                Selamat datang, {employee?.nickname ?? employee?.fullName ?? "Karyawan"}!
-              </h2>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {employee?.positionName ?? "—"} · {employee?.divisionName ?? "—"}
-              </p>
-              {employee?.employeeCode && (
-                <p className="text-xs text-slate-400 mt-1 font-mono">
-                  {employee.employeeCode}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge
-              className={`text-xs font-semibold border ${statusColor} hover:${statusColor}`}
-            >
-              {statusLabel}
-            </Badge>
-            {employee?.isActive === false && (
-              <Badge className="text-xs font-semibold bg-red-100 text-red-700 border-red-200 hover:bg-red-100">
-                Nonaktif
-              </Badge>
-            )}
-          </div>
-        </div>
-      </section>
-
       {/* Stats Row */}
       <section>
         <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">

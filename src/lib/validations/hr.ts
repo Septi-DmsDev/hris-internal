@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createTicketSchema = z.object({
-  employeeId: z.string().uuid("Karyawan tidak valid."),
+  employeeId: z.string().uuid("Karyawan tidak valid.").optional().or(z.literal("")),
   ticketType: z.enum(["CUTI", "SAKIT", "IZIN", "EMERGENCY", "SETENGAH_HARI"]),
   startDate: z.coerce.date({ message: "Tanggal mulai wajib diisi." }),
   endDate: z.coerce.date({ message: "Tanggal akhir wajib diisi." }),
@@ -10,6 +10,17 @@ export const createTicketSchema = z.object({
 }).superRefine((v, ctx) => {
   if (v.endDate < v.startDate) {
     ctx.addIssue({ code: "custom", path: ["endDate"], message: "Tanggal akhir tidak boleh sebelum tanggal mulai." });
+  }
+
+  const daysCount = Math.max(1, Math.ceil((v.endDate.getTime() - v.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const needsAttachment = v.ticketType === "SAKIT" && daysCount > 1;
+
+  if (needsAttachment && !v.attachmentUrl?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["attachmentUrl"],
+      message: "Surat dokter wajib dilampirkan untuk sakit lebih dari 1 hari.",
+    });
   }
 });
 

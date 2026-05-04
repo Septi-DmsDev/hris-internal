@@ -2,6 +2,22 @@
 
 Gunakan playbook ini saat agent mengerjakan kode proyek HRD Dashboard.
 
+## Status Code Aktual
+
+Repo saat ini memakai alur:
+
+```text
+src/app/(dashboard) page/client
+-> src/server/actions atau route handler
+-> src/lib/validations Zod
+-> src/lib/auth/session role/scope check
+-> Drizzle query/transaction
+-> src/server/*-engine helper/rule
+-> PostgreSQL
+```
+
+Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `performance`, `tickets`, `reviews`, `training`, `payroll`, dan route handler payroll PDF/XLSX. Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
+
 ## 1. Sebelum Coding
 
 Untuk setiap task, tentukan:
@@ -43,12 +59,13 @@ Mutation wajib:
 
 Letakkan rule engine di folder `server/*-engine`.
 
-Contoh:
+Folder engine/helper aktual:
 
 ```text
-server/point-engine/resolve-bonus-level.ts
-server/ticketing-engine/resolve-leave-quota.ts
-server/payroll-engine/calculate-teamwork-payroll.ts
+src/server/point-engine/
+src/server/payroll-engine/
+src/server/ticketing-engine/
+src/server/review-engine/
 ```
 
 Rule engine harus pure sebisa mungkin:
@@ -57,10 +74,16 @@ Rule engine harus pure sebisa mungkin:
 - minim side effect;
 - mudah ditest.
 
-Untuk modul poin kinerja, pisahkan resolver rule berikut:
-- resolver target poin harian berbasis divisi snapshot;
-- resolver daftar pekerjaan berbasis divisi aktual harian;
-- resolver performa bulanan dari poin approved vs target snapshot.
+Untuk modul poin kinerja:
+- target poin harian berbasis divisi snapshot saat ini memakai `src/config/constants.ts` dan `calculateMonthlyPointPerformance()`;
+- daftar pekerjaan harian mengikuti divisi aktual harian di action performance;
+- performa bulanan dihitung dari poin approved/locked vs target snapshot.
+
+Untuk payroll:
+- level bonus memakai `resolveBonusLevel()`;
+- periode 26-25 memakai `resolvePayrollPeriod()`;
+- kalkulasi TEAMWORK/MANAGERIAL memakai engine payroll;
+- PDF/XLSX memakai builder server-side.
 
 ## 5. Database Rules
 
@@ -84,6 +107,11 @@ RLS minimal:
 - Admin mengelola master data.
 
 Tetap lakukan permission check di server action, jangan hanya mengandalkan UI hidden state.
+
+Catatan code aktual:
+- `user_roles.employee_id` dipakai untuk self-service employee-linked account.
+- `user_role_divisions` dipakai untuk SPV/KABAG division scope.
+- RLS policy lengkap perlu diverifikasi di database/migration; server-side checks tetap wajib.
 
 ## 7. Payroll Rules
 
@@ -131,6 +159,7 @@ Risiko/catatan:
 - Jangan hardcode rule payroll di komponen UI.
 - Jangan hardcode target poin divisi langsung di banyak tempat; gunakan satu resolver rule server-side.
 - Jangan menggunakan service role key di client.
+- Jangan memakai `src/lib/supabase/admin.ts` dari client component.
 - Jangan menghapus histori payroll, aktivitas, approval, atau ticket tanpa audit.
 - Jangan mengubah master poin lama tanpa versioning.
 - Jangan membuat finalization yang bisa dijalankan berulang dengan efek samping ganda.

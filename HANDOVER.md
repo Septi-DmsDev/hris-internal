@@ -1,9 +1,9 @@
 # HRD Dashboard - Handover Document
 
-**Tanggal update:** 2026-04-29  
+**Tanggal update:** 2026-05-04  
 **Branch aktif:** `main`  
 **Remote:** `https://github.com/Septi-DmsDev/hris-internal.git`  
-**Status saat ini:** main sync dengan origin, repo buildable, siap masuk QA functional review
+**Status saat ini:** repo sudah memiliki flow MVP lintas phase; dokumentasi utama disinkronkan ulang dengan alur code aktual pada 2026-05-04
 
 ---
 
@@ -57,8 +57,14 @@ Recent commits terpenting di `main`:
 - `aaf6827` `feat(auth): finish KABAG role system foundation`
 
 Status kerja saat handover ini ditulis:
-- `main` sudah push ke `origin/main`
-- working tree diasumsikan clean saat sesi ini ditutup
+- dokumentasi root dan kurikulum codebase sudah diperbarui agar sesuai route/action/engine aktual
+- cek `git status` sebelum melanjutkan karena sesi dokumentasi ini membuat perubahan file markdown
+
+Update dokumentasi 2026-05-04:
+- `AGENTS.md`, `CLAUDE.md`, dan `agent-startup-prompt.md` sudah mengikuti alur code aktual.
+- `README.md` sudah diganti dari template Next.js menjadi README project.
+- `docs/onboarding-curriculum.md` dan `docs/codebase-curriculum/*` inti sudah diperbarui untuk self-service, users, settings, schedule/scheduler, KABAG/SPV division scope, master shift, payroll PDF/XLSX, dan test aktual.
+- `references/implementation-playbook.md` dan `references/tech-stack.md` diberi catatan penyelarasan code.
 
 ---
 

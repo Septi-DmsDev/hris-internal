@@ -16,6 +16,7 @@ export const dailyActivityEntrySchema = z.object({
   workDate: z.coerce.date({ message: "Tanggal kerja wajib diisi." }),
   actualDivisionId: z.string().uuid("Divisi aktual tidak valid."),
   pointCatalogEntryId: z.string().uuid("Pekerjaan poin tidak valid."),
+  jobId: z.string().trim().optional().transform((value) => value || undefined),
   quantity: z.coerce.number().positive("Qty harus lebih besar dari 0."),
   notes: z.string().trim().optional().transform((value) => value || undefined),
 });
@@ -54,6 +55,7 @@ export const batchSubmitDraftSchema = z.object({
     .array(
       z.object({
         pointCatalogEntryId: z.string().uuid("Katalog pekerjaan tidak valid."),
+        jobId: z.string().trim().optional().transform((value) => value || undefined),
         quantity: z.coerce.number().positive("Qty harus lebih besar dari 0."),
       })
     )

@@ -93,6 +93,7 @@ export const dailyActivityEntries = pgTable("daily_activity_entries", {
   pointCatalogEntryId: uuid("point_catalog_entry_id").notNull().references(() => pointCatalogEntries.id, { onDelete: "restrict" }),
   pointCatalogVersionId: uuid("point_catalog_version_id").notNull().references(() => pointCatalogVersions.id, { onDelete: "restrict" }),
   pointCatalogDivisionName: varchar("point_catalog_division_name", { length: 100 }).notNull(),
+  jobIdSnapshot: varchar("job_id_snapshot", { length: 50 }),
   workNameSnapshot: text("work_name_snapshot").notNull(),
   unitDescriptionSnapshot: text("unit_description_snapshot"),
   pointValueSnapshot: numeric("point_value_snapshot", { precision: 12, scale: 2 }).notNull(),

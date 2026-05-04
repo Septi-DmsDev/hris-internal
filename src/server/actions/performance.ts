@@ -7,12 +7,15 @@ import {
   employees,
   workScheduleDays,
 } from "@/lib/db/schema/employee";
+import { attendanceTickets } from "@/lib/db/schema/hr";
 import { divisions } from "@/lib/db/schema/master";
 import {
   dailyActivityApprovalLogs,
   dailyActivityEntries,
   monthlyPointPerformances,
   pointCatalogEntries,
+  pointCatalogVersions,
+  activityStatusEnum,
 } from "@/lib/db/schema/point";
 import {
   checkRole,
@@ -33,6 +36,9 @@ import {
   getPointCatalogEntriesByVersion,
 } from "@/server/services/point-catalog-service";
 import {
+  encodeLegacyNotes,
+} from "@/lib/performance/job-id";
+import {
   aliasedTable,
   and,
   asc,
@@ -42,8 +48,10 @@ import {
   inArray,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { date, numeric, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import type { UserRole } from "@/types";
 
 const PERFORMANCE_ACTIVITY_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
@@ -52,6 +60,32 @@ const PERFORMANCE_GENERATE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
 const APPROVABLE_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG"] as const;
 const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const;
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
+let hasJobIdSnapshotColumnPromise: Promise<boolean> | null = null;
+
+const dailyActivityEntriesLegacy = pgTable("daily_activity_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  workDate: date("work_date", { mode: "date" }).notNull(),
+  actualDivisionId: uuid("actual_division_id").references(() => divisions.id, { onDelete: "set null" }),
+  pointCatalogEntryId: uuid("point_catalog_entry_id").notNull().references(() => pointCatalogEntries.id, { onDelete: "restrict" }),
+  pointCatalogVersionId: uuid("point_catalog_version_id").notNull().references(() => pointCatalogVersions.id, { onDelete: "restrict" }),
+  pointCatalogDivisionName: varchar("point_catalog_division_name", { length: 100 }).notNull(),
+  workNameSnapshot: text("work_name_snapshot").notNull(),
+  unitDescriptionSnapshot: text("unit_description_snapshot"),
+  pointValueSnapshot: numeric("point_value_snapshot", { precision: 12, scale: 2 }).notNull(),
+  quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull(),
+  totalPoints: numeric("total_points", { precision: 14, scale: 2 }).notNull(),
+  status: activityStatusEnum("status").notNull(),
+  notes: text("notes"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  createdByUserId: uuid("created_by_user_id").notNull(),
+  updatedByUserId: uuid("updated_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 function toNumber(value: string | number | null | undefined) {
   if (value === null || value === undefined) return 0;
@@ -61,6 +95,26 @@ function toNumber(value: string | number | null | undefined) {
 
 function ensurePerformanceReadRole(role: UserRole) {
   return ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL"].includes(role);
+}
+
+async function hasJobIdSnapshotColumn() {
+  if (!hasJobIdSnapshotColumnPromise) {
+    hasJobIdSnapshotColumnPromise = db
+      .execute(
+        sql<{ has_column: boolean }>`
+          select exists (
+            select 1
+            from information_schema.columns
+            where table_name = 'daily_activity_entries'
+              and column_name = 'job_id_snapshot'
+          ) as has_column
+        `,
+      )
+      .then((rows) => Boolean(rows[0]?.has_column))
+      .catch(() => false);
+  }
+
+  return hasJobIdSnapshotColumnPromise;
 }
 
 async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[]) {
@@ -108,12 +162,14 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[])
 async function getScopedActivityEntries(role: UserRole, divisionIds: string[], employeeId?: string | null) {
   const entryDivision = aliasedTable(divisions, "entry_division");
   const employeeDivision = aliasedTable(divisions, "employee_division");
+  const hasSnapshotColumn = await hasJobIdSnapshotColumn();
 
   const baseQuery = db
     .select({
       id: dailyActivityEntries.id,
       employeeId: dailyActivityEntries.employeeId,
       pointCatalogEntryId: dailyActivityEntries.pointCatalogEntryId,
+      jobIdSnapshot: hasSnapshotColumn ? dailyActivityEntries.jobIdSnapshot : pointCatalogEntries.externalCode,
       employeeName: employees.fullName,
       employeeCode: employees.employeeCode,
       employeeDivisionId: employees.divisionId,
@@ -135,6 +191,7 @@ async function getScopedActivityEntries(role: UserRole, divisionIds: string[], e
     })
     .from(dailyActivityEntries)
     .leftJoin(employees, eq(dailyActivityEntries.employeeId, employees.id))
+    .leftJoin(pointCatalogEntries, eq(dailyActivityEntries.pointCatalogEntryId, pointCatalogEntries.id))
     .leftJoin(entryDivision, eq(dailyActivityEntries.actualDivisionId, entryDivision.id))
     .leftJoin(employeeDivision, eq(employees.divisionId, employeeDivision.id));
 
@@ -395,6 +452,7 @@ export async function saveDailyActivityEntry(input: unknown) {
   if (!activeVersion) {
     return { error: "Belum ada versi katalog poin aktif." };
   }
+  const hasSnapshotColumn = await hasJobIdSnapshotColumn();
 
   const [catalogEntry, actualDivision] = await Promise.all([
     db
@@ -426,6 +484,7 @@ export async function saveDailyActivityEntry(input: unknown) {
 
   const pointValue = toNumber(entry.pointValue);
   const totalPoints = Number((pointValue * parsed.data.quantity).toFixed(2));
+  const snapshotValue = parsed.data.jobId ?? entry.externalCode ?? null;
   const values = {
     employeeId: parsed.data.employeeId,
     workDate: parsed.data.workDate,
@@ -438,7 +497,7 @@ export async function saveDailyActivityEntry(input: unknown) {
     pointValueSnapshot: pointValue.toFixed(2),
     quantity: parsed.data.quantity.toFixed(2),
     totalPoints: totalPoints.toFixed(2),
-    notes: parsed.data.notes,
+    notes: hasSnapshotColumn ? (parsed.data.notes ?? null) : encodeLegacyNotes(snapshotValue, parsed.data.notes),
     updatedByUserId: user?.id ?? null,
   };
 
@@ -459,6 +518,7 @@ export async function saveDailyActivityEntry(input: unknown) {
         .update(dailyActivityEntries)
         .set({
           ...values,
+          ...(hasSnapshotColumn ? { jobIdSnapshot: snapshotValue } : {}),
           status: existingEntry.status === "DRAFT" ? "DRAFT" : "REVISI_TW",
           updatedAt: new Date(),
         })
@@ -466,6 +526,7 @@ export async function saveDailyActivityEntry(input: unknown) {
     } else {
       await db.insert(dailyActivityEntries).values({
         ...values,
+        ...(hasSnapshotColumn ? { jobIdSnapshot: snapshotValue } : {}),
         createdByUserId: user?.id ?? parsed.data.employeeId,
         status: "DRAFT",
       });
@@ -664,28 +725,68 @@ export async function generateMonthlyPerformance(input: unknown) {
   const periodStartDate = parsed.data.periodStartDate;
   const periodEndDate = parsed.data.periodEndDate;
 
-  const activities = await db
-    .select({
-      employeeId: dailyActivityEntries.employeeId,
-      totalPoints: dailyActivityEntries.totalPoints,
-      status: dailyActivityEntries.status,
-    })
-    .from(dailyActivityEntries)
-    .where(
-      and(
-        inArray(dailyActivityEntries.employeeId, targetEmployees.map((employee) => employee.id)),
-        gte(dailyActivityEntries.workDate, periodStartDate),
-        lte(dailyActivityEntries.workDate, periodEndDate)
-      )
-    );
+  const SUBMITTED_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG", "DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
+  const APPROVED_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
+  const employeeIds = targetEmployees.map((e) => e.id);
 
-  const summaryByEmployee = new Map<string, number>();
+  const [activities, leaveRows] = await Promise.all([
+    db
+      .select({
+        employeeId: dailyActivityEntries.employeeId,
+        workDate: dailyActivityEntries.workDate,
+        totalPoints: dailyActivityEntries.totalPoints,
+        status: dailyActivityEntries.status,
+      })
+      .from(dailyActivityEntries)
+      .where(
+        and(
+          inArray(dailyActivityEntries.employeeId, employeeIds),
+          gte(dailyActivityEntries.workDate, periodStartDate),
+          lte(dailyActivityEntries.workDate, periodEndDate),
+          inArray(dailyActivityEntries.status, SUBMITTED_STATUSES)
+        )
+      ),
+    db
+      .select({
+        employeeId: attendanceTickets.employeeId,
+        daysCount: attendanceTickets.daysCount,
+      })
+      .from(attendanceTickets)
+      .where(
+        and(
+          inArray(attendanceTickets.employeeId, employeeIds),
+          lte(attendanceTickets.startDate, periodEndDate),
+          gte(attendanceTickets.endDate, periodStartDate),
+          inArray(attendanceTickets.status, ["APPROVED_SPV", "APPROVED_HRD", "AUTO_APPROVED", "LOCKED"])
+        )
+      ),
+  ]);
+
+  // Per-employee: approved total dan per-hari submitted (untuk rata-rata persentase)
+  const approvedSumByEmployee = new Map<string, number>();
+  const submittedDaysByEmployee = new Map<string, Map<string, number>>();
+
   for (const activity of activities) {
-    if (!["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"].includes(activity.status)) {
-      continue;
+    const d = activity.workDate;
+    const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+    if (!submittedDaysByEmployee.has(activity.employeeId)) {
+      submittedDaysByEmployee.set(activity.employeeId, new Map());
     }
-    const current = summaryByEmployee.get(activity.employeeId) ?? 0;
-    summaryByEmployee.set(activity.employeeId, current + toNumber(activity.totalPoints));
+    const dayMap = submittedDaysByEmployee.get(activity.employeeId)!;
+    dayMap.set(dateKey, (dayMap.get(dateKey) ?? 0) + toNumber(activity.totalPoints));
+
+    if ((APPROVED_STATUSES as readonly string[]).includes(activity.status)) {
+      approvedSumByEmployee.set(
+        activity.employeeId,
+        (approvedSumByEmployee.get(activity.employeeId) ?? 0) + toNumber(activity.totalPoints)
+      );
+    }
+  }
+
+  const leaveCountByEmployee = new Map<string, number>();
+  for (const leave of leaveRows) {
+    leaveCountByEmployee.set(leave.employeeId, (leaveCountByEmployee.get(leave.employeeId) ?? 0) + leave.daysCount);
   }
 
   await db.transaction(async (tx) => {
@@ -700,12 +801,20 @@ export async function generateMonthlyPerformance(input: unknown) {
 
     for (const employee of targetEmployees) {
       const divisionSnapshot = await resolveDivisionSnapshotForPeriod(employee.id, periodStartDate);
-      const targetDays = await resolveTargetDaysForPeriod(employee.id, periodStartDate, periodEndDate);
-      const totalApprovedPoints = Number((summaryByEmployee.get(employee.id) ?? 0).toFixed(2));
+      const rawTargetDays = await resolveTargetDaysForPeriod(employee.id, periodStartDate, periodEndDate);
+      const leaveDays = leaveCountByEmployee.get(employee.id) ?? 0;
+      const targetDays = Math.max(0, rawTargetDays - leaveDays);
+
+      const dailySubmissions = Array.from(
+        submittedDaysByEmployee.get(employee.id)?.values() ?? []
+      ).map((pts) => ({ totalPoints: pts }));
+
+      const totalApprovedPoints = Number((approvedSumByEmployee.get(employee.id) ?? 0).toFixed(2));
       const calculated = calculateMonthlyPointPerformance({
         divisionName: divisionSnapshot.divisionSnapshotName,
         targetDays,
         totalApprovedPoints,
+        dailySubmissions,
       });
 
       await tx.insert(monthlyPointPerformances).values({
@@ -732,6 +841,8 @@ export type TwActivityItem = {
   id: string;
   workDate: Date;
   pointCatalogEntryId: string;
+  jobIdSnapshot: string | null;
+  notes: string | null;
   workNameSnapshot: string;
   pointValueSnapshot: string | number;
   quantity: string | number;
@@ -809,12 +920,15 @@ export async function getTwPerformanceData(): Promise<{
         unitDescription: e.unitDescription ?? null,
       }));
   }
+  const hasSnapshotColumn = await hasJobIdSnapshotColumn();
 
   const activities = await db
     .select({
       id: dailyActivityEntries.id,
       workDate: dailyActivityEntries.workDate,
       pointCatalogEntryId: dailyActivityEntries.pointCatalogEntryId,
+      jobIdSnapshot: hasSnapshotColumn ? dailyActivityEntries.jobIdSnapshot : pointCatalogEntries.externalCode,
+      notes: dailyActivityEntries.notes,
       workNameSnapshot: dailyActivityEntries.workNameSnapshot,
       pointValueSnapshot: dailyActivityEntries.pointValueSnapshot,
       quantity: dailyActivityEntries.quantity,
@@ -824,6 +938,7 @@ export async function getTwPerformanceData(): Promise<{
       rejectedAt: dailyActivityEntries.rejectedAt,
     })
     .from(dailyActivityEntries)
+    .leftJoin(pointCatalogEntries, eq(dailyActivityEntries.pointCatalogEntryId, pointCatalogEntries.id))
     .where(eq(dailyActivityEntries.employeeId, roleRow.employeeId))
     .orderBy(desc(dailyActivityEntries.workDate), desc(dailyActivityEntries.createdAt));
 
@@ -850,6 +965,7 @@ export async function batchSubmitDraft(input: unknown) {
 
   const activeVersion = await getActivePointCatalogVersion();
   if (!activeVersion) return { error: "Belum ada versi katalog poin aktif." };
+  const hasSnapshotColumn = await hasJobIdSnapshotColumn();
 
   const catalogIds = [...new Set(parsed.data.items.map((i) => i.pointCatalogEntryId))];
   const catalogRows = await db
@@ -896,29 +1012,56 @@ export async function batchSubmitDraft(input: unknown) {
       const entry = catalogMap.get(item.pointCatalogEntryId)!;
       const pointValue = toNumber(entry.pointValue);
       const totalPoints = Number((pointValue * item.quantity).toFixed(2));
-
-      const [inserted] = await tx
-        .insert(dailyActivityEntries)
-        .values({
-          employeeId: roleRow.employeeId!,
-          workDate: parsed.data.workDate,
-          actualDivisionId: emp.divisionId!,
-          pointCatalogEntryId: entry.id,
-          pointCatalogVersionId: activeVersion.id,
-          pointCatalogDivisionName: entry.divisionName,
-          workNameSnapshot: entry.workName,
-          unitDescriptionSnapshot: entry.unitDescription,
+      const snapshotValue = item.jobId ?? entry.externalCode ?? null;
+      let insertedId: string;
+      if (hasSnapshotColumn) {
+        const [inserted] = await tx
+          .insert(dailyActivityEntries)
+          .values({
+            employeeId: roleRow.employeeId!,
+            workDate: parsed.data.workDate,
+            actualDivisionId: emp.divisionId!,
+            pointCatalogEntryId: entry.id,
+            pointCatalogVersionId: activeVersion.id,
+            pointCatalogDivisionName: entry.divisionName,
+            jobIdSnapshot: snapshotValue,
+            workNameSnapshot: entry.workName,
+            unitDescriptionSnapshot: entry.unitDescription,
+            pointValueSnapshot: pointValue.toFixed(2),
+            quantity: item.quantity.toFixed(2),
+            totalPoints: totalPoints.toFixed(2),
+            status: nextStatus,
+            submittedAt: new Date(),
+            createdByUserId: user?.id ?? roleRow.employeeId!,
+          })
+          .returning({ id: dailyActivityEntries.id });
+        insertedId = inserted.id;
+      } else {
+        const [inserted] = await tx
+          .insert(dailyActivityEntriesLegacy)
+          .values({
+            employeeId: roleRow.employeeId!,
+            workDate: parsed.data.workDate,
+            actualDivisionId: emp.divisionId!,
+            pointCatalogEntryId: entry.id,
+            pointCatalogVersionId: activeVersion.id,
+            pointCatalogDivisionName: entry.divisionName,
+            workNameSnapshot: entry.workName,
+            unitDescriptionSnapshot: entry.unitDescription,
           pointValueSnapshot: pointValue.toFixed(2),
           quantity: item.quantity.toFixed(2),
           totalPoints: totalPoints.toFixed(2),
           status: nextStatus,
           submittedAt: new Date(),
           createdByUserId: user?.id ?? roleRow.employeeId!,
+          notes: encodeLegacyNotes(snapshotValue),
         })
-        .returning({ id: dailyActivityEntries.id });
+          .returning({ id: dailyActivityEntriesLegacy.id });
+        insertedId = inserted.id;
+      }
 
       await tx.insert(dailyActivityApprovalLogs).values({
-        activityEntryId: inserted.id,
+        activityEntryId: insertedId,
         action: logAction,
         actorUserId: user?.id ?? roleRow.employeeId!,
         actorRole: roleRow.role as UserRole,
@@ -938,6 +1081,7 @@ export type SpvPendingActivityItem = {
   employeeDivisionName: string | null;
   workDate: Date;
   externalCode: string | null;
+  jobIdSnapshot: string | null;
   workNameSnapshot: string;
   pointValueSnapshot: string | number;
   quantity: string | number;
@@ -953,6 +1097,7 @@ export async function getSpvPendingActivities(): Promise<{ activities: SpvPendin
 
   const roleRow = await getCurrentUserRoleRow();
   if (roleRow.divisionIds.length === 0) return { activities: [] };
+  const hasSnapshotColumn = await hasJobIdSnapshotColumn();
 
   const entryDivision = aliasedTable(divisions, "entry_division");
   const employeeDivision = aliasedTable(divisions, "employee_division");
@@ -966,6 +1111,7 @@ export async function getSpvPendingActivities(): Promise<{ activities: SpvPendin
       employeeDivisionName: employeeDivision.name,
       workDate: dailyActivityEntries.workDate,
       externalCode: pointCatalogEntries.externalCode,
+      jobIdSnapshot: hasSnapshotColumn ? dailyActivityEntries.jobIdSnapshot : pointCatalogEntries.externalCode,
       workNameSnapshot: dailyActivityEntries.workNameSnapshot,
       pointValueSnapshot: dailyActivityEntries.pointValueSnapshot,
       quantity: dailyActivityEntries.quantity,
@@ -1007,7 +1153,11 @@ export async function batchDecideDraftActivities(input: {
   const role = roleRow.role as UserRole;
 
   const entries = await db
-    .select()
+    .select({
+      id: dailyActivityEntries.id,
+      employeeId: dailyActivityEntries.employeeId,
+      status: dailyActivityEntries.status,
+    })
     .from(dailyActivityEntries)
     .where(inArray(dailyActivityEntries.id, input.ids));
 
@@ -1068,7 +1218,11 @@ export async function deleteActivityEntry(activityEntryId: string) {
   const role = roleRow.role as UserRole;
 
   const [existingEntry] = await db
-    .select()
+    .select({
+      id: dailyActivityEntries.id,
+      employeeId: dailyActivityEntries.employeeId,
+      status: dailyActivityEntries.status,
+    })
     .from(dailyActivityEntries)
     .where(eq(dailyActivityEntries.id, activityEntryId))
     .limit(1);

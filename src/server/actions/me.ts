@@ -15,8 +15,9 @@ import {
 import { attendanceTickets, employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import { payrollPeriods, payrollResults } from "@/lib/db/schema/payroll";
-import { dailyActivityEntries, monthlyPointPerformances } from "@/lib/db/schema/point";
-import { aliasedTable, and, desc, eq, gte } from "drizzle-orm";
+import { dailyActivityEntries } from "@/lib/db/schema/point";
+import { aliasedTable, and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { resolvePointTargetForDivision } from "@/config/constants";
 import type { UserRole } from "@/types";
 import {
   buildPersonalQuickActions,
@@ -259,21 +260,98 @@ async function getIncidentSummary(employeeId: string): Promise<MyIncidentSummary
 }
 
 async function getLatestPerformance(employeeId: string): Promise<MyPerformanceSummary> {
-  const rows = await db
-    .select({
-      periodStartDate: monthlyPointPerformances.periodStartDate,
-      periodEndDate: monthlyPointPerformances.periodEndDate,
-      performancePercent: monthlyPointPerformances.performancePercent,
-      totalApprovedPoints: monthlyPointPerformances.totalApprovedPoints,
-      totalTargetPoints: monthlyPointPerformances.totalTargetPoints,
-      status: monthlyPointPerformances.status,
-    })
-    .from(monthlyPointPerformances)
-    .where(eq(monthlyPointPerformances.employeeId, employeeId))
-    .orderBy(desc(monthlyPointPerformances.periodEndDate), desc(monthlyPointPerformances.calculatedAt))
-    .limit(1);
+  // Periode berjalan: tgl 26 bulan lalu s/d tgl 25 bulan ini (atau 26 bulan ini s/d 25 bulan depan)
+  const today = new Date();
+  const day = today.getDate();
+  const periodStart = day >= 26
+    ? new Date(today.getFullYear(), today.getMonth(), 26)
+    : new Date(today.getFullYear(), today.getMonth() - 1, 26);
+  const periodEnd = day >= 26
+    ? new Date(today.getFullYear(), today.getMonth() + 1, 25)
+    : new Date(today.getFullYear(), today.getMonth(), 25);
 
-  return rows[0] ?? null;
+  const SUBMITTED_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG", "DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
+  const APPROVED_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"];
+
+  const [entries, empRows, leaveRows] = await Promise.all([
+    db
+      .select({
+        workDate: dailyActivityEntries.workDate,
+        totalPoints: dailyActivityEntries.totalPoints,
+        status: dailyActivityEntries.status,
+      })
+      .from(dailyActivityEntries)
+      .where(
+        and(
+          eq(dailyActivityEntries.employeeId, employeeId),
+          gte(dailyActivityEntries.workDate, periodStart),
+          lte(dailyActivityEntries.workDate, periodEnd),
+          inArray(dailyActivityEntries.status, [...SUBMITTED_STATUSES])
+        )
+      ),
+    db
+      .select({ divisionName: divisions.name })
+      .from(employees)
+      .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+      .where(eq(employees.id, employeeId))
+      .limit(1),
+    db
+      .select({ daysCount: attendanceTickets.daysCount })
+      .from(attendanceTickets)
+      .where(
+        and(
+          eq(attendanceTickets.employeeId, employeeId),
+          lte(attendanceTickets.startDate, periodEnd),
+          gte(attendanceTickets.endDate, periodStart),
+          inArray(attendanceTickets.status, ["APPROVED_SPV", "APPROVED_HRD", "AUTO_APPROVED", "LOCKED"])
+        )
+      ),
+  ]);
+
+  if (entries.length === 0) return null;
+
+  const targetDailyPoints = resolvePointTargetForDivision(empRows[0]?.divisionName);
+
+  // Group submitted entries by workDate (gunakan local time, konsisten dengan countTargetDaysForPeriod)
+  const dailyPointsMap = new Map<string, number>();
+  let totalApprovedPoints = 0;
+  for (const entry of entries) {
+    const d = entry.workDate;
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    dailyPointsMap.set(key, (dailyPointsMap.get(key) ?? 0) + Number(entry.totalPoints));
+    if (APPROVED_STATUSES.includes(entry.status)) {
+      totalApprovedPoints += Number(entry.totalPoints);
+    }
+  }
+
+  // Performa = rata-rata persentase harian dari hari yang sudah submit
+  const dailyPercents = Array.from(dailyPointsMap.values()).map(
+    (pts) => (targetDailyPoints > 0 ? (pts / targetDailyPoints) * 100 : 0)
+  );
+  const performancePercent =
+    dailyPercents.length > 0
+      ? (dailyPercents.reduce((a, b) => a + b, 0) / dailyPercents.length).toFixed(2)
+      : "0.00";
+
+  // Target days efektif = hari kerja Senin–Sabtu dalam periode dikurangi hari izin yang disetujui
+  let workingDays = 0;
+  const cursor = new Date(periodStart);
+  while (cursor <= periodEnd) {
+    if (cursor.getDay() !== 0) workingDays++; // 0 = Minggu
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const leaveDays = leaveRows.reduce((sum, r) => sum + r.daysCount, 0);
+  const effectiveTargetDays = Math.max(0, workingDays - leaveDays);
+  const totalTargetPoints = targetDailyPoints * effectiveTargetDays;
+
+  return {
+    periodStartDate: periodStart,
+    periodEndDate: periodEnd,
+    performancePercent,
+    totalApprovedPoints: totalApprovedPoints.toFixed(2),
+    totalTargetPoints,
+    status: "BERJALAN",
+  };
 }
 
 async function getLatestPayroll(employeeId: string): Promise<MyPayrollSummary> {

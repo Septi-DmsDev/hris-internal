@@ -5,6 +5,9 @@
 **Disusun oleh:** AI Project Concept Architect  
 **Basis pembahasan:** Diskusi konsep Manajemen Poin Kinerja, Profiling Karyawan, Review Karyawan, Ticketing Izin/Sakit/Cuti, dan Payroll System.
 
+> Catatan penyelarasan code 2026-05-04:
+> Dokumen ini tetap menjadi konsep/roadmap bisnis 3 phase. Status implementasi aktual sudah melewati blueprint awal dan mencakup auth user management, self-service `/me`, `/settings`, `/schedule`, KABAG/SPV multi-division scope, master shift, grade compensation, payroll PDF/XLSX, dan finance dashboard. Untuk alur code terbaru, gunakan `docs/codebase-curriculum/00-overview.md`, `docs/codebase-curriculum/01-project-structure.md`, dan `docs/codebase-curriculum/12-server-actions-and-business-logic.md`.
+
 ---
 
 ## 1. Ringkasan Eksekutif

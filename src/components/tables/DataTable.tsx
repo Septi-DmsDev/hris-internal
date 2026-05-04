@@ -9,6 +9,7 @@ import {
   type ColumnFiltersState,
   type ColumnDef,
 } from "@tanstack/react-table";
+import type { ReactNode } from "react";
 import {
   Table,
   TableBody,
@@ -27,6 +28,8 @@ type DataTableProps<T extends Record<string, unknown>> = {
   columns: ColumnDef<T>[];
   searchKey?: string;
   searchPlaceholder?: string;
+  globalSearch?: boolean;
+  toolbarSlot?: ReactNode;
 };
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -34,10 +37,15 @@ export function DataTable<T extends Record<string, unknown>>({
   columns,
   searchKey,
   searchPlaceholder = "Cari...",
+  globalSearch = false,
+  toolbarSlot,
 }: DataTableProps<T>) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const searchValue =
-    searchKey === undefined
+  const [globalFilter, setGlobalFilter] = useState("");
+
+  const searchValue = globalSearch
+    ? globalFilter
+    : searchKey === undefined
       ? ""
       : ((columnFilters.find((filter) => filter.id === searchKey)
           ?.value as string | undefined) ?? "");
@@ -49,8 +57,9 @@ export function DataTable<T extends Record<string, unknown>>({
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    state: { columnFilters },
+    state: { columnFilters, globalFilter },
     onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: setGlobalFilter,
     initialState: { pagination: { pageSize: 20 } },
   });
 
@@ -59,23 +68,34 @@ export function DataTable<T extends Record<string, unknown>>({
   const pageIndex = table.getState().pagination.pageIndex;
   const pageCount = table.getPageCount();
 
+  const showToolbar = searchKey !== undefined || globalSearch || toolbarSlot !== undefined;
+
   return (
     <div className="space-y-4">
-      {searchKey !== undefined && (
-        <div className="relative max-w-xs">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-          />
-          <Input
-            placeholder={searchPlaceholder}
-            value={searchValue}
-            onChange={(e) => {
-              const value = e.target.value;
-              setColumnFilters(value ? [{ id: searchKey, value }] : []);
-            }}
-            className="pl-9 h-9 text-sm bg-white border-slate-200 focus-visible:ring-teal-500 placeholder:text-slate-400"
-          />
+      {showToolbar && (
+        <div className="flex items-center justify-between gap-3">
+          {(searchKey !== undefined || globalSearch) ? (
+            <div className="relative flex-1 max-w-xs">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
+              <Input
+                placeholder={searchPlaceholder}
+                value={searchValue}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (globalSearch) {
+                    setGlobalFilter(value);
+                  } else {
+                    setColumnFilters(value ? [{ id: searchKey!, value }] : []);
+                  }
+                }}
+                className="pl-9 h-9 text-sm bg-white border-slate-200 focus-visible:ring-teal-500 placeholder:text-slate-400"
+              />
+            </div>
+          ) : <div />}
+          {toolbarSlot && <div className="shrink-0">{toolbarSlot}</div>}
         </div>
       )}
 

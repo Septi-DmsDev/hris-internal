@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HRIS Internal
 
-## Getting Started
+Internal HRIS/HRD Dashboard built with Next.js App Router, TypeScript, Supabase Auth, PostgreSQL, and Drizzle ORM.
 
-First, run the development server:
+## What This App Covers
+
+- Auth, user roles, employee login links, and division-scoped access.
+- Employee profiling, histories, branches, divisions, positions, grades, work schedules, and shift masters.
+- TEAMWORK performance point catalog, daily activities, approval workflow, and monthly performance.
+- Ticketing for leave/sick/permission and leave quota handling.
+- Employee review, incident log, and training evaluation.
+- Payroll period 26-25, snapshots, preview, finalization, paid/locked lifecycle, adjustments, payslip PDF, XLSX export, and finance summary.
+- Personal self-service pages for linked employee accounts.
+
+## Tech Stack
+
+- Next.js `16.2.4` App Router
+- React `19.2.4`
+- TypeScript
+- Tailwind CSS v4
+- shadcn/ui + Radix UI
+- Supabase Auth via `@supabase/ssr`
+- PostgreSQL / Supabase
+- Drizzle ORM + Drizzle Kit
+- Zod + React Hook Form
+- TanStack Table
+- Recharts
+- Vitest
+
+## Local Setup
+
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create `.env.local` with the required environment values:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=
+NEXT_PUBLIC_APP_URL=
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run the development server:
 
-## Learn More
+```bash
+pnpm dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open `http://localhost:3000`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Main Commands
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm lint
+pnpm vitest run
+pnpm exec tsc --noEmit
+pnpm build
+```
 
-## Deploy on Vercel
+## Architecture
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The main code flow is:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+Page / Client Component
+-> Server Action / Route Handler
+-> Zod validation
+-> Supabase session + role/scope check
+-> Drizzle query/transaction
+-> server rule engine/helper
+-> PostgreSQL
+```
+
+Important folders:
+
+- `src/app/(dashboard)/*` - authenticated routes and route handlers.
+- `src/components/*` - reusable UI, layout, tables, and shadcn/ui wrappers.
+- `src/lib/auth/session.ts` - server-side session and role helpers.
+- `src/lib/db/schema/*` - Drizzle schema source of truth.
+- `src/lib/validations/*` - Zod contracts.
+- `src/server/actions/*` - business query/mutation boundary.
+- `src/server/*-engine/*` - testable business rules and helper engines.
+- `supabase/migrations/*` - database migrations.
+
+## Documentation Map
+
+- `AGENTS.md` - root instructions for coding agents.
+- `CLAUDE.md` - companion AI instructions.
+- `agent-startup-prompt.md` - reusable startup prompt.
+- `HANDOVER.md` - current handover and operational status.
+- `references/business-rules.md` - business rules that must be preserved.
+- `references/implementation-playbook.md` - implementation workflow.
+- `docs/onboarding-curriculum.md` - practical onboarding guide.
+- `docs/codebase-curriculum/` - module-by-module codebase guide.
+- `next-update.md` - known payroll/master-data follow-up checklist.
+
+## Security Rules
+
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` to browser/client code.
+- Do not calculate payroll or sensitive bonus/leave/adjustment logic in client components.
+- Use server actions, route handlers, rule engines, transactions, and audit logs for sensitive workflows.
+- Keep payroll finalization idempotent.
+- Preserve snapshots for payroll and master point transactions.

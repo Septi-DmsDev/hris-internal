@@ -14,8 +14,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { approveTicket, rejectTicket } from "@/server/actions/tickets";
+import type { UserRole } from "@/types";
 
-export type SpvTicketRow = {
+export type ApprovalTicketRow = {
   id: string;
   employeeId: string | null;
   employeeName: string;
@@ -45,7 +46,24 @@ const TICKET_TYPE_LABEL: Record<string, string> = {
   SETENGAH_HARI: "Setengah Hari",
 };
 
-export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketRow[] }) {
+const QUEUE_STATUS_LABEL: Record<string, string> = {
+  SUBMITTED: "Menunggu Review",
+  NEED_REVIEW: "Perlu Review",
+  APPROVED_SPV: "Disetujui SPV",
+};
+
+const QUEUE_STATUS_COLOR: Record<string, string> = {
+  SUBMITTED: "bg-blue-100 text-blue-700",
+  NEED_REVIEW: "bg-yellow-100 text-yellow-800",
+  APPROVED_SPV: "bg-teal-100 text-teal-700",
+};
+
+type Props = {
+  tickets: ApprovalTicketRow[];
+  role: UserRole;
+};
+
+export default function TicketApprovalClient({ tickets, role }: Props) {
   const router = useRouter();
   const [decision, setDecision] = useState<DecisionState | null>(null);
   const [notes, setNotes] = useState("");
@@ -53,6 +71,8 @@ export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketR
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const isHrd = ["SUPER_ADMIN", "HRD"].includes(role);
 
   async function handleDecision() {
     if (!decision) return;
@@ -82,7 +102,7 @@ export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketR
     }
   }
 
-  const columns: ColumnDef<SpvTicketRow>[] = [
+  const columns: ColumnDef<ApprovalTicketRow>[] = [
     {
       header: "Karyawan",
       accessorKey: "employeeName",
@@ -121,7 +141,7 @@ export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketR
       header: "Alasan",
       accessorKey: "reason",
       cell: ({ row }) => (
-        <p className="max-w-[200px] truncate text-sm">{row.original.reason}</p>
+        <p className="max-w-[180px] truncate text-sm">{row.original.reason}</p>
       ),
     },
     {
@@ -133,6 +153,21 @@ export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketR
         </span>
       ),
     },
+    ...(isHrd
+      ? [
+          {
+            header: "Tahap",
+            accessorKey: "status",
+            cell: ({ row }: { row: { original: ApprovalTicketRow } }) => (
+              <span
+                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${QUEUE_STATUS_COLOR[row.original.status] ?? "bg-slate-100 text-slate-500"}`}
+              >
+                {QUEUE_STATUS_LABEL[row.original.status] ?? row.original.status}
+              </span>
+            ),
+          } satisfies ColumnDef<ApprovalTicketRow>,
+        ]
+      : []),
     {
       header: "Diajukan",
       accessorKey: "createdAt",
@@ -178,12 +213,18 @@ export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketR
     },
   ];
 
+  const subtitle = isHrd
+    ? "Tiket dari TeamWork (sudah disetujui SPV) dan tiket langsung dari SPV/Kabag"
+    : "Tiket dari anggota divisi Anda yang menunggu persetujuan";
+
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-base font-semibold text-slate-900">Antrian Review Izin</h2>
         <p className="text-sm text-slate-500">
-          {tickets.length} pengajuan menunggu persetujuan
+          {tickets.length > 0
+            ? `${tickets.length} pengajuan menunggu — ${subtitle}`
+            : subtitle}
         </p>
       </div>
 
@@ -200,16 +241,14 @@ export default function SPVTicketReviewClient({ tickets }: { tickets: SpvTicketR
 
       {tickets.length === 0 ? (
         <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
-          <p className="text-sm text-slate-500">
-            Tidak ada pengajuan izin yang menunggu persetujuan.
-          </p>
+          <p className="text-sm text-slate-500">Tidak ada pengajuan izin yang menunggu persetujuan.</p>
         </div>
       ) : (
         <DataTable
           data={tickets}
           columns={columns}
-          searchKey="employeeName"
-          searchPlaceholder="Cari karyawan..."
+          globalSearch
+          searchPlaceholder="Cari karyawan, jenis, atau status..."
         />
       )}
 

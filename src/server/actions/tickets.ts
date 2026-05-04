@@ -5,7 +5,7 @@ import { employees } from "@/lib/db/schema/employee";
 import { attendanceTickets, leaveQuotas } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { createTicketSchema, ticketDecisionSchema } from "@/lib/validations/hr";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 import { divisions } from "@/lib/db/schema/master";
@@ -72,6 +72,7 @@ export async function getTickets() {
       endDate: attendanceTickets.endDate,
       daysCount: attendanceTickets.daysCount,
       reason: attendanceTickets.reason,
+      attachmentUrl: attendanceTickets.attachmentUrl,
       status: attendanceTickets.status,
       payrollImpact: attendanceTickets.payrollImpact,
       reviewNotes: attendanceTickets.reviewNotes,
@@ -82,15 +83,13 @@ export async function getTickets() {
     .leftJoin(employees, eq(attendanceTickets.employeeId, employees.id))
     .leftJoin(employeeDivision, eq(employees.divisionId, employeeDivision.id));
 
-  const rows = isDivScoped
+  // For /tickets, everyone sees their own submissions; only HRD/SUPER_ADMIN see all
+  const showOwnOnly = user && (SELF_SERVICE_TICKET_ROLES.includes(role) || isDivScoped);
+  const rows = showOwnOnly
     ? await baseQuery
-        .where(inArray(employees.divisionId, roleRow.divisionIds))
+        .where(eq(attendanceTickets.createdByUserId, user.id))
         .orderBy(desc(attendanceTickets.createdAt))
-    : SELF_SERVICE_TICKET_ROLES.includes(role) && user
-      ? await baseQuery
-          .where(eq(attendanceTickets.createdByUserId, user.id))
-          .orderBy(desc(attendanceTickets.createdAt))
-      : await baseQuery.orderBy(desc(attendanceTickets.createdAt));
+    : await baseQuery.orderBy(desc(attendanceTickets.createdAt));
 
   return { role, tickets: rows };
 }
@@ -107,19 +106,27 @@ export async function createTicket(input: unknown) {
   const user = await getUser();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+  let employeeId = parsed.data.employeeId;
 
   if (SELF_SERVICE_TICKET_ROLES.includes(role)) {
     if (!roleRow.employeeId) {
       return { error: "Akun Anda belum terhubung ke data karyawan. Hubungi HRD." };
     }
-    parsed.data.employeeId = roleRow.employeeId;
+    employeeId = roleRow.employeeId;
+  } else if (!employeeId) {
+    return { error: "Karyawan wajib dipilih." };
   }
 
-  if (DIV_SCOPED_ROLES.includes(role)) {
+  if (!employeeId) {
+    return { error: "Karyawan wajib dipilih." };
+  }
+
+  // Skip div-scope check when submitting for self (SPV/KABAG always submit for self via SELF_SERVICE)
+  if (DIV_SCOPED_ROLES.includes(role) && employeeId !== roleRow.employeeId) {
     if (roleRow.divisionIds.length === 0) {
       return { error: "Akun Anda belum terhubung ke divisi. Hubungi HRD." };
     }
-    const employeeDivisionId = await getEmployeeDivisionId(parsed.data.employeeId);
+    const employeeDivisionId = await getEmployeeDivisionId(employeeId);
     if (!employeeDivisionId || !roleRow.divisionIds.includes(employeeDivisionId)) {
       return { error: "Anda hanya boleh membuat tiket untuk karyawan di divisi Anda." };
     }
@@ -127,18 +134,23 @@ export async function createTicket(input: unknown) {
 
   const { startDate, endDate } = parsed.data;
   const daysCount = diffDays(startDate, endDate);
+  const attachmentUrl = parsed.data.attachmentUrl?.trim() || null;
+
+  if (parsed.data.ticketType === "SAKIT" && daysCount > 1 && !attachmentUrl) {
+    return { error: "Surat dokter wajib dilampirkan untuk sakit lebih dari 1 hari." };
+  }
 
   try {
     await db.insert(attendanceTickets).values({
-      employeeId: parsed.data.employeeId,
+      employeeId,
       ticketType: parsed.data.ticketType,
       startDate,
       endDate,
       daysCount,
       reason: parsed.data.reason,
-      attachmentUrl: parsed.data.attachmentUrl || null,
+      attachmentUrl,
       status: "SUBMITTED",
-      createdByUserId: user?.id ?? parsed.data.employeeId,
+      createdByUserId: user?.id ?? employeeId,
     });
   } catch (e) {
     const code = (e as { code?: string }).code;
@@ -179,16 +191,42 @@ export async function approveTicket(input: unknown) {
   if (ticket.status === "LOCKED") {
     return { error: "Tiket yang sudah LOCKED tidak dapat diproses lagi." };
   }
-  if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
+
+  const allowedStatuses = DIV_SCOPED_ROLES.includes(role)
+    ? ["SUBMITTED", "NEED_REVIEW"]
+    : ["SUBMITTED", "NEED_REVIEW", "APPROVED_SPV"];
+  if (!allowedStatuses.includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat disetujui." };
   }
 
   if (DIV_SCOPED_ROLES.includes(role)) {
+    // SPV tidak boleh menyetujui tiket miliknya sendiri
+    if (roleRow.employeeId && ticket.employeeId === roleRow.employeeId) {
+      return { error: "Anda tidak dapat menyetujui tiket Anda sendiri." };
+    }
     if (roleRow.divisionIds.length === 0) return { error: "Akun Anda belum terhubung ke divisi." };
     const employeeDivisionId = await getEmployeeDivisionId(ticket.employeeId);
     if (!employeeDivisionId || !roleRow.divisionIds.includes(employeeDivisionId)) {
       return { error: "Anda hanya dapat menyetujui tiket karyawan di divisi Anda." };
     }
+  }
+
+  // HRD finalizing an already-SPV-approved ticket — just change status, quota already processed
+  if (ticket.status === "APPROVED_SPV") {
+    await db
+      .update(attendanceTickets)
+      .set({
+        status: "APPROVED_HRD",
+        reviewNotes: parsed.data.notes ?? null,
+        approvedByUserId: user?.id ?? null,
+        approvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(attendanceTickets.id, parsed.data.ticketId));
+
+    revalidatePath("/tickets");
+    revalidatePath("/ticketingapproval");
+    return { success: true };
   }
 
   const nextStatus = DIV_SCOPED_ROLES.includes(role) ? "APPROVED_SPV" : "APPROVED_HRD";
@@ -263,6 +301,7 @@ export async function approveTicket(input: unknown) {
   });
 
   revalidatePath("/tickets");
+  revalidatePath("/ticketingapproval");
   return { success: true };
 }
 
@@ -297,11 +336,18 @@ export async function rejectTicket(input: unknown) {
   if (ticket.status === "LOCKED") {
     return { error: "Tiket yang sudah LOCKED tidak dapat diproses lagi." };
   }
-  if (!["SUBMITTED", "NEED_REVIEW"].includes(ticket.status)) {
+
+  const allowedRejectStatuses = DIV_SCOPED_ROLES.includes(role)
+    ? ["SUBMITTED", "NEED_REVIEW"]
+    : ["SUBMITTED", "NEED_REVIEW", "APPROVED_SPV"];
+  if (!allowedRejectStatuses.includes(ticket.status)) {
     return { error: "Tiket tidak dalam status yang dapat ditolak." };
   }
 
   if (DIV_SCOPED_ROLES.includes(role)) {
+    if (roleRow.employeeId && ticket.employeeId === roleRow.employeeId) {
+      return { error: "Anda tidak dapat menolak tiket Anda sendiri." };
+    }
     if (roleRow.divisionIds.length === 0) return { error: "Akun Anda belum terhubung ke divisi." };
     const employeeDivisionId = await getEmployeeDivisionId(ticket.employeeId);
     if (!employeeDivisionId || !roleRow.divisionIds.includes(employeeDivisionId)) {
@@ -321,6 +367,7 @@ export async function rejectTicket(input: unknown) {
     .where(eq(attendanceTickets.id, parsed.data.ticketId));
 
   revalidatePath("/tickets");
+  revalidatePath("/ticketingapproval");
   return { success: true };
 }
 
@@ -354,6 +401,60 @@ export async function cancelTicket(ticketId: string) {
 
   revalidatePath("/tickets");
   return { success: true };
+}
+
+// ─── getTicketsForApproval ────────────────────────────────────────────────────
+// SPV/KABAG: SUBMITTED from their division, excluding own ticket
+// HRD/SUPER_ADMIN: SUBMITTED (SPV self-tickets) + APPROVED_SPV (TW after SPV review)
+
+export async function getTicketsForApproval() {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  if (!["SUPER_ADMIN", "HRD", "SPV", "KABAG"].includes(role)) {
+    return { role, tickets: [] };
+  }
+
+  const isDivScoped = DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0;
+
+  const baseQuery = db
+    .select({
+      id: attendanceTickets.id,
+      employeeId: attendanceTickets.employeeId,
+      employeeName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      divisionName: divisions.name,
+      ticketType: attendanceTickets.ticketType,
+      startDate: attendanceTickets.startDate,
+      endDate: attendanceTickets.endDate,
+      daysCount: attendanceTickets.daysCount,
+      reason: attendanceTickets.reason,
+      attachmentUrl: attendanceTickets.attachmentUrl,
+      status: attendanceTickets.status,
+      createdAt: attendanceTickets.createdAt,
+    })
+    .from(attendanceTickets)
+    .leftJoin(employees, eq(attendanceTickets.employeeId, employees.id))
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id));
+
+  const rows = isDivScoped
+    ? await baseQuery
+        .where(
+          and(
+            inArray(attendanceTickets.status, ["SUBMITTED", "NEED_REVIEW"] as const),
+            inArray(employees.divisionId, roleRow.divisionIds),
+            roleRow.employeeId ? ne(attendanceTickets.employeeId, roleRow.employeeId) : undefined
+          )
+        )
+        .orderBy(desc(attendanceTickets.createdAt))
+    : await baseQuery
+        .where(
+          inArray(attendanceTickets.status, ["SUBMITTED", "NEED_REVIEW", "APPROVED_SPV"] as const)
+        )
+        .orderBy(desc(attendanceTickets.createdAt));
+
+  return { role, tickets: rows };
 }
 
 export async function generateLeaveQuota(employeeId: string, year: number) {

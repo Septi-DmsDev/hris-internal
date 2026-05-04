@@ -1,45 +1,18 @@
 import { format } from "date-fns";
 import { getTickets } from "@/server/actions/tickets";
 import TicketingClient from "./TicketingClient";
-import SPVTicketReviewClient from "./SPVTicketReviewClient";
-import type { SpvTicketRow } from "./SPVTicketReviewClient";
 import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
 import { divisions } from "@/lib/db/schema/master";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { UserRole } from "@/types";
 
 export default async function TicketingPage() {
   const { role, tickets } = await getTickets();
   const roleRow = await getCurrentUserRoleRow();
 
-  if (["SPV", "KABAG"].includes(role)) {
-    const pending = tickets
-      .filter((t) => ["SUBMITTED", "NEED_REVIEW"].includes(t.status))
-      .map((t): SpvTicketRow => ({
-        id: t.id,
-        employeeId: t.employeeId ?? null,
-        employeeName: t.employeeName ?? "-",
-        employeeCode: t.employeeCode ?? "-",
-        divisionName: t.divisionName ?? "-",
-        ticketType: t.ticketType,
-        startDate: t.startDate instanceof Date ? format(t.startDate, "yyyy-MM-dd") : String(t.startDate),
-        endDate: t.endDate instanceof Date ? format(t.endDate, "yyyy-MM-dd") : String(t.endDate),
-        daysCount: t.daysCount,
-        reason: t.reason,
-        status: t.status,
-        createdAt: t.createdAt instanceof Date ? format(t.createdAt, "yyyy-MM-dd HH:mm") : String(t.createdAt),
-      }));
-    return (
-      <div className="space-y-4">
-        <SPVTicketReviewClient tickets={pending} />
-      </div>
-    );
-  }
-
   const canManageEmployeeOptions = ["SUPER_ADMIN", "HRD"].includes(role);
-  const isDivScoped = false;
 
   const employeeRows = canManageEmployeeOptions
     ? await db
@@ -47,17 +20,11 @@ export default async function TicketingPage() {
           id: employees.id,
           employeeCode: employees.employeeCode,
           fullName: employees.fullName,
-          divisionId: employees.divisionId,
           divisionName: divisions.name,
         })
         .from(employees)
         .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-        .where(
-          and(
-            eq(employees.isActive, true),
-            isDivScoped ? inArray(employees.divisionId, roleRow.divisionIds) : undefined,
-          )
-        )
+        .where(eq(employees.isActive, true))
         .orderBy(asc(employees.fullName))
     : [];
 
@@ -72,6 +39,7 @@ export default async function TicketingPage() {
     payrollImpact: t.payrollImpact ?? null,
     reviewNotes: t.reviewNotes ?? "",
     rejectionReason: t.rejectionReason ?? "",
+    attachmentUrl: t.attachmentUrl ?? null,
   }));
 
   const employeeOptions = employeeRows.map((e) => ({

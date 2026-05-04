@@ -1,8 +1,8 @@
-# HRD Dashboard Codebase Curriculum
+# HRIS Internal Codebase Curriculum
 
 ## Tujuan
 
-Folder ini adalah kurikulum belajar codebase untuk project HRD Dashboard internal. Isinya dibuat dari code aktual repo per 28 April 2026, bukan dari asumsi, sehingga bisa dipakai untuk:
+Folder ini adalah kurikulum belajar codebase untuk project HRIS/HRD Dashboard internal. Isinya diselaraskan dengan code aktual repo per 2026-05-04 sehingga bisa dipakai untuk:
 
 - onboarding developer baru,
 - menyamakan pemahaman owner/project lead,
@@ -17,8 +17,7 @@ Urutan baca yang direkomendasikan:
 2. `01-project-structure.md`
 3. `02-auth-and-role-access.md`
 4. `03-database-schema.md`
-5. Dokumen modul:
-   `04-master-data-module.md` sampai `10-payroll-module.md`
+5. Dokumen modul: `04-master-data-module.md` sampai `10-payroll-module.md`
 6. `11-ui-components.md`
 7. `12-server-actions-and-business-logic.md`
 8. `13-data-flow-and-user-flow.md`
@@ -30,35 +29,35 @@ Urutan baca yang direkomendasikan:
 
 | File | Fokus | Status |
 |---|---|---|
-| `README.md` | Peta baca kurikulum | lengkap |
-| `00-overview.md` | Ringkasan sistem, status implementasi, relasi modul | lengkap |
-| `01-project-structure.md` | Struktur repo, boundary folder, file inti | lengkap |
-| `02-auth-and-role-access.md` | Auth, session, role, scope akses | sebagian |
-| `03-database-schema.md` | Semua schema Drizzle dan relasi bisnis | lengkap |
-| `04-master-data-module.md` | Cabang, divisi, jabatan, grade, jadwal kerja | lengkap |
-| `05-employee-profiling-module.md` | Profil karyawan, histori, detail page | lengkap |
-| `06-performance-point-module.md` | Katalog poin, aktivitas harian, performa bulanan | sebagian |
-| `07-ticketing-leave-module.md` | Izin/sakit/cuti dan leave quota | sebagian |
-| `08-review-and-incident-module.md` | Review kualitas kerja dan incident | lengkap |
-| `09-training-evaluation-module.md` | Evaluasi training berbasis performa | sebagian |
-| `10-payroll-module.md` | Period, preview, finalisasi, payslip, finance basis | sebagian |
-| `11-ui-components.md` | Layout, reusable UI, table, tabs, dialog | lengkap |
-| `12-server-actions-and-business-logic.md` | Ringkasan semua server action | lengkap |
-| `13-data-flow-and-user-flow.md` | Alur data dan alur user per modul | lengkap |
-| `14-testing-and-validation.md` | Test yang ada, command, gap test | lengkap |
-| `15-developer-learning-path.md` | Rencana belajar 12 hari | lengkap |
-| `16-maintenance-checklist.md` | Checklist maintenance dan hotspot | lengkap |
+| `README.md` | Peta baca kurikulum | updated |
+| `00-overview.md` | Ringkasan sistem, status implementasi, relasi modul | updated |
+| `01-project-structure.md` | Struktur repo, route, boundary folder, file inti | updated |
+| `02-auth-and-role-access.md` | Auth, session, role, scope akses | perlu review lanjutan |
+| `03-database-schema.md` | Schema Drizzle dan relasi bisnis | perlu review bila ada migration baru |
+| `04-master-data-module.md` | Cabang, divisi, jabatan, grade, shift, jadwal kerja | perlu review lanjutan |
+| `05-employee-profiling-module.md` | Profil karyawan, histori, detail page | perlu review lanjutan |
+| `06-performance-point-module.md` | Katalog poin, aktivitas harian, performa bulanan | perlu review lanjutan |
+| `07-ticketing-leave-module.md` | Izin/sakit/cuti dan leave quota | perlu review lanjutan |
+| `08-review-and-incident-module.md` | Review kualitas kerja dan incident | perlu review lanjutan |
+| `09-training-evaluation-module.md` | Evaluasi training berbasis performa | perlu review lanjutan |
+| `10-payroll-module.md` | Period, preview, finalisasi, payslip, finance basis | perlu review lanjutan |
+| `11-ui-components.md` | Layout, reusable UI, table, tabs, dialog | perlu review lanjutan |
+| `12-server-actions-and-business-logic.md` | Ringkasan server action | updated |
+| `13-data-flow-and-user-flow.md` | Alur data dan alur user per modul | perlu review lanjutan |
+| `14-testing-and-validation.md` | Test yang ada, command, gap test | updated |
+| `15-developer-learning-path.md` | Rencana belajar | perlu review lanjutan |
+| `16-maintenance-checklist.md` | Checklist maintenance dan hotspot | updated |
 
 ## Quick Start untuk Developer Baru
 
 1. Install dependency:
    `pnpm install`
-2. Siapkan `.env.local` sesuai `HANDOVER.md`.
-3. Jika develop lokal memakai database VPS, aktifkan SSH tunnel lebih dulu.
+2. Siapkan `.env.local` sesuai `README.md` atau `HANDOVER.md`.
+3. Pastikan koneksi `DATABASE_URL` aktif.
 4. Jalankan dev server:
    `pnpm dev`
 5. Pahami auth terlebih dahulu:
-   `src/proxy.ts`, `src/lib/auth/session.ts`, `src/lib/permissions/index.ts`
+   `src/proxy.ts`, `src/lib/auth/session.ts`, `src/lib/permissions/index.ts`, `src/server/actions/users.ts`
 6. Lanjut ke schema:
    `src/lib/db/schema/*`
 7. Lanjut ke server actions:
@@ -68,7 +67,17 @@ Urutan baca yang direkomendasikan:
 
 ## Status Dokumentasi
 
-- `lengkap`: struktur repo, schema, master data, employee profiling, review, UI reusable, testing, learning path.
-- `sebagian`: auth/access, performance, ticketing, training, payroll.
-  Alasannya: modul ada dan berjalan, tetapi implementasinya belum sepenuhnya memenuhi semua business rules di dokumen referensi.
-- `perlu review lanjutan`: RLS policy database, mapping `auth user -> employee`, enforcement deadline H+1/H+2, rule training “efektif periode payroll berikutnya”, dan komponen payroll seperti overtime/uang harian yang sudah ada di schema/UI tetapi belum dihitung di preview.
+Dokumentasi utama yang paling diselaraskan dengan code aktual:
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `agent-startup-prompt.md`
+- `README.md`
+- `docs/onboarding-curriculum.md`
+- `docs/codebase-curriculum/00-overview.md`
+- `docs/codebase-curriculum/01-project-structure.md`
+- `docs/codebase-curriculum/12-server-actions-and-business-logic.md`
+- `docs/codebase-curriculum/14-testing-and-validation.md`
+- `docs/codebase-curriculum/16-maintenance-checklist.md`
+
+Dokumen `docs/superpowers/*` bersifat arsip spec/plan historis. Jangan pakai sebagai sumber status terakhir tanpa membandingkan dengan code.

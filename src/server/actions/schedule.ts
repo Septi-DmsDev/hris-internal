@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/schema/employee";
 import { attendanceTickets } from "@/lib/db/schema/hr";
 import { divisions } from "@/lib/db/schema/master";
+import { dailyActivityEntries } from "@/lib/db/schema/point";
 import { and, asc, desc, eq, inArray, isNull, lte, gte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -28,6 +29,15 @@ export type ScheduleCalendarDay = {
   ticketOverride: string | null;
 };
 
+export type TicketHistoryItem = {
+  ticketType: string;
+  startDate: string;
+  endDate: string;
+  daysCount: number;
+  status: string;
+  reason: string;
+};
+
 export type MyScheduleResult = {
   employeeId: string;
   employeeName: string;
@@ -36,6 +46,11 @@ export type MyScheduleResult = {
   month: number;
   year: number;
   days: ScheduleCalendarDay[];
+  periodTotalTargetPoints: number;
+  periodApprovedPoints: number;
+  dailyTargetNeeded: number | null;
+  remainingWorkingDays: number;
+  ticketHistory: TicketHistoryItem[];
 };
 
 export type TeamMember = {
@@ -124,9 +139,9 @@ export async function getMySchedule(
     dayConfigMap.set(sd.dayOfWeek, sd);
   }
 
-  // Get approved tickets for this month
-  const monthStart = new Date(targetYear, targetMonth - 1, 1);
-  const monthEnd = new Date(targetYear, targetMonth, 0); // last day of month
+  // Periode kerja: tgl 26 bulan sebelumnya s/d tgl 25 bulan ini
+  const periodStart = new Date(targetYear, targetMonth - 2, 26); // mis. 26 Apr
+  const periodEnd = new Date(targetYear, targetMonth - 1, 25);   // mis. 25 Mei
 
   const approvedStatuses = ["AUTO_APPROVED", "APPROVED_SPV", "APPROVED_HRD"] as const;
 
@@ -141,33 +156,38 @@ export async function getMySchedule(
       and(
         eq(attendanceTickets.employeeId, roleRow.employeeId),
         inArray(attendanceTickets.status, approvedStatuses),
-        lte(attendanceTickets.startDate, monthEnd),
-        gte(attendanceTickets.endDate, monthStart)
+        lte(attendanceTickets.startDate, periodEnd),
+        gte(attendanceTickets.endDate, periodStart)
       )
     );
+
+  // Gunakan komponen lokal (bukan toISOString) agar tidak terjadi offset UTC+7
+  function localDateStr(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
 
   // Build ticket override map: "yyyy-MM-dd" -> ticketType
   const ticketMap = new Map<string, string>();
   for (const ticket of tickets) {
-    const start = ticket.startDate instanceof Date ? ticket.startDate : new Date(ticket.startDate);
-    const end = ticket.endDate instanceof Date ? ticket.endDate : new Date(ticket.endDate);
-    const cur = new Date(start);
-    while (cur <= end) {
-      const key = cur.toISOString().slice(0, 10);
-      ticketMap.set(key, ticket.ticketType);
+    const rawStart = ticket.startDate instanceof Date ? ticket.startDate : new Date(ticket.startDate);
+    const rawEnd = ticket.endDate instanceof Date ? ticket.endDate : new Date(ticket.endDate);
+    // Normalisasi ke lokal midnight agar iterasi hari akurat
+    const cur = new Date(rawStart.getFullYear(), rawStart.getMonth(), rawStart.getDate());
+    const endNorm = new Date(rawEnd.getFullYear(), rawEnd.getMonth(), rawEnd.getDate());
+    while (cur <= endNorm) {
+      ticketMap.set(localDateStr(cur), ticket.ticketType);
       cur.setDate(cur.getDate() + 1);
     }
   }
 
-  // Build calendar days array
-  const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+  // Build calendar days untuk rentang periode kerja
   const days: ScheduleCalendarDay[] = [];
+  const cursor = new Date(periodStart.getFullYear(), periodStart.getMonth(), periodStart.getDate());
+  const endCursor = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate());
 
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateObj = new Date(targetYear, targetMonth - 1, d);
-    const dayOfWeek = dateObj.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const dateStr = dateObj.toISOString().slice(0, 10);
-
+  while (cursor <= endCursor) {
+    const dateStr = localDateStr(cursor);
+    const dayOfWeek = cursor.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
     const config = dayConfigMap.get(dayOfWeek);
     const ticketOverride = ticketMap.get(dateStr) ?? null;
 
@@ -181,7 +201,80 @@ export async function getMySchedule(
       targetPoints: config?.targetPoints ?? 0,
       ticketOverride,
     });
+    cursor.setDate(cursor.getDate() + 1);
   }
+
+  // ── Sidebar metrics ───────────────────────────────────────────────────────────
+
+  // Total target poin periode (jumlah targetPoints hari kerja dalam periode)
+  const periodTotalTargetPoints = days
+    .filter((d) => d.isWorkingDay)
+    .reduce((sum, d) => sum + d.targetPoints, 0);
+
+  // Sisa hari kerja dari hari ini (inklusif) sampai akhir periode
+  const nowNow = new Date();
+  const todayLocal = new Date(nowNow.getFullYear(), nowNow.getMonth(), nowNow.getDate());
+  let remainingWorkingDays = 0;
+  const remCursor = new Date(todayLocal);
+  while (remCursor <= endCursor) {
+    if (remCursor.getDay() !== 0) remainingWorkingDays++;
+    remCursor.setDate(remCursor.getDate() + 1);
+  }
+
+  // Poin yang sudah disetujui SPV/HRD dalam periode
+  const APPROVED_PERF = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
+  const approvedEntries = await db
+    .select({ totalPoints: dailyActivityEntries.totalPoints })
+    .from(dailyActivityEntries)
+    .where(
+      and(
+        eq(dailyActivityEntries.employeeId, roleRow.employeeId),
+        gte(dailyActivityEntries.workDate, periodStart),
+        lte(dailyActivityEntries.workDate, periodEnd),
+        inArray(dailyActivityEntries.status, APPROVED_PERF)
+      )
+    );
+  const periodApprovedPoints = approvedEntries.reduce((sum, e) => sum + Number(e.totalPoints), 0);
+
+  // Target poin harian yang dibutuhkan = (total target - approved) / sisa hari kerja
+  const dailyTargetNeeded =
+    remainingWorkingDays > 0
+      ? Math.max(0, periodTotalTargetPoints - periodApprovedPoints) / remainingWorkingDays
+      : null;
+
+  // Riwayat perizinan (3 bulan ke belakang, semua status)
+  const historyWindowStart = new Date(nowNow.getFullYear(), nowNow.getMonth() - 2, 1);
+  const ticketHistoryRows = await db
+    .select({
+      ticketType: attendanceTickets.ticketType,
+      startDate: attendanceTickets.startDate,
+      endDate: attendanceTickets.endDate,
+      daysCount: attendanceTickets.daysCount,
+      status: attendanceTickets.status,
+      reason: attendanceTickets.reason,
+    })
+    .from(attendanceTickets)
+    .where(
+      and(
+        eq(attendanceTickets.employeeId, roleRow.employeeId),
+        gte(attendanceTickets.startDate, historyWindowStart)
+      )
+    )
+    .orderBy(desc(attendanceTickets.startDate))
+    .limit(15);
+
+  const ticketHistory: TicketHistoryItem[] = ticketHistoryRows.map((t) => {
+    const s = t.startDate instanceof Date ? t.startDate : new Date(t.startDate);
+    const e = t.endDate instanceof Date ? t.endDate : new Date(t.endDate);
+    return {
+      ticketType: t.ticketType,
+      startDate: localDateStr(new Date(s.getFullYear(), s.getMonth(), s.getDate())),
+      endDate: localDateStr(new Date(e.getFullYear(), e.getMonth(), e.getDate())),
+      daysCount: t.daysCount,
+      status: t.status,
+      reason: t.reason,
+    };
+  });
 
   return {
     employeeId: roleRow.employeeId,
@@ -191,6 +284,11 @@ export async function getMySchedule(
     month: targetMonth,
     year: targetYear,
     days,
+    periodTotalTargetPoints,
+    periodApprovedPoints,
+    dailyTargetNeeded,
+    remainingWorkingDays,
+    ticketHistory,
   };
 }
 

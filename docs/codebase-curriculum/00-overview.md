@@ -4,14 +4,14 @@
 
 Dokumen ini memberi gambaran besar project sebelum masuk ke level file. Fokusnya adalah menjawab:
 
-- sistem ini mengerjakan apa,
-- modul apa saja yang benar-benar ada di code,
-- modul mana yang masih parsial,
+- sistem ini mengerjakan apa;
+- modul apa saja yang benar-benar ada di code;
+- modul mana yang masih perlu hardening;
 - bagaimana hubungan antar modul.
 
 ## 2. Identitas Project
 
-Project ini adalah dashboard internal HRD yang dibangun dengan:
+Project ini adalah dashboard internal HRIS/HRD yang dibangun dengan:
 
 - Next.js `16.2.4` App Router
 - React `19.2.4`
@@ -23,105 +23,113 @@ Project ini adalah dashboard internal HRD yang dibangun dengan:
 - TanStack Table
 - Zod v4
 - date-fns
+- Recharts
 - Vitest
+- PDF/XLSX route handlers
 
 Fungsi bisnis yang sudah muncul di code:
 
-- login dan session Supabase,
-- master data cabang/divisi/jabatan/grade/jadwal kerja,
-- profiling karyawan dan histori perubahan,
-- katalog poin dan import workbook,
-- aktivitas harian TEAMWORK,
-- approval aktivitas,
-- generate performa bulanan,
-- ticketing izin/sakit/cuti,
-- leave quota,
-- review karyawan,
-- incident log,
-- evaluasi training,
-- payroll period, preview, finalisasi, paid, lock,
-- export Excel payroll,
-- payslip PDF,
+- login dan session Supabase;
+- user role management, employee login link, dan division scope;
+- personal dashboard, personal profile, account settings, dan schedule;
+- master data cabang/divisi/jabatan/grade/shift/jadwal kerja;
+- profiling karyawan dan histori perubahan;
+- katalog poin, import workbook, dan entry catalog manual;
+- aktivitas harian TEAMWORK, batch submit, approval SPV/KABAG, HRD flow;
+- generate performa bulanan;
+- ticketing izin/sakit/cuti dan leave quota;
+- review karyawan dan incident log;
+- evaluasi training;
+- payroll period, salary config, grade compensation, KPI managerial, preview, finalisasi, paid, lock;
+- export Excel payroll;
+- payslip PDF;
 - finance dashboard berbasis payroll result.
 
 ## 3. Arsitektur Singkat
 
 ```text
 User Browser
-→ Next.js App Router page / client component
-→ server action / route handler
-→ validation Zod
-→ auth + role check
-→ Drizzle query / transaction
-→ rule engine / helper service
-→ PostgreSQL
-→ response ke UI
+-> Next.js App Router page / client component
+-> server action / route handler
+-> validation Zod
+-> auth + role/scope check
+-> Drizzle query / transaction
+-> rule engine / helper service
+-> PostgreSQL
+-> response ke UI
 ```
 
 ## 4. Entry Point Utama
 
 | Area | File | Peran |
 |---|---|---|
-| Auth gate request | `src/proxy.ts` | redirect user ke `/login` atau `/dashboard` berdasarkan session Supabase |
+| Auth gate request | `src/proxy.ts` | redirect user ke `/login`, `/dashboard`, atau `/me` sesuai session |
 | Auth helper server-side | `src/lib/auth/session.ts` | `getUser`, `requireAuth`, `checkRole`, `getCurrentUserRoleRow`, `getCurrentUserRole` |
+| Permission matrix | `src/lib/permissions/index.ts` | permission helper dan test matrix |
+| User management | `src/server/actions/users.ts` | invite/update/remove access dan employee login link |
 | Koneksi database | `src/lib/db/index.ts` | inisialisasi Drizzle ke `DATABASE_URL` |
 | Definisi tabel | `src/lib/db/schema/*` | sumber kebenaran model data |
 | Boundary business logic | `src/server/actions/*` | query dan mutation yang dipanggil UI |
-| Rule engine | `src/server/point-engine/*`, `src/server/payroll-engine/*` | kalkulasi yang dipisahkan dari UI |
+| Rule engine/helper | `src/server/*-engine/*` | kalkulasi/helper yang dipisahkan dari UI |
 | Dashboard UI | `src/app/(dashboard)/*` | halaman internal setelah login |
 
 ## 5. Peta Relasi Modul
 
 ```text
+Auth/User Role
+  -> employee link + division scope
+
 Master Data
-  ↓
-Profiling Karyawan
-  ↓
-Jadwal Kerja + Divisi Snapshot + Status Kerja
-  ↓
-Performance Point / Ticketing / Review / Incident / Training
-  ↓
-Monthly Point Performance + Managerial KPI + Approved Ticket + Incident
-  ↓
-Payroll Snapshot
-  ↓
-Payroll Result + Payslip + Finance Dashboard
+  -> Employee Profiling
+  -> Work Schedule / Shift
+
+Employee Profiling
+  -> Performance Point / Ticketing / Review / Incident / Training
+
+Performance + Ticketing + Review + KPI + Adjustment
+  -> Payroll Snapshot
+  -> Payroll Result
+  -> Payslip + Export + Finance Dashboard
+
+Employee Link
+  -> /me + /me/profile + /settings + /schedule + personal payroll detail
 ```
 
 ## 6. Status Implementasi Aktual
 
 | Modul | Status | Catatan |
 |---|---|---|
-| Auth & session | ada | role check server-side ada, tetapi RLS policy tidak terlihat di repo |
-| Master data | ada | CRUD lengkap untuk branch, division, position, grade, work schedule |
+| Auth & session | ada | `src/proxy.ts`, Supabase Auth, role row, employee link, division scope |
+| User management | ada | `/users`, invite/update/remove access, employee login upsert |
+| Master data | ada | branch, division, position, grade, work schedule, shift master |
 | Employee profiling | ada | create, update, delete, histori, detail page |
-| Performance point | ada, parsial | katalognya versioned, approval ada, tetapi self-service TEAMWORK belum ada dan deadline H+1/H+2 belum dienforce |
-| Ticketing leave | ada, parsial | approval dan quota ada, tetapi self-service diblokir karena belum ada mapping `auth user -> employee` |
+| Self-service | ada | `/me`, `/me/profile`, `/settings`, `/schedule` |
+| Performance point | ada, perlu hardening | self-service TEAMWORK ada; deadline H+1/H+2 masih perlu enforcement lengkap |
+| Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
 | Review & incident | ada | review score 5 aspek, validate review, create incident |
-| Training evaluation | ada, parsial | evaluasi ada, keputusan lulus/tidak lolos ada, tetapi rule “efektif payroll berikutnya” belum diwujudkan |
-| Payroll | ada, parsial tapi cukup besar | period, snapshot, preview, finalize, paid, lock, export Excel, payslip PDF sudah ada |
+| Training evaluation | ada, gap bisnis | keputusan lulus/gagal ada; rule efektif periode payroll berikutnya belum penuh |
+| Payroll | ada, perlu hardening | period, snapshot, preview, finalize, paid, lock, export Excel, payslip PDF |
 | Finance dashboard | ada | membaca payroll result dan summary per divisi |
-| Settings | belum ada | folder ada, belum ada page |
-| `src/app/api` | belum ada API custom | hanya `.gitkeep` |
-| `src/server/review-engine` dan `src/server/ticketing-engine` | belum terpakai | folder placeholder saja |
+| Scheduler | ada | `/scheduler` route tersedia |
+| RLS policy | perlu verifikasi | tidak terlihat jelas sebagai policy lengkap di repo |
 
-## 7. Inkonsistensi Dokumen vs Code
+## 7. Inkonsistensi/Gaps Code vs Business Rules
 
-| Sumber dokumen | Catatan inkonsistensi |
+| Area | Catatan |
 |---|---|
-| `HANDOVER.md` | masih menyebut Phase 3 “belum dimulai”, padahal code aktual sudah punya schema payroll, action payroll, payslip PDF, export Excel, finance page |
-| `docs/onboarding-curriculum.md` | masih menyebut `src/middleware.ts`, padahal repo sekarang memakai `src/proxy.ts` |
-| `README.md` root | masih default Create Next App, belum mewakili project HRD Dashboard |
-| `references/business-rules.md` vs code training | dokumen meminta status reguler efektif periode payroll berikutnya, tetapi `graduateTrainee()` langsung mengubah status karyawan saat action dipanggil |
-| `references/business-rules.md` vs code performance | dokumen meminta TW input H+1 dan SPV approve H+2, tetapi `performance.ts` belum menegakkan batas waktu itu |
-| `references/business-rules.md` vs code ticketing | dokumen mendesain self-service karyawan, tetapi `createTicket()` menolak role `TEAMWORK` dan `MANAGERIAL` karena mapping auth ke employee belum tersedia |
+| RLS | Dokumentasi bisnis meminta RLS; repo lebih jelas menunjukkan server-side checks daripada policy RLS lengkap. |
+| Performance deadline | Business rules meminta TW input H+1 dan SPV approve H+2; enforcement belum lengkap di semua action. |
+| Training graduation | Business rules meminta reguler efektif payroll berikutnya; `graduateTrainee()` masih mengubah status langsung. |
+| Audit log | Payroll dan performance activity punya log kuat; ticket/review/training masih perlu audit hardening bila diminta. |
+| Payroll hardening | `next-update.md` mencatat overtime, SP quarter, structured additions/deductions, tunjangan masa kerja otomatis, dan rule lain yang belum penuh. |
 
 ## 8. Risiko Teknis Paling Penting
 
-- Repo tidak menunjukkan migration/policy RLS.
-- Mapping `auth user -> employee` belum ada, sehingga self-access TEAMWORK/MANAGERIAL belum kuat.
-- Beberapa field payroll seperti `dailyAllowanceAmount` dan `overtimeRateAmount` ada di schema/UI, tetapi preview payroll saat ini masih mengisi nominal dibayar `0`.
-- Payroll read scope tidak dibatasi per divisi. Semua role payroll yang lolos check dapat melihat seluruh data payroll.
+- Payroll adalah modul dengan blast radius tertinggi; perubahan harus disertai test engine/helper dan cek status transition.
+- Server-side scope harus dijaga untuk SPV/KABAG multi-division dan self-service employee-linked account.
+- Jangan memindahkan logic payroll/ticket quota/bonus ke client component.
+- Snapshot payroll dan snapshot master point tidak boleh rusak oleh update master data.
+- Route handler PDF/XLSX harus tetap menghormati payroll read access.
 
 ## 9. Cara Memakai Kurikulum Ini
 
@@ -130,6 +138,7 @@ Jika baru mulai memahami codebase:
 1. baca auth dan structure;
 2. baca schema;
 3. pilih satu modul;
-4. ikuti alur: page → client component → server action → schema/engine;
+4. ikuti alur: page -> client component -> server action -> schema/engine;
 5. cocokkan dengan dokumen business rules;
-6. catat gap yang muncul.
+6. catat gap yang muncul;
+7. jalankan test terkait sebelum mengubah logic sensitif.

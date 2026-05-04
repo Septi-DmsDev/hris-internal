@@ -11,7 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { batchDecideDraftActivities } from "@/server/actions/performance";
+import {
+  batchDecideDraftActivities,
+} from "@/server/actions/performance";
+import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
 
 export type SpvActivityRow = {
   id: string;
@@ -21,6 +24,8 @@ export type SpvActivityRow = {
   employeeDivisionName: string;
   workDate: string;
   externalCode: string | null;
+  jobIdSnapshot: string | null;
+  notes: string | null;
   workNameSnapshot: string;
   pointValueSnapshot: string;
   quantity: string;
@@ -241,7 +246,9 @@ export default function SPVReviewClient({ activities }: { activities: SpvActivit
                     {detailGroup.activities.map((a, idx) => (
                       <tr key={a.id} className="bg-white">
                         <td className="px-3 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
-                        <td className="px-3 py-2.5 font-mono text-xs text-slate-600">{a.externalCode ?? "—"}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-slate-600">
+                          {resolveActivityJobIdLabel(a.jobIdSnapshot, a.externalCode, a.notes)}
+                        </td>
                         <td className="px-3 py-2.5 text-slate-900">{a.workNameSnapshot}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{a.quantity}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{a.pointValueSnapshot}</td>

@@ -8,6 +8,7 @@ import {
   User,
   BarChart3,
   Ticket,
+  ClipboardCheck,
   FileCheck,
   CreditCard,
   TrendingUp,

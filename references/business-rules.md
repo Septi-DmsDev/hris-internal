@@ -2,6 +2,9 @@
 
 Dokumen ini merangkum aturan bisnis yang wajib dijaga saat membangun HRD Dashboard.
 
+> Catatan code 2026-05-04:
+> Business rules di bawah adalah sumber aturan bisnis. Jika implementasi aktual berbeda, catat sebagai gap dan jangan mengubah rule diam-diam. Gap yang diketahui: enforcement deadline H+1/H+2 belum lengkap, status lulus training di code masih langsung berubah, dan beberapa hardening payroll lanjutan masih dilacak di `next-update.md`.
+
 ## Kelompok Karyawan
 
 | Kelompok | Contoh role | Metode penilaian |
@@ -146,6 +149,11 @@ Default:
 - gaji pokok dipotong;
 - bonus fulltime tidak didapat;
 - target poin tidak dihitung jika ticket approved.
+
+Untuk form TEAMWORK:
+- field yang ditampilkan cukup jenis tiket, rentang tanggal/durasi, alasan/catatan, dan bukti bila memang diwajibkan;
+- akun self-service memakai `user_roles.employee_id` sebagai karyawan tujuan;
+- sakit lebih dari 1 hari wajib melampirkan surat dokter atau bukti pendukung lain yang valid.
 
 Untuk karyawan dengan masa kerja > 1 tahun dan punya tunjangan tahunan:
 - kuota cuti bulanan 1x;

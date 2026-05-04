@@ -721,29 +721,18 @@ export default function EmployeesTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div className="text-sm text-slate-500">
-          {options.canManage
-            ? "HRD dan Super Admin dapat menambah, mengubah, dan menghapus profil."
-            : "Role ini hanya memiliki akses baca untuk profil karyawan."}
-        </div>
-        <div className="flex gap-2">
-          <Button asChild type="button" variant="outline">
-            <Link href="/master/work-schedules">Kelola Jadwal Kerja</Link>
-          </Button>
-          {options.canManage ? (
-            <Button type="button" onClick={resetCreateDialog}>
-              Tambah Karyawan
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
       <DataTable
         data={data}
         columns={columns}
         searchKey="fullName"
         searchPlaceholder="Cari nama karyawan..."
+        toolbarSlot={
+          options.canManage ? (
+            <Button type="button" onClick={resetCreateDialog}>
+              Tambah Karyawan
+            </Button>
+          ) : undefined
+        }
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

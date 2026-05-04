@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
-import { getTeamSchedules, getScheduleOptions } from "@/server/actions/schedule";
+import { getScheduleManagementWorkspace } from "@/server/actions/schedule";
+import { getWorkShiftMasters } from "@/server/actions/work-schedules";
 import SchedulerClient from "./SchedulerClient";
 import type { UserRole } from "@/types";
 
@@ -14,9 +15,9 @@ export default async function SchedulerPage() {
     redirect("/schedule");
   }
 
-  const [teamMembers, scheduleOptions] = await Promise.all([
-    getTeamSchedules(),
-    getScheduleOptions(),
+  const [{ teamMembers, scheduleOptions }, shiftMasters] = await Promise.all([
+    getScheduleManagementWorkspace(),
+    getWorkShiftMasters(),
   ]);
 
   return (
@@ -31,6 +32,14 @@ export default async function SchedulerPage() {
       <SchedulerClient
         teamMembers={teamMembers}
         scheduleOptions={scheduleOptions}
+        shiftMasters={shiftMasters.map((row) => ({
+          id: row.id,
+          name: row.name,
+          startTime: row.startTime,
+          endTime: row.endTime,
+          isActive: row.isActive,
+        }))}
+        canBulkAssign={role === "HRD" || role === "SUPER_ADMIN"}
       />
     </div>
   );

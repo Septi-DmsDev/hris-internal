@@ -1,13 +1,13 @@
-import { getMySchedule } from "@/server/actions/schedule";
+import { getCurrentUserRoleRow } from "@/lib/auth/session";
+import { getHrdScheduleOverview, getMySchedule } from "@/server/actions/schedule";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Info, Target } from "lucide-react";
+import type { UserRole } from "@/types";
 
 const DAY_NAMES_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-
 const MONTH_NAMES = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
-
 const GRID_HEADERS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 
 const TICKET_TYPE_LABELS: Record<string, string> = {
@@ -15,7 +15,7 @@ const TICKET_TYPE_LABELS: Record<string, string> = {
   SAKIT: "Sakit",
   IZIN: "Izin",
   EMERGENCY: "Emergency",
-  SETENGAH_HARI: "½ Hari",
+  SETENGAH_HARI: "1/2 Hari",
 };
 
 const TICKET_TYPE_COLORS: Record<string, string> = {
@@ -52,73 +52,70 @@ const TICKET_STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-slate-100 text-slate-500",
 };
 
-type DayStatus = string;
-
-function getDayBg(dayStatus: DayStatus, ticketOverride: string | null): string {
+function getDayBg(dayStatus: string, ticketOverride: string | null): string {
   if (ticketOverride) {
     switch (ticketOverride) {
-      case "CUTI":        return "bg-orange-50 border-orange-200";
-      case "SAKIT":       return "bg-blue-50 border-blue-200";
-      case "IZIN":        return "bg-yellow-50 border-yellow-200";
-      case "EMERGENCY":   return "bg-red-50 border-red-200";
+      case "CUTI": return "bg-orange-50 border-orange-200";
+      case "SAKIT": return "bg-blue-50 border-blue-200";
+      case "IZIN": return "bg-yellow-50 border-yellow-200";
+      case "EMERGENCY": return "bg-red-50 border-red-200";
       case "SETENGAH_HARI": return "bg-purple-50 border-purple-200";
-      default:            return "bg-slate-50 border-slate-200";
+      default: return "bg-slate-50 border-slate-200";
     }
   }
+
   switch (dayStatus) {
-    case "KERJA":       return "bg-white border-slate-200";
-    case "OFF":         return "bg-slate-50 border-slate-200";
-    case "CUTI":        return "bg-orange-50 border-orange-200";
-    case "SAKIT":       return "bg-blue-50 border-blue-200";
-    case "IZIN":        return "bg-yellow-50 border-yellow-200";
-    case "ALPA":        return "bg-red-50 border-red-200";
+    case "KERJA": return "bg-white border-slate-200";
+    case "OFF": return "bg-slate-50 border-slate-200";
+    case "CUTI": return "bg-orange-50 border-orange-200";
+    case "SAKIT": return "bg-blue-50 border-blue-200";
+    case "IZIN": return "bg-yellow-50 border-yellow-200";
+    case "ALPA": return "bg-red-50 border-red-200";
     case "SETENGAH_HARI": return "bg-purple-50 border-purple-200";
-    default:            return "bg-white border-slate-200";
+    default: return "bg-white border-slate-200";
   }
 }
 
-function getDayLabel(dayStatus: DayStatus, ticketOverride: string | null): string | null {
+function getDayLabel(dayStatus: string, ticketOverride: string | null): string | null {
   const status = ticketOverride ?? dayStatus;
   switch (status) {
-    case "KERJA":       return null;
-    case "OFF":         return "OFF";
-    case "CUTI":        return "CUTI";
-    case "SAKIT":       return "SAKIT";
-    case "IZIN":        return "IZIN";
-    case "EMERGENCY":   return "EMRG";
-    case "ALPA":        return "ALPA";
-    case "SETENGAH_HARI": return "½ HARI";
-    default:            return status;
+    case "KERJA": return null;
+    case "OFF": return "OFF";
+    case "CUTI": return "CUTI";
+    case "SAKIT": return "SAKIT";
+    case "IZIN": return "IZIN";
+    case "EMERGENCY": return "EMRG";
+    case "ALPA": return "ALPA";
+    case "SETENGAH_HARI": return "1/2 HARI";
+    default: return status;
   }
 }
 
-function getDayLabelColor(dayStatus: DayStatus, ticketOverride: string | null): string {
+function getDayLabelColor(dayStatus: string, ticketOverride: string | null): string {
   const status = ticketOverride ?? dayStatus;
   switch (status) {
-    case "OFF":         return "text-slate-400";
-    case "CUTI":        return "text-orange-600";
-    case "SAKIT":       return "text-blue-600";
-    case "IZIN":        return "text-yellow-700";
-    case "EMERGENCY":   return "text-red-600";
-    case "ALPA":        return "text-red-500";
+    case "OFF": return "text-slate-400";
+    case "CUTI": return "text-orange-600";
+    case "SAKIT": return "text-blue-600";
+    case "IZIN": return "text-yellow-700";
+    case "EMERGENCY": return "text-red-600";
+    case "ALPA": return "text-red-500";
     case "SETENGAH_HARI": return "text-purple-600";
-    default:            return "text-slate-400";
+    default: return "text-slate-400";
   }
 }
 
-function getDotColor(dayStatus: DayStatus, ticketOverride: string | null): string {
+function getDotColor(dayStatus: string, ticketOverride: string | null): string {
   if (ticketOverride) return "";
-  if (dayStatus === "KERJA") return "bg-teal-400";
-  return "";
+  return dayStatus === "KERJA" ? "bg-teal-400" : "";
 }
 
-// dayOfWeek: 0=Sun → col6, 1=Mon → col0 … 6=Sat → col5
 function getGridOffset(dayOfWeek: number): number {
   return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 }
 
 function formatDateShort(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
+  const [, m, d] = dateStr.split("-").map(Number);
   return `${d} ${MONTH_NAMES[m - 1].slice(0, 3)}`;
 }
 
@@ -131,21 +128,54 @@ type PageProps = {
 };
 
 export default async function SchedulePage({ searchParams }: PageProps) {
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  if (role === "HRD" || role === "SUPER_ADMIN") {
+    const overview = await getHrdScheduleOverview();
+
+    return (
+      <div className="space-y-4 max-w-7xl">
+        <div>
+          <h1 className="text-lg font-bold text-slate-900">Rekap Jadwal Harian Tim</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Periode kerja {overview.periodStart} s.d. {overview.periodEnd}. Hanya shift atau izin dengan jumlah di atas 0 yang ditampilkan.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+          {overview.days.map((day) => (
+            <div key={day.date} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <p className="text-xs font-bold text-slate-900">{day.date}</p>
+              <p className="text-[11px] text-slate-500 mb-2">{day.dayName}</p>
+
+              {day.counts.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Tidak ada data</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {day.counts.map((item) => (
+                    <div key={item.key} className="text-xs flex items-center justify-between">
+                      <span className={item.kind === "SHIFT" ? "text-slate-700" : "text-amber-700"}>
+                        {item.label.toLowerCase() === "izin" ? "izin" : item.label}
+                      </span>
+                      <span className="font-semibold text-slate-900">{item.count} orang</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   const params = await searchParams;
   const now = new Date();
   const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
   const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
-
-  const safeYear = isNaN(year) ? now.getFullYear() : year;
-  const safeMonth = isNaN(month) || month < 1 || month > 12 ? now.getMonth() + 1 : month;
-
-  let prevYear = safeYear, prevMonth = safeMonth - 1;
-  if (prevMonth < 1) { prevMonth = 12; prevYear -= 1; }
-  let nextYear = safeYear, nextMonth = safeMonth + 1;
-  if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
-
-  const prevUrl = `/schedule?year=${prevYear}&month=${prevMonth}`;
-  const nextUrl = `/schedule?year=${nextYear}&month=${nextMonth}`;
+  const safeYear = Number.isNaN(year) ? now.getFullYear() : year;
+  const safeMonth = Number.isNaN(month) || month < 1 || month > 12 ? now.getMonth() + 1 : month;
 
   const result = await getMySchedule(safeYear, safeMonth);
 
@@ -165,25 +195,34 @@ export default async function SchedulePage({ searchParams }: PageProps) {
     );
   }
 
+  let prevYear = safeYear;
+  let prevMonth = safeMonth - 1;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYear -= 1;
+  }
+  let nextYear = safeYear;
+  let nextMonth = safeMonth + 1;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+
+  const prevUrl = `/schedule?year=${prevYear}&month=${prevMonth}`;
+  const nextUrl = `/schedule?year=${nextYear}&month=${nextMonth}`;
   const gridOffset = result.days.length > 0 ? getGridOffset(result.days[0].dayOfWeek) : 0;
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const todayDay = result.days.find((d) => d.date === todayStr);
 
   const prevMonthIdx = (safeMonth - 2 + 12) % 12;
   const prevMonthYear = safeMonth === 1 ? safeYear - 1 : safeYear;
-  const periodRangeLabel = `26 ${MONTH_NAMES[prevMonthIdx].slice(0, 3)}${prevMonthYear !== safeYear ? ` ${prevMonthYear}` : ""} – 25 ${MONTH_NAMES[safeMonth - 1]} ${safeYear}`;
-
+  const periodRangeLabel = `26 ${MONTH_NAMES[prevMonthIdx].slice(0, 3)}${prevMonthYear !== safeYear ? ` ${prevMonthYear}` : ""} - 25 ${MONTH_NAMES[safeMonth - 1]} ${safeYear}`;
   const remainingPoints = Math.max(0, result.periodTotalTargetPoints - result.periodApprovedPoints);
-  const targetAchieved = result.periodTotalTargetPoints > 0
-    && result.periodApprovedPoints >= result.periodTotalTargetPoints;
+  const targetAchieved = result.periodTotalTargetPoints > 0 && result.periodApprovedPoints >= result.periodTotalTargetPoints;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5 max-w-7xl items-start">
-
-      {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4">
-
-        {/* JADWAL HARI INI */}
         <section className="rounded-xl border-2 border-red-200 bg-gradient-to-br from-red-50 to-rose-50/60 p-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-red-400 mb-3 flex items-center gap-1.5">
             <Clock size={11} />
@@ -200,24 +239,19 @@ export default async function SchedulePage({ searchParams }: PageProps) {
               </p>
 
               {todayDay.ticketOverride ? (
-                <div className="space-y-1">
-                  <span className={`inline-block px-3 py-1 rounded-lg text-xs font-bold ${TICKET_TYPE_COLORS[todayDay.ticketOverride] ?? "bg-slate-100 text-slate-600"}`}>
-                    {TICKET_TYPE_LABELS[todayDay.ticketOverride] ?? todayDay.ticketOverride}
-                  </span>
-                </div>
+                <span className={`inline-block px-3 py-1 rounded-lg text-xs font-bold ${TICKET_TYPE_COLORS[todayDay.ticketOverride] ?? "bg-slate-100 text-slate-600"}`}>
+                  {TICKET_TYPE_LABELS[todayDay.ticketOverride] ?? todayDay.ticketOverride}
+                </span>
               ) : todayDay.dayStatus === "KERJA" ? (
                 <div className="space-y-1">
                   {todayDay.startTime && todayDay.endTime && (
                     <p className="text-2xl font-extrabold text-red-900 tracking-tight">
-                      {todayDay.startTime} – {todayDay.endTime}
+                      {todayDay.startTime} - {todayDay.endTime}
                     </p>
                   )}
                   {todayDay.targetPoints > 0 && (
                     <p className="text-sm text-red-500">
-                      Target:{" "}
-                      <span className="font-bold text-red-800">
-                        {todayDay.targetPoints.toLocaleString("id-ID")} poin
-                      </span>
+                      Target: <span className="font-bold text-red-800">{todayDay.targetPoints.toLocaleString("id-ID")} poin</span>
                     </p>
                   )}
                 </div>
@@ -232,7 +266,6 @@ export default async function SchedulePage({ searchParams }: PageProps) {
           )}
         </section>
 
-        {/* TARGET POIN HARI INI */}
         <section className="rounded-xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50/60 p-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-orange-400 mb-3 flex items-center gap-1.5">
             <Target size={11} />
@@ -256,15 +289,11 @@ export default async function SchedulePage({ searchParams }: PageProps) {
               <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-orange-500">Sisa dibutuhkan</span>
-                  <span className="font-bold text-red-700">
-                    {formatNum(remainingPoints)} poin
-                  </span>
+                  <span className="font-bold text-red-700">{formatNum(remainingPoints)} poin</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-orange-500">Sisa hari kerja</span>
-                  <span className="font-bold text-orange-900">
-                    {result.remainingWorkingDays} hari
-                  </span>
+                  <span className="font-bold text-orange-900">{result.remainingWorkingDays} hari</span>
                 </div>
               </div>
             </>
@@ -273,7 +302,6 @@ export default async function SchedulePage({ searchParams }: PageProps) {
           )}
         </section>
 
-        {/* HISTORY PERIZINAN */}
         <section className="rounded-xl border border-slate-200/80 bg-white p-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
             Riwayat Perizinan
@@ -295,7 +323,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
                   </div>
                   <p className="text-xs font-semibold text-slate-700">
                     {formatDateShort(ticket.startDate)}
-                    {ticket.startDate !== ticket.endDate && ` – ${formatDateShort(ticket.endDate)}`}
+                    {ticket.startDate !== ticket.endDate && ` - ${formatDateShort(ticket.endDate)}`}
                     <span className="font-normal text-slate-400 ml-1">({ticket.daysCount} hari)</span>
                   </p>
                   {ticket.reason && (
@@ -306,13 +334,9 @@ export default async function SchedulePage({ searchParams }: PageProps) {
             </div>
           )}
         </section>
-
       </div>
 
-      {/* ── RIGHT: JADWAL BULAN INI ──────────────────────────────────────── */}
       <div className="flex flex-col gap-4">
-
-        {/* Header: info karyawan + navigasi bulan */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -320,8 +344,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
               <h1 className="text-lg font-bold text-slate-900">Jadwal Bulan Ini</h1>
             </div>
             <p className="text-sm text-slate-500">
-              {result.employeeName} ·{" "}
-              <span className="font-semibold text-slate-700">{result.scheduleName}</span>{" "}
+              {result.employeeName} · <span className="font-semibold text-slate-700">{result.scheduleName}</span>{" "}
               <span className="text-xs text-slate-400 font-mono">({result.scheduleCode})</span>
             </p>
           </div>
@@ -348,28 +371,18 @@ export default async function SchedulePage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        {/* Kalender grid */}
         <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-          {/* Header kolom */}
           <div className="grid grid-cols-7 border-b border-slate-100">
             {GRID_HEADERS.map((day) => (
-              <div
-                key={day}
-                className="py-1.5 text-center text-xs font-bold uppercase tracking-wide text-slate-400 border-r border-slate-100 last:border-r-0"
-              >
+              <div key={day} className="py-1.5 text-center text-xs font-bold uppercase tracking-wide text-slate-400 border-r border-slate-100 last:border-r-0">
                 {day}
               </div>
             ))}
           </div>
 
-          {/* Sel-sel hari */}
           <div className="grid grid-cols-7">
-            {/* Sel kosong untuk offset */}
             {Array.from({ length: gridOffset }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                className="min-h-[60px] border-r border-b border-slate-100 last:border-r-0 bg-slate-50/50"
-              />
+              <div key={`empty-${i}`} className="min-h-[60px] border-r border-b border-slate-100 last:border-r-0 bg-slate-50/50" />
             ))}
 
             {result.days.map((day) => {
@@ -409,7 +422,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
 
                   {day.dayStatus === "KERJA" && !day.ticketOverride && day.startTime && day.endTime && (
                     <span className="block text-[10px] text-slate-400 mt-0.5 leading-tight">
-                      {day.startTime}–{day.endTime}
+                      {day.startTime}-{day.endTime}
                     </span>
                   )}
 
@@ -424,19 +437,18 @@ export default async function SchedulePage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        {/* Legenda */}
         <div className="flex flex-wrap gap-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 self-center">
             Keterangan:
           </p>
           {[
-            { label: "Kerja",     bg: "bg-white border-slate-200",    dot: "bg-teal-400" },
-            { label: "OFF",       bg: "bg-slate-50 border-slate-200", dot: "" },
-            { label: "Cuti",      bg: "bg-orange-50 border-orange-200", dot: "" },
-            { label: "Sakit",     bg: "bg-blue-50 border-blue-200",   dot: "" },
-            { label: "Izin",      bg: "bg-yellow-50 border-yellow-200", dot: "" },
-            { label: "Emergency", bg: "bg-red-50 border-red-200",     dot: "" },
-            { label: "½ Hari",    bg: "bg-purple-50 border-purple-200", dot: "" },
+            { label: "Kerja", bg: "bg-white border-slate-200", dot: "bg-teal-400" },
+            { label: "OFF", bg: "bg-slate-50 border-slate-200", dot: "" },
+            { label: "Cuti", bg: "bg-orange-50 border-orange-200", dot: "" },
+            { label: "Sakit", bg: "bg-blue-50 border-blue-200", dot: "" },
+            { label: "Izin", bg: "bg-yellow-50 border-yellow-200", dot: "" },
+            { label: "Emergency", bg: "bg-red-50 border-red-200", dot: "" },
+            { label: "1/2 Hari", bg: "bg-purple-50 border-purple-200", dot: "" },
           ].map(({ label, bg, dot }) => (
             <div key={label} className="flex items-center gap-1.5">
               <div className={`w-4 h-4 rounded border ${bg} flex items-center justify-center`}>
@@ -446,7 +458,6 @@ export default async function SchedulePage({ searchParams }: PageProps) {
             </div>
           ))}
         </div>
-
       </div>
     </div>
   );

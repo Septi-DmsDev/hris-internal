@@ -1,6 +1,7 @@
 const DB_CONNECTION_ERROR_CODES = new Set([
   "ECONNREFUSED",
   "ENOTFOUND",
+  "EAI_AGAIN",
   "EHOSTUNREACH",
   "ETIMEDOUT",
   "ECONNRESET",
@@ -9,6 +10,7 @@ const DB_CONNECTION_ERROR_CODES = new Set([
 const DB_CONNECTION_ERROR_PATTERNS = [
   "connect econnrefused",
   "getaddrinfo enotfound",
+  "getaddrinfo eai_again",
   "connect etimedout",
   "connection terminated unexpectedly",
   "write econnreset",

@@ -35,7 +35,7 @@ export default async function DashboardLayout({
   }
 
   if (!userRoleRow) {
-    redirect("/login");
+    redirect("/account-pending");
   }
 
   const role = userRoleRow.role;

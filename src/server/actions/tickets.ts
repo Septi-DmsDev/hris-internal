@@ -14,7 +14,7 @@ import { resolveLeaveQuotaEligibility } from "@/server/ticketing-engine/resolve-
 
 const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "KABAG"];
 const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["KABAG", "SPV", "MANAGERIAL", "FINANCE", "TEAMWORK", "PAYROLL_VIEWER"];
-const TICKET_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"];
+const TICKET_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"];
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 const SPV_REVIEW_SUBMITTER_ROLES: UserRole[] = ["TEAMWORK"];
 const DIRECT_HRD_SUBMITTER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "KABAG", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"];
@@ -115,6 +115,11 @@ export async function createTicket(input: unknown) {
   const user = await getUser();
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
+
+  if (role === "HRD") {
+    return { error: "HRD tidak dapat membuat pengajuan tiket." };
+  }
+
   let employeeId = parsed.data.employeeId;
 
   if (SELF_SERVICE_TICKET_ROLES.includes(role) || (!employeeId && roleRow.employeeId)) {

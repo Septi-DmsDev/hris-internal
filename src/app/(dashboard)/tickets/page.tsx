@@ -1,12 +1,19 @@
 import { format } from "date-fns";
+import { redirect } from "next/navigation";
 import { getTickets } from "@/server/actions/tickets";
 import TicketingClient from "./TicketingClient";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import type { UserRole } from "@/types";
 
 export default async function TicketingPage() {
-  const { role, tickets } = await getTickets();
   const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  if (role === "HRD") {
+    redirect("/ticketingapproval");
+  }
+
+  const { tickets } = await getTickets();
 
   const ticketRows = tickets.map((t) => ({
     ...t,
@@ -25,7 +32,7 @@ export default async function TicketingPage() {
   return (
     <div className="space-y-4">
       <TicketingClient
-        role={role as UserRole}
+        role={role}
         hasEmployeeLink={Boolean(roleRow.employeeId)}
         tickets={ticketRows}
       />

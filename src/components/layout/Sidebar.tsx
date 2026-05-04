@@ -36,7 +36,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Saya",
     href: "/me",
     icon: User,
-    roles: ["HRD", "KABAG", "FINANCE", "PAYROLL_VIEWER"],
+    roles: ["KABAG", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
   },
   {
@@ -64,7 +64,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Ticketing",
     href: "/tickets",
     icon: Ticket,
-    roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"],
+    roles: ["SUPER_ADMIN", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
   },
   {
@@ -99,14 +99,14 @@ const NAV_ITEMS: NavItem[] = [
     label: "Payroll",
     href: "/payroll",
     icon: CreditCard,
-    roles: ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"],
+    roles: ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
   },
   {
     label: "Finance",
     href: "/finance",
     icon: TrendingUp,
-    roles: ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"],
+    roles: ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
   },
   {

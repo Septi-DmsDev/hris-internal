@@ -46,8 +46,8 @@ import { revalidatePath } from "next/cache";
 import type { PayrollAdjustmentType, PayrollPeriodStatus, UserRole } from "@/types";
 import { canReadPayrollEmployeeDetail } from "./payroll.helpers";
 
-const PAYROLL_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "FINANCE", "PAYROLL_VIEWER"];
-const PAYROLL_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "FINANCE"];
+const PAYROLL_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWER"];
+const PAYROLL_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE"];
 const APPROVED_TICKET_STATUSES = ["AUTO_APPROVED", "APPROVED_SPV", "APPROVED_HRD"] as const;
 const LOCKABLE_ACTIVITY_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD"] as const;
 

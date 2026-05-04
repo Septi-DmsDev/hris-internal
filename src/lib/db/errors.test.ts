@@ -10,6 +10,9 @@ describe("database error helpers", () => {
     expect(
       isDatabaseConnectionError({ code: "ECONNREFUSED", message: "failed" }),
     ).toBe(true);
+    expect(
+      isDatabaseConnectionError({ code: "EAI_AGAIN", message: "dns lookup failed" }),
+    ).toBe(true);
   });
 
   it("mendeteksi error koneksi berdasarkan message", () => {

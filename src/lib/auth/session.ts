@@ -58,7 +58,7 @@ export async function getCurrentUserRoleRow(): Promise<RoleRow> {
     throw error;
   }
 
-  if (rows.length === 0) redirect("/login");
+  if (rows.length === 0) redirect("/account-pending");
 
   const baseRow = {
     id: rows[0].id,

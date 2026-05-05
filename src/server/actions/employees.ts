@@ -12,16 +12,19 @@ import {
   workSchedules,
 } from "@/lib/db/schema/employee";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
+import { upsertEmployeeLogin } from "@/server/actions/users";
 import {
   checkRole,
   getCurrentUserRole,
   getCurrentUserRoleRow,
   requireAuth,
 } from "@/lib/auth/session";
+import { userRoles } from "@/lib/db/schema/auth";
 import { employeeSchema, type EmployeeInput } from "@/lib/validations/employee";
 import { aliasedTable, asc, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import * as XLSX from "xlsx";
 import type { UserRole } from "@/types";
 
 const EMPLOYEE_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "FINANCE"];
@@ -107,12 +110,21 @@ function oneDayBefore(date: Date) {
   return previousDay;
 }
 
-function toEmployeeRecord(input: EmployeeInput) {
+type EmployeePersistInput = Omit<EmployeeInput, "supervisorEmployeeId"> & {
+  supervisorEmployeeId?: string | null;
+};
+
+function toEmployeeRecord(input: EmployeePersistInput) {
   return {
     employeeCode: input.employeeCode,
     fullName: input.fullName,
     nickname: input.nickname,
     photoUrl: input.photoUrl,
+    birthPlace: input.birthPlace,
+    birthDate: input.birthDate,
+    gender: input.gender,
+    religion: input.religion,
+    maritalStatus: input.maritalStatus,
     phoneNumber: input.phoneNumber,
     address: input.address,
     startDate: input.startDate,
@@ -124,11 +136,160 @@ function toEmployeeRecord(input: EmployeeInput) {
     employeeGroup: input.employeeGroup,
     employmentStatus: input.employmentStatus,
     payrollStatus: input.payrollStatus,
-    supervisorEmployeeId: input.supervisorEmployeeId,
+    supervisorEmployeeId: input.supervisorEmployeeId ?? undefined,
     trainingGraduationDate: input.trainingGraduationDate,
     isActive: input.isActive,
     notes: input.notes,
   };
+}
+
+function normalizeImportHeader(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, " ").replace(/\./g, "").replace(/_/g, " ");
+}
+
+function normalizeImportEmail(username: string): string {
+  const value = username.trim().toLowerCase();
+  if (!value) return "";
+  if (value.includes("@")) return value;
+  return `${value.replace(/\s+/g, ".")}@hris.internal`;
+}
+
+function normalizeImportEmployeeCode(username: string): string {
+  const base = username.trim().split("@")[0] || username.trim();
+  return base.replace(/\s+/g, "_").toUpperCase().slice(0, 30);
+}
+
+function matchBranchId(branchRows: Array<{ id: string; name: string }>, rawBranchName: string) {
+  const normalized = normalizeImportHeader(rawBranchName);
+  const exact = branchRows.find((branch) => normalizeImportHeader(branch.name) === normalized);
+  if (exact) return exact.id;
+
+  const fuzzy = branchRows.find((branch) => {
+    const normalizedBranch = normalizeImportHeader(branch.name);
+    return normalizedBranch.includes(normalized) || normalized.includes(normalizedBranch);
+  });
+  if (fuzzy) return fuzzy.id;
+
+  return branchRows.length === 1 ? branchRows[0]?.id ?? null : null;
+}
+
+function parseImportDate(value: unknown): Date | undefined {
+  if (value instanceof Date) return startOfDay(value);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return undefined;
+    return startOfDay(new Date(parsed.y, parsed.m - 1, parsed.d));
+  }
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return startOfDay(new Date(Number(y), Number(m) - 1, Number(d)));
+  }
+  const slashMatch = normalized.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+  if (slashMatch) {
+    const [, d, m, y] = slashMatch;
+    return startOfDay(new Date(Number(y), Number(m) - 1, Number(d)));
+  }
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return startOfDay(parsed);
+}
+
+
+function parseImportGender(value: unknown): string | undefined {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (!normalized) return undefined;
+  if (["L", "LAKI-LAKI", "LAKI LAKI", "PRIA", "MALE"].includes(normalized)) return "Laki-laki";
+  if (["P", "PEREMPUAN", "WANITA", "FEMALE"].includes(normalized)) return "Perempuan";
+  return String(value).trim() || undefined;
+}
+
+function unwrapDbError(error: unknown) {
+  let current = error as {
+    code?: string;
+    message?: string;
+    detail?: string;
+    constraint?: string;
+    cause?: unknown;
+  };
+
+  for (let depth = 0; depth < 4 && current?.cause; depth += 1) {
+    current = current.cause as typeof current;
+  }
+
+  return {
+    code: current?.code,
+    message: current?.message,
+    detail: current?.detail,
+    constraint: current?.constraint,
+  };
+}
+
+async function persistEmployeeRecord(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  input: EmployeePersistInput
+) {
+  const effectiveDate = input.effectiveDate ?? input.startDate;
+  const [employee] = await tx
+    .insert(employees)
+    .values(toEmployeeRecord(input))
+    .returning({ id: employees.id });
+
+  await tx.insert(employeeDivisionHistories).values({
+    employeeId: employee.id,
+    previousDivisionId: null,
+    newDivisionId: input.divisionId,
+    effectiveDate,
+    notes: "Data awal karyawan",
+  });
+
+  await tx.insert(employeePositionHistories).values({
+    employeeId: employee.id,
+    previousPositionId: null,
+    newPositionId: input.positionId,
+    effectiveDate,
+    notes: "Data awal karyawan",
+  });
+
+  await tx.insert(employeeGradeHistories).values({
+    employeeId: employee.id,
+    previousGradeId: null,
+    newGradeId: input.gradeId,
+    effectiveDate,
+    notes: "Data awal karyawan",
+  });
+
+  await tx.insert(employeeSupervisorHistories).values({
+    employeeId: employee.id,
+    previousSupervisorEmployeeId: null,
+    newSupervisorEmployeeId: input.supervisorEmployeeId ?? null,
+    effectiveDate,
+    notes: "Data awal karyawan",
+  });
+
+  await tx.insert(employeeStatusHistories).values({
+    employeeId: employee.id,
+    previousEmploymentStatus: null,
+    newEmploymentStatus: input.employmentStatus,
+    previousPayrollStatus: null,
+    newPayrollStatus: input.payrollStatus,
+    effectiveDate,
+    notes: "Status awal karyawan",
+  });
+
+  if (input.scheduleId) {
+    await tx.insert(employeeScheduleAssignments).values({
+      employeeId: employee.id,
+      scheduleId: input.scheduleId,
+      effectiveStartDate: effectiveDate,
+      notes: "Jadwal awal karyawan",
+    });
+  }
+
+  return employee.id;
 }
 
 export async function getEmployees() {
@@ -406,76 +567,244 @@ export async function createEmployee(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? "Input karyawan tidak valid." };
   }
 
-  const effectiveDate = parsed.data.effectiveDate ?? parsed.data.startDate;
-  const employeeValues = toEmployeeRecord(parsed.data);
-
   try {
-    await db.transaction(async (tx) => {
-      const [employee] = await tx
-        .insert(employees)
-        .values(employeeValues)
-        .returning({ id: employees.id });
-
-      await tx.insert(employeeDivisionHistories).values({
-        employeeId: employee.id,
-        previousDivisionId: null,
-        newDivisionId: parsed.data.divisionId,
-        effectiveDate,
-        notes: "Data awal karyawan",
-      });
-
-      await tx.insert(employeePositionHistories).values({
-        employeeId: employee.id,
-        previousPositionId: null,
-        newPositionId: parsed.data.positionId,
-        effectiveDate,
-        notes: "Data awal karyawan",
-      });
-
-      await tx.insert(employeeGradeHistories).values({
-        employeeId: employee.id,
-        previousGradeId: null,
-        newGradeId: parsed.data.gradeId,
-        effectiveDate,
-        notes: "Data awal karyawan",
-      });
-
-      await tx.insert(employeeSupervisorHistories).values({
-        employeeId: employee.id,
-        previousSupervisorEmployeeId: null,
-        newSupervisorEmployeeId: parsed.data.supervisorEmployeeId ?? null,
-        effectiveDate,
-        notes: "Data awal karyawan",
-      });
-
-      await tx.insert(employeeStatusHistories).values({
-        employeeId: employee.id,
-        previousEmploymentStatus: null,
-        newEmploymentStatus: parsed.data.employmentStatus,
-        previousPayrollStatus: null,
-        newPayrollStatus: parsed.data.payrollStatus,
-        effectiveDate,
-        notes: "Status awal karyawan",
-      });
-
-      if (parsed.data.scheduleId) {
-        await tx.insert(employeeScheduleAssignments).values({
-          employeeId: employee.id,
-          scheduleId: parsed.data.scheduleId,
-          effectiveStartDate: effectiveDate,
-          notes: "Jadwal awal karyawan",
-        });
-      }
+    const result = await db.transaction(async (tx) => {
+      return persistEmployeeRecord(tx, parsed.data);
     });
+
+    revalidatePath("/employees");
+    return { success: true, employeeId: result };
   } catch (error) {
-    const code = (error as { code?: string }).code;
+    const { code, message, detail, constraint } = unwrapDbError(error);
     if (code === "23505") return { error: "ID karyawan sudah digunakan, pakai kode lain." };
     if (code === "23503") return { error: "Referensi karyawan tidak valid atau sudah tidak aktif." };
-    throw error;
+    throw new Error([message, detail, constraint].filter(Boolean).join(" | ") || "Gagal membuat data karyawan.");
+  }
+}
+
+type ImportOutcome = {
+  rowNumber: number;
+  name: string;
+  success: boolean;
+  message?: string;
+};
+
+export async function importEmployeesFromXlsx(formData: FormData) {
+  const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const file = formData.get("file") as File | null;
+  if (!file || file.size === 0) return { error: "File xlsx tidak ditemukan." };
+
+  let rows: unknown[][];
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
+  } catch {
+    return { error: "Gagal membaca file xlsx. Pastikan format file valid." };
+  }
+
+  if (rows.length < 2) return { error: "File tidak memiliki data." };
+
+  const header = (rows[0] as unknown[]).map((value) => normalizeImportHeader(String(value ?? "")));
+  const cabangIdx = header.findIndex((value) => value === "CABANG");
+  const namaIdx = header.findIndex((value) => value === "NAMA");
+  const usernameIdx = header.findIndex((value) => value === "USERNAME");
+  const passwordIdx = header.findIndex((value) => value === "PASSWORD");
+  const tempatLahirIdx = header.findIndex((value) => value === "TEMPAT LAHIR");
+  const tglLahirIdx = header.findIndex((value) => value === "TGL LAHIR");
+  const jenisKelaminIdx = header.findIndex((value) => value === "JENIS KELAMIN");
+  const agamaIdx = header.findIndex((value) => value === "AGAMA");
+  const statusIdx = header.findIndex((value) => value === "STATUS");
+  const alamatIdx = header.findIndex((value) => value === "ALAMAT");
+  const noTelpIdx = header.findIndex((value) => value === "NO TELP");
+  const masukKerjaIdx = header.findIndex((value) => value === "MASUK KERJA");
+  const lolosTrainingIdx = header.findIndex((value) => value === "LOLOS TRAINING");
+
+  if (cabangIdx === -1 || namaIdx === -1 || usernameIdx === -1 || passwordIdx === -1 || masukKerjaIdx === -1) {
+    return {
+      error:
+        "Header kolom tidak sesuai. Pastikan ada kolom: CABANG, NAMA, Username, Password, MASUK KERJA.",
+    };
+  }
+
+  const [branchRows, divisionRows, positionRows, gradeRows, supervisorRows] = await Promise.all([
+    db
+      .select({ id: branches.id, name: branches.name })
+      .from(branches)
+      .where(eq(branches.isActive, true))
+      .orderBy(asc(branches.name)),
+    db
+      .select({ id: divisions.id, branchId: divisions.branchId })
+      .from(divisions)
+      .where(eq(divisions.isActive, true))
+      .orderBy(asc(divisions.name)),
+    db
+      .select({ id: positions.id, employeeGroup: positions.employeeGroup })
+      .from(positions)
+      .where(eq(positions.isActive, true))
+      .orderBy(asc(positions.name)),
+    db
+      .select({ id: grades.id })
+      .from(grades)
+      .where(eq(grades.isActive, true))
+      .orderBy(asc(grades.name)),
+    db
+      .select({ id: employees.id, employeeGroup: employees.employeeGroup })
+      .from(employees)
+      .where(eq(employees.isActive, true))
+      .orderBy(asc(employees.fullName)),
+  ]);
+
+  const divisionByBranchId = new Map(
+    divisionRows
+      .filter((division): division is { id: string; branchId: string | null } => Boolean(division.id))
+      .map((division) => [division.branchId ?? "__global__", division.id] as const)
+  );
+  const fallbackDivisionId = divisionRows[0]?.id ?? null;
+  const fallbackPosition =
+    positionRows.find((position) => position.employeeGroup === "TEAMWORK") ?? positionRows[0] ?? null;
+  const fallbackGradeId = gradeRows[0]?.id ?? null;
+  const fallbackSupervisorEmployeeId =
+    supervisorRows.find((employee) => employee.employeeGroup === "MANAGERIAL")?.id ?? null;
+  const importEmployeeGroup = "TEAMWORK" as const;
+
+  if (!fallbackDivisionId || !fallbackPosition || !fallbackGradeId) {
+    return {
+      error:
+        "Master data belum lengkap. Pastikan ada divisi, jabatan, dan grade aktif sebelum import.",
+    };
+  }
+  const outcomes: ImportOutcome[] = [];
+  let importedEmployees = 0;
+  let importedLogins = 0;
+
+  for (let index = 1; index < rows.length; index += 1) {
+    const row = rows[index] as unknown[];
+    const rowNumber = index + 1;
+    const branchName = String(row[cabangIdx] ?? "").trim();
+    const fullName = String(row[namaIdx] ?? "").trim();
+    const username = String(row[usernameIdx] ?? "").trim();
+    const password = String(row[passwordIdx] ?? "").trim();
+    const branchId = matchBranchId(branchRows, branchName);
+
+    if (!branchName || !fullName || !username || !password) {
+      outcomes.push({ rowNumber, name: fullName || "-", success: false, message: "Kolom wajib belum lengkap." });
+      continue;
+    }
+
+    if (!branchId) {
+      outcomes.push({ rowNumber, name: fullName, success: false, message: `Cabang "${branchName}" tidak ditemukan.` });
+      continue;
+    }
+
+    const startDate = parseImportDate(row[masukKerjaIdx]);
+    if (!startDate) {
+      outcomes.push({ rowNumber, name: fullName, success: false, message: "Tanggal masuk kerja tidak valid." });
+      continue;
+    }
+
+    // LOLOS TRAINING di Excel adalah tanggal lulus training (bukan boolean)
+    const trainingGraduationDate = lolosTrainingIdx >= 0 ? parseImportDate(row[lolosTrainingIdx]) : undefined;
+    const trainingPassed = Boolean(trainingGraduationDate);
+    const employmentStatus: EmployeeInput["employmentStatus"] = trainingPassed ? "REGULER" : "TRAINING";
+    const payrollStatus: EmployeeInput["payrollStatus"] = trainingPassed ? "REGULER" : "TRAINING";
+
+    const divisionId = divisionByBranchId.get(branchId) ?? fallbackDivisionId;
+    const employeeInput: EmployeePersistInput = {
+      employeeCode: normalizeImportEmployeeCode(username),
+      fullName,
+      nickname: undefined,
+      photoUrl: undefined,
+      // Data diri: dipetakan ke kolom DB yang sebenarnya
+      birthPlace: tempatLahirIdx >= 0 ? (String(row[tempatLahirIdx] ?? "").trim() || undefined) : undefined,
+      birthDate: tglLahirIdx >= 0 ? parseImportDate(row[tglLahirIdx]) : undefined,
+      gender: jenisKelaminIdx >= 0 ? (parseImportGender(row[jenisKelaminIdx]) || undefined) : undefined,
+      religion: agamaIdx >= 0 ? (String(row[agamaIdx] ?? "").trim() || undefined) : undefined,
+      // STATUS di Excel adalah status pernikahan (bukan employment status)
+      maritalStatus: statusIdx >= 0 ? (String(row[statusIdx] ?? "").trim() || undefined) : undefined,
+      phoneNumber: noTelpIdx >= 0 ? (String(row[noTelpIdx] ?? "").trim() || undefined) : undefined,
+      address: alamatIdx >= 0 ? (String(row[alamatIdx] ?? "").trim() || undefined) : undefined,
+      startDate,
+      branchId,
+      divisionId,
+      positionId: fallbackPosition.id,
+      jobdesk: undefined,
+      gradeId: fallbackGradeId,
+      scheduleId: undefined,
+      employeeGroup: importEmployeeGroup,
+      employmentStatus,
+      payrollStatus,
+      supervisorEmployeeId: fallbackSupervisorEmployeeId,
+      effectiveDate: startDate,
+      trainingGraduationDate,
+      isActive: true,
+      notes: undefined,
+    };
+
+    let employeeId: string;
+    try {
+      employeeId = await db.transaction(async (tx) => persistEmployeeRecord(tx, employeeInput));
+    } catch (error) {
+      const dbError = unwrapDbError(error);
+      const details = [dbError.message, dbError.detail, dbError.constraint].filter(Boolean).join(" | ");
+      outcomes.push({
+        rowNumber,
+        name: fullName,
+        success: false,
+        message:
+          dbError.code === "23505"
+            ? "ID karyawan atau data unik sudah dipakai."
+            : dbError.code === "23503"
+              ? "Referensi master tidak valid."
+            : details || "Gagal membuat data karyawan.",
+      });
+      continue;
+    }
+
+    importedEmployees += 1;
+
+    const loginEmail = normalizeImportEmail(username);
+    const loginResult = await upsertEmployeeLogin({
+      employeeId,
+      email: loginEmail,
+      password,
+      role: importEmployeeGroup,
+    });
+    if (loginResult && "error" in loginResult) {
+      outcomes.push({
+        rowNumber,
+        name: fullName,
+        success: false,
+        message: `Data karyawan tersimpan, tetapi akun login gagal: ${loginResult.error}`,
+      });
+      continue;
+    }
+
+    importedLogins += 1;
+    outcomes.push({ rowNumber, name: fullName, success: true });
+  }
+
+  if (importedEmployees === 0) {
+    const firstFailure = outcomes.find((outcome) => !outcome.success);
+    return {
+      error: firstFailure
+        ? `Tidak ada data berhasil diimpor. Baris ${firstFailure.rowNumber} (${firstFailure.name}): ${firstFailure.message}`
+        : "Tidak ada data berhasil diimpor.",
+      outcomes,
+    };
   }
 
   revalidatePath("/employees");
-  return { success: true };
+
+  return {
+    success: true,
+    importedEmployees,
+    importedLogins,
+    outcomes,
+  };
 }
 
 export async function updateEmployee(id: string, input: unknown) {
@@ -610,7 +939,34 @@ export async function deleteEmployee(id: string) {
   const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
   if (authError) return authError;
 
-  await db.delete(employees).where(eq(employees.id, id));
+  const [existing] = await db
+    .select({
+      id: employees.id,
+      isActive: employees.isActive,
+    })
+    .from(employees)
+    .where(eq(employees.id, id))
+    .limit(1);
+
+  if (!existing) {
+    return { error: "Data karyawan tidak ditemukan." };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(userRoles)
+      .set({ employeeId: null })
+      .where(eq(userRoles.employeeId, id));
+
+    await tx
+      .update(employees)
+      .set({
+        isActive: false,
+        employmentStatus: "NONAKTIF",
+        payrollStatus: "NONAKTIF",
+      })
+      .where(eq(employees.id, id));
+  });
 
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);

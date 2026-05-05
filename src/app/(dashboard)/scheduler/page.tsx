@@ -21,14 +21,7 @@ export default async function SchedulerPage() {
   ]);
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div>
-        <h1 className="text-lg font-bold text-slate-900">Atur Jadwal Tim</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Tetapkan jadwal kerja untuk anggota tim. Jadwal aktif ditampilkan per karyawan.
-        </p>
-      </div>
-
+    <div className="max-w-6xl">
       <SchedulerClient
         teamMembers={teamMembers}
         scheduleOptions={scheduleOptions}

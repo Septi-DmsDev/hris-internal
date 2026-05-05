@@ -2,6 +2,7 @@ import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import { getHrdScheduleOverview, getMySchedule } from "@/server/actions/schedule";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Info, Target } from "lucide-react";
 import type { UserRole } from "@/types";
+import HrdScheduleOverviewClient from "./HrdScheduleOverviewClient";
 
 const DAY_NAMES_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 const MONTH_NAMES = [
@@ -134,40 +135,7 @@ export default async function SchedulePage({ searchParams }: PageProps) {
   if (role === "HRD" || role === "SUPER_ADMIN") {
     const overview = await getHrdScheduleOverview();
 
-    return (
-      <div className="space-y-4 max-w-7xl">
-        <div>
-          <h1 className="text-lg font-bold text-slate-900">Rekap Jadwal Harian Tim</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Periode kerja {overview.periodStart} s.d. {overview.periodEnd}. Hanya shift atau izin dengan jumlah di atas 0 yang ditampilkan.
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-          {overview.days.map((day) => (
-            <div key={day.date} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <p className="text-xs font-bold text-slate-900">{day.date}</p>
-              <p className="text-[11px] text-slate-500 mb-2">{day.dayName}</p>
-
-              {day.counts.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">Tidak ada data</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {day.counts.map((item) => (
-                    <div key={item.key} className="text-xs flex items-center justify-between">
-                      <span className={item.kind === "SHIFT" ? "text-slate-700" : "text-amber-700"}>
-                        {item.label.toLowerCase() === "izin" ? "izin" : item.label}
-                      </span>
-                      <span className="font-semibold text-slate-900">{item.count} orang</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <HrdScheduleOverviewClient overview={overview} />;
   }
 
   const params = await searchParams;

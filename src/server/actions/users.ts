@@ -219,6 +219,10 @@ const employeeLoginSchema = z.object({
   employeeId: z.string().uuid(),
   email: z.string().email("Email tidak valid"),
   password: z.string().min(8, "Password minimal 8 karakter").optional(),
+  role: z.enum([
+    "SUPER_ADMIN", "HRD", "KABAG", "SPV",
+    "MANAGERIAL", "FINANCE", "TEAMWORK", "PAYROLL_VIEWER",
+  ]).optional(),
 });
 
 export async function upsertEmployeeLogin(input: unknown) {
@@ -229,7 +233,7 @@ export async function upsertEmployeeLogin(input: unknown) {
   const parsed = employeeLoginSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const { employeeId, email, password } = parsed.data;
+  const { employeeId, email, password, role } = parsed.data;
   const admin = createAdminClient();
 
   const [existing] = await db
@@ -243,6 +247,9 @@ export async function upsertEmployeeLogin(input: unknown) {
     if (password) updates.password = password;
     const { error } = await admin.auth.admin.updateUserById(existing.userId, updates);
     if (error) return { error: error.message };
+    if (role) {
+      await db.update(userRoles).set({ role }).where(eq(userRoles.employeeId, employeeId));
+    }
   } else {
     if (!password) return { error: "Password wajib diisi untuk akun baru." };
     const { data, error } = await admin.auth.admin.createUser({
@@ -253,7 +260,7 @@ export async function upsertEmployeeLogin(input: unknown) {
     if (error) return { error: error.message };
     await db
       .insert(userRoles)
-      .values({ userId: data.user.id, role: "TEAMWORK", employeeId })
+      .values({ userId: data.user.id, role: role ?? "TEAMWORK", employeeId })
       .onConflictDoNothing();
   }
 

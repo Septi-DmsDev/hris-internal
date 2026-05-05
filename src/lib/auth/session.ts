@@ -38,9 +38,8 @@ export async function getCurrentUserRoleRow(): Promise<RoleRow> {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  let rows;
-  try {
-    rows = await db
+  const runRoleQuery = () =>
+    db
       .select({
         id: userRoles.id,
         userId: userRoles.userId,
@@ -51,11 +50,23 @@ export async function getCurrentUserRoleRow(): Promise<RoleRow> {
       .from(userRoles)
       .leftJoin(userRoleDivisions, eq(userRoleDivisions.userRoleId, userRoles.id))
       .where(eq(userRoles.userId, user.id));
+
+  let rows;
+  try {
+    rows = await runRoleQuery();
   } catch (error) {
     if (isDatabaseConnectionError(error)) {
-      redirect("/database-unavailable");
+      try {
+        rows = await runRoleQuery();
+      } catch (retryError) {
+        if (isDatabaseConnectionError(retryError)) {
+          redirect("/database-unavailable");
+        }
+        throw retryError;
+      }
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   if (rows.length === 0) redirect("/account-pending");

@@ -30,9 +30,11 @@ import {
   createEmployee,
   deleteEmployee,
   getEmployeeById,
+  importEmployeesFromXlsx,
   updateEmployee,
 } from "@/server/actions/employees";
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
+import { Paperclip, Plus, Upload } from "lucide-react";
 
 const EMPLOYEE_GROUP_OPTIONS = [
   { value: "TEAMWORK", label: "Teamwork" },
@@ -532,6 +534,11 @@ export default function EmployeesTable({
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
   const [loginDraft, setLoginDraft] = useState<LoginDraft>({ email: "", password: "", confirmPassword: "" });
   const [existingLoginEmail, setExistingLoginEmail] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPending, setImportPending] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   function handleDraftChange(
     field: keyof EmployeeDraft,
@@ -544,6 +551,20 @@ export default function EmployeesTable({
     setDraft(createEmptyDraft());
     setFormError(null);
     setCreateOpen(true);
+  }
+
+  function openImportDialog() {
+    setImportFile(null);
+    setImportError(null);
+    setImportSuccess(null);
+    setImportOpen(true);
+  }
+
+  function closeImportDialog() {
+    setImportOpen(false);
+    setImportFile(null);
+    setImportError(null);
+    setImportSuccess(null);
   }
 
   async function submitCreate() {
@@ -560,6 +581,36 @@ export default function EmployeesTable({
       router.refresh();
     } finally {
       setPending(false);
+    }
+  }
+
+  async function handleImportSubmit() {
+    setImportPending(true);
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      if (!importFile) {
+        setImportError("Pilih file Excel terlebih dahulu.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", importFile);
+
+      const result = await importEmployeesFromXlsx(formData);
+      if (result && "error" in result) {
+        setImportError(result.error ?? "Import gagal.");
+        return;
+      }
+
+      const summary = result && "success" in result
+        ? `Import selesai: ${result.importedEmployees} karyawan, ${result.importedLogins} akun login.`
+        : "Import selesai.";
+      setImportSuccess(summary);
+      router.refresh();
+    } finally {
+      setImportPending(false);
     }
   }
 
@@ -719,6 +770,30 @@ export default function EmployeesTable({
     [loadingEditId, options.canManage]
   );
 
+  const toolbarSlot = options.canManage ? (
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 border-slate-200"
+        onClick={openImportDialog}
+      >
+        <Upload size={14} className="mr-1.5" />
+        Import Excel
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        className="h-9 bg-teal-600 hover:bg-teal-700"
+        onClick={resetCreateDialog}
+      >
+        <Plus size={14} className="mr-1.5" />
+        Tambah Karyawan
+      </Button>
+    </div>
+  ) : undefined;
+
   return (
     <div className="space-y-3">
       <DataTable
@@ -726,14 +801,42 @@ export default function EmployeesTable({
         columns={columns}
         searchKey="fullName"
         searchPlaceholder="Cari nama karyawan..."
-        toolbarSlot={
-          options.canManage ? (
-            <Button type="button" onClick={resetCreateDialog}>
-              Tambah Karyawan
-            </Button>
-          ) : undefined
-        }
+        toolbarSlot={toolbarSlot}
       />
+
+      <Dialog open={importOpen} onOpenChange={(open) => (open ? setImportOpen(true) : closeImportDialog())}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Import Karyawan dari Excel</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Format didukung: CABANG, NAMA, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, MASUK KERJA, LOLOS TRAINING. Default kelompok: TEAMWORK. Divisi, jabatan, grade, dan supervisor akan diisi otomatis dari master data aktif.
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">File Excel</label>
+              <Input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+
+            {importError ? <p className="text-sm text-red-600">{importError}</p> : null}
+            {importSuccess ? <p className="text-sm text-teal-700">{importSuccess}</p> : null}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeImportDialog} disabled={importPending}>
+                Batal
+              </Button>
+              <Button type="button" onClick={() => void handleImportSubmit()} disabled={importPending}>
+                {importPending ? "Mengimpor..." : "Import"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">

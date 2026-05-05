@@ -9,6 +9,7 @@ import {
   workScheduleDays,
   workShiftMasters,
 } from "@/lib/db/schema/employee";
+import { POINT_TARGET_HARIAN } from "@/config/constants";
 import { attendanceTickets } from "@/lib/db/schema/hr";
 import { branches, divisions, positions } from "@/lib/db/schema/master";
 import { dailyActivityEntries } from "@/lib/db/schema/point";
@@ -85,10 +86,29 @@ export type HrdScheduleOverviewDayCount = {
   kind: "SHIFT" | "TICKET";
 };
 
+export type HrdScheduleOverviewEmployee = {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  branchName: string;
+  divisionName: string;
+  positionName: string;
+  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+};
+
+export type HrdScheduleOverviewDayGroup = {
+  key: string;
+  label: string;
+  count: number;
+  kind: "SHIFT" | "TICKET";
+  employees: HrdScheduleOverviewEmployee[];
+};
+
 export type HrdScheduleOverviewDay = {
   date: string;
   dayName: string;
   counts: HrdScheduleOverviewDayCount[];
+  groups: HrdScheduleOverviewDayGroup[];
 };
 
 export type HrdScheduleOverview = {
@@ -114,14 +134,18 @@ function startOfLocalDay(date: Date): Date {
 }
 
 function addLocalDays(date: Date, days: number): Date {
-  const next = startOfLocalDay(date);
-  next.setDate(next.getDate() + days);
+  const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  next.setUTCDate(next.getUTCDate() + days);
   return next;
+}
+
+function createUtcDate(year: number, monthIndex: number, day: number): Date {
+  return new Date(Date.UTC(year, monthIndex, day));
 }
 
 function parseDateOnly(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
+  return createUtcDate(year, month - 1, day);
 }
 
 function toDateKey(date: Date): string {
@@ -130,6 +154,40 @@ function toDateKey(date: Date): string {
 
 function dayNameId(dayOfWeek: number): string {
   return ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"][dayOfWeek] ?? "-";
+}
+
+function normalizeScheduleCode(code: string): string {
+  const upper = code.toUpperCase().trim();
+  if (/^SHIFT_\d/.test(upper) || upper === "STATUS_IZIN") return upper;
+
+  const base = upper.replace(/_\d+K$/, "");
+  const match = base.match(/^SHIFT(\d[A-Z]?)$/);
+  if (match) {
+    return `SHIFT_${match[1]}`;
+  }
+
+  return base;
+}
+
+function isSelectableShiftMaster(code: string, name: string): boolean {
+  const normalizedCode = code.toUpperCase().trim();
+  const normalizedName = name.toLowerCase().trim();
+  return !normalizedCode.includes("STATUS") && !normalizedName.includes("status");
+}
+
+function buildDefaultScheduleDays(scheduleId: string, startTime: string, endTime: string) {
+  return Array.from({ length: 7 }, (_, dayOfWeek) => {
+    const isWorkingDay = dayOfWeek !== 0;
+    return {
+      scheduleId,
+      dayOfWeek,
+      dayStatus: (isWorkingDay ? "KERJA" : "OFF") as "KERJA" | "OFF",
+      isWorkingDay,
+      startTime: isWorkingDay ? startTime : null,
+      endTime: isWorkingDay ? endTime : null,
+      targetPoints: isWorkingDay ? POINT_TARGET_HARIAN : 0,
+    };
+  });
 }
 
 function isDateWithinRange(date: Date, start: Date, end: Date): boolean {
@@ -180,14 +238,14 @@ function resolvePayrollPeriodWindow(now: Date): { periodStart: Date; periodEnd: 
 
   if (day >= 26) {
     return {
-      periodStart: new Date(today.getFullYear(), today.getMonth(), 26),
-      periodEnd: new Date(today.getFullYear(), today.getMonth() + 1, 25),
+      periodStart: createUtcDate(today.getFullYear(), today.getMonth(), 26),
+      periodEnd: createUtcDate(today.getFullYear(), today.getMonth() + 1, 25),
     };
   }
 
   return {
-    periodStart: new Date(today.getFullYear(), today.getMonth() - 1, 26),
-    periodEnd: new Date(today.getFullYear(), today.getMonth(), 25),
+    periodStart: createUtcDate(today.getFullYear(), today.getMonth() - 1, 26),
+    periodEnd: createUtcDate(today.getFullYear(), today.getMonth(), 25),
   };
 }
 
@@ -485,6 +543,225 @@ export async function getMySchedule(
   };
 }
 
+export async function getEmployeeScheduleDetail(
+  employeeId: string,
+  year?: number,
+  month?: number
+): Promise<MyScheduleResult | null> {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+
+  if (!employeeId) return null;
+  if (!["SUPER_ADMIN", "HRD", "KABAG", "SPV"].includes(role)) return null;
+
+  const employeeDivisionId = await getEmployeeDivisionId(employeeId);
+  if (role === "SPV" || role === "KABAG") {
+    if (!employeeDivisionId || !roleRow.divisionIds.includes(employeeDivisionId)) return null;
+  }
+
+  const now = new Date();
+  const targetYear = year ?? now.getFullYear();
+  const targetMonth = month ?? now.getMonth() + 1;
+  const periodStart = new Date(targetYear, targetMonth - 2, 26);
+  const periodEnd = new Date(targetYear, targetMonth - 1, 25);
+  const today = startOfLocalDay(now);
+
+  const empRows = await db
+    .select({ fullName: employees.fullName })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+
+  if (!empRows[0]) return null;
+  const employeeName = empRows[0].fullName;
+
+  const assignmentRows = await db
+    .select({
+      id: employeeScheduleAssignments.id,
+      scheduleId: employeeScheduleAssignments.scheduleId,
+      scheduleName: workSchedules.name,
+      scheduleCode: workSchedules.code,
+      effectiveStartDate: employeeScheduleAssignments.effectiveStartDate,
+      effectiveEndDate: employeeScheduleAssignments.effectiveEndDate,
+      createdAt: employeeScheduleAssignments.createdAt,
+    })
+    .from(employeeScheduleAssignments)
+    .leftJoin(workSchedules, eq(employeeScheduleAssignments.scheduleId, workSchedules.id))
+    .where(
+      and(
+        eq(employeeScheduleAssignments.employeeId, employeeId),
+        lte(employeeScheduleAssignments.effectiveStartDate, periodEnd),
+        or(
+          isNull(employeeScheduleAssignments.effectiveEndDate),
+          gte(employeeScheduleAssignments.effectiveEndDate, periodStart)
+        )
+      )
+    )
+    .orderBy(asc(employeeScheduleAssignments.effectiveStartDate), asc(employeeScheduleAssignments.createdAt));
+
+  if (assignmentRows.length === 0) {
+    return null;
+  }
+
+  const scheduleIds = [...new Set(assignmentRows.map((row) => row.scheduleId))];
+  const scheduleDays = await db
+    .select({
+      scheduleId: workScheduleDays.scheduleId,
+      dayOfWeek: workScheduleDays.dayOfWeek,
+      dayStatus: workScheduleDays.dayStatus,
+      isWorkingDay: workScheduleDays.isWorkingDay,
+      startTime: workScheduleDays.startTime,
+      endTime: workScheduleDays.endTime,
+      targetPoints: workScheduleDays.targetPoints,
+    })
+    .from(workScheduleDays)
+    .where(inArray(workScheduleDays.scheduleId, scheduleIds))
+    .orderBy(asc(workScheduleDays.dayOfWeek));
+
+  const scheduleDayMap = new Map<string, Map<number, (typeof scheduleDays)[0]>>();
+  for (const sd of scheduleDays) {
+    const current = scheduleDayMap.get(sd.scheduleId) ?? new Map<number, (typeof scheduleDays)[0]>();
+    current.set(sd.dayOfWeek, sd);
+    scheduleDayMap.set(sd.scheduleId, current);
+  }
+
+  const approvedStatuses = ["AUTO_APPROVED", "APPROVED_SPV", "APPROVED_HRD"] as const;
+  const tickets = await db
+    .select({
+      ticketType: attendanceTickets.ticketType,
+      startDate: attendanceTickets.startDate,
+      endDate: attendanceTickets.endDate,
+    })
+    .from(attendanceTickets)
+    .where(
+      and(
+        eq(attendanceTickets.employeeId, employeeId),
+        inArray(attendanceTickets.status, approvedStatuses),
+        lte(attendanceTickets.startDate, periodEnd),
+        gte(attendanceTickets.endDate, periodStart)
+      )
+    );
+
+  const ticketMap = new Map<string, string>();
+  for (const ticket of tickets) {
+    const rawStart = ticket.startDate instanceof Date ? ticket.startDate : new Date(ticket.startDate);
+    const rawEnd = ticket.endDate instanceof Date ? ticket.endDate : new Date(ticket.endDate);
+    const cur = startOfLocalDay(rawStart);
+    const endNorm = startOfLocalDay(rawEnd);
+    while (cur <= endNorm) {
+      ticketMap.set(toDateKey(cur), ticket.ticketType);
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+
+  const days: ScheduleCalendarDay[] = [];
+  const cursor = startOfLocalDay(periodStart);
+  const endCursor = startOfLocalDay(periodEnd);
+  const currentAssignment = pickLatestAssignmentForDate(assignmentRows, today) ?? assignmentRows[0] ?? null;
+  const scheduleName = currentAssignment?.scheduleName ?? assignmentRows[0]?.scheduleName ?? "-";
+  const scheduleCode = currentAssignment?.scheduleCode ?? assignmentRows[0]?.scheduleCode ?? "-";
+
+  while (cursor <= endCursor) {
+    const dateStr = toDateKey(cursor);
+    const dayOfWeek = cursor.getDay();
+    const assignment = pickLatestAssignmentForDate(assignmentRows, cursor);
+    const config = assignment ? scheduleDayMap.get(assignment.scheduleId)?.get(dayOfWeek) ?? null : null;
+    const ticketOverride = ticketMap.get(dateStr) ?? null;
+    const isWorkingDay = Boolean(config?.isWorkingDay) && !ticketOverride;
+    const targetPoints = isWorkingDay ? config?.targetPoints ?? 0 : 0;
+
+    days.push({
+      date: dateStr,
+      dayOfWeek,
+      dayStatus: config?.dayStatus ?? "OFF",
+      isWorkingDay,
+      startTime: ticketOverride ? null : config?.startTime ?? null,
+      endTime: ticketOverride ? null : config?.endTime ?? null,
+      targetPoints,
+      ticketOverride,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const periodTotalTargetPoints = days.reduce((sum, day) => sum + (day.targetPoints > 0 ? day.targetPoints : 0), 0);
+
+  let remainingWorkingDays = 0;
+  const remCursor = startOfLocalDay(today);
+  while (remCursor <= endCursor) {
+    const dayRow = days.find((day) => day.date === toDateKey(remCursor));
+    if (dayRow?.isWorkingDay) remainingWorkingDays++;
+    remCursor.setDate(remCursor.getDate() + 1);
+  }
+
+  const APPROVED_PERF = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
+  const approvedEntries = await db
+    .select({ totalPoints: dailyActivityEntries.totalPoints })
+    .from(dailyActivityEntries)
+    .where(
+      and(
+        eq(dailyActivityEntries.employeeId, employeeId),
+        gte(dailyActivityEntries.workDate, periodStart),
+        lte(dailyActivityEntries.workDate, periodEnd),
+        inArray(dailyActivityEntries.status, APPROVED_PERF)
+      )
+    );
+  const periodApprovedPoints = approvedEntries.reduce((sum, e) => sum + Number(e.totalPoints), 0);
+
+  const dailyTargetNeeded =
+    remainingWorkingDays > 0
+      ? Math.max(0, periodTotalTargetPoints - periodApprovedPoints) / remainingWorkingDays
+      : null;
+
+  const historyWindowStart = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  const ticketHistoryRows = await db
+    .select({
+      ticketType: attendanceTickets.ticketType,
+      startDate: attendanceTickets.startDate,
+      endDate: attendanceTickets.endDate,
+      daysCount: attendanceTickets.daysCount,
+      status: attendanceTickets.status,
+      reason: attendanceTickets.reason,
+    })
+    .from(attendanceTickets)
+    .where(
+      and(
+        eq(attendanceTickets.employeeId, employeeId),
+        gte(attendanceTickets.startDate, historyWindowStart)
+      )
+    )
+    .orderBy(desc(attendanceTickets.startDate))
+    .limit(15);
+
+  const ticketHistory: TicketHistoryItem[] = ticketHistoryRows.map((t) => {
+    const s = t.startDate instanceof Date ? t.startDate : new Date(t.startDate);
+    const e = t.endDate instanceof Date ? t.endDate : new Date(t.endDate);
+    return {
+      ticketType: t.ticketType,
+      startDate: toDateKey(new Date(s.getFullYear(), s.getMonth(), s.getDate())),
+      endDate: toDateKey(new Date(e.getFullYear(), e.getMonth(), e.getDate())),
+      daysCount: t.daysCount,
+      status: t.status,
+      reason: t.reason,
+    };
+  });
+
+  return {
+    employeeId,
+    employeeName,
+    scheduleName,
+    scheduleCode,
+    month: targetMonth,
+    year: targetYear,
+    days,
+    periodTotalTargetPoints,
+    periodApprovedPoints,
+    dailyTargetNeeded,
+    remainingWorkingDays,
+    ticketHistory,
+  };
+}
+
 async function getEmployeeDivisionId(employeeId: string) {
   const [row] = await db
     .select({ divisionId: employees.divisionId })
@@ -598,17 +875,85 @@ export async function getTeamSchedules(): Promise<TeamMember[]> {
 export async function getScheduleOptions(): Promise<ScheduleOption[]> {
   await requireAuth();
 
-  const rows = await db
-    .select({
-      id: workSchedules.id,
-      name: workSchedules.name,
-      code: workSchedules.code,
-    })
-    .from(workSchedules)
-    .where(eq(workSchedules.isActive, true))
-    .orderBy(asc(workSchedules.name));
+  const [scheduleRows, masterRows] = await Promise.all([
+    db
+      .select({
+        id: workSchedules.id,
+        code: workSchedules.code,
+        name: workSchedules.name,
+      })
+      .from(workSchedules)
+      .where(eq(workSchedules.isActive, true))
+      .orderBy(asc(workSchedules.name)),
+    db
+      .select({
+        code: workShiftMasters.code,
+        name: workShiftMasters.name,
+        startTime: workShiftMasters.startTime,
+        endTime: workShiftMasters.endTime,
+        notes: workShiftMasters.notes,
+        sortOrder: workShiftMasters.sortOrder,
+        isActive: workShiftMasters.isActive,
+      })
+      .from(workShiftMasters)
+      .where(eq(workShiftMasters.isActive, true))
+      .orderBy(asc(workShiftMasters.sortOrder), asc(workShiftMasters.name)),
+  ]);
 
-  return rows;
+  const scheduleMap = new Map(scheduleRows.map((schedule) => [normalizeScheduleCode(schedule.code), schedule] as const));
+  const selectableMasters = masterRows.filter((master) => isSelectableShiftMaster(master.code, master.name));
+  const missingMasters = selectableMasters.filter((master) => !scheduleMap.has(normalizeScheduleCode(master.code)));
+
+  if (missingMasters.length > 0) {
+    await db.transaction(async (tx) => {
+      for (const master of missingMasters) {
+        const inserted = await tx
+          .insert(workSchedules)
+          .values({
+            code: master.code,
+            name: master.name,
+            description: master.notes ?? null,
+            isActive: master.isActive,
+          })
+          .onConflictDoNothing()
+          .returning({ id: workSchedules.id, code: workSchedules.code, name: workSchedules.name });
+
+        const scheduleRow =
+          inserted[0] ??
+          (await tx
+            .select({ id: workSchedules.id, code: workSchedules.code, name: workSchedules.name })
+            .from(workSchedules)
+            .where(eq(workSchedules.code, master.code))
+            .limit(1))[0];
+
+        if (!scheduleRow) continue;
+
+        await tx.insert(workScheduleDays).values(
+          buildDefaultScheduleDays(scheduleRow.id, master.startTime, master.endTime)
+        );
+
+        scheduleMap.set(normalizeScheduleCode(master.code), scheduleRow);
+      }
+    });
+  }
+
+  return selectableMasters
+    .map((master) => {
+      const scheduleRow = scheduleMap.get(normalizeScheduleCode(master.code));
+      if (!scheduleRow) return null;
+      return {
+        id: scheduleRow.id,
+        name: master.name,
+        code: master.code,
+        sortOrder: master.sortOrder,
+      };
+    })
+    .filter((item): item is ScheduleOption & { sortOrder: number } => item !== null)
+    .sort((left, right) => {
+      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+      return left.name.localeCompare(right.name);
+    })
+    .map(({ id, name, code }) => ({ id, name, code }));
 }
 
 export async function getScheduleManagementWorkspace(): Promise<{
@@ -643,8 +988,16 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
     .select({
       employeeId: employees.id,
       employeeName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      branchName: branches.name,
+      divisionName: divisions.name,
+      positionName: positions.name,
+      employeeGroup: employees.employeeGroup,
     })
     .from(employees)
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+    .leftJoin(positions, eq(employees.positionId, positions.id))
     .where(eq(employees.isActive, true))
     .orderBy(asc(employees.fullName));
 
@@ -678,29 +1031,17 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
         .orderBy(asc(employeeScheduleAssignments.effectiveStartDate), asc(employeeScheduleAssignments.createdAt))
     : [];
 
-  const scheduleIds = [...new Set(assignmentRows.map((row) => row.scheduleId))];
-  const scheduleDays = scheduleIds.length
-    ? await db
-        .select({
-          scheduleId: workScheduleDays.scheduleId,
-          dayOfWeek: workScheduleDays.dayOfWeek,
-          dayStatus: workScheduleDays.dayStatus,
-          isWorkingDay: workScheduleDays.isWorkingDay,
-          startTime: workScheduleDays.startTime,
-          endTime: workScheduleDays.endTime,
-          targetPoints: workScheduleDays.targetPoints,
-        })
-        .from(workScheduleDays)
-        .where(inArray(workScheduleDays.scheduleId, scheduleIds))
-        .orderBy(asc(workScheduleDays.dayOfWeek))
-    : [];
+  const activeMasterRows = await db
+    .select({
+      code: workShiftMasters.code,
+      name: workShiftMasters.name,
+    })
+    .from(workShiftMasters)
+    .where(eq(workShiftMasters.isActive, true));
 
-  const scheduleDayMap = new Map<string, Map<number, (typeof scheduleDays)[0]>>();
-  for (const scheduleDay of scheduleDays) {
-    const current = scheduleDayMap.get(scheduleDay.scheduleId) ?? new Map<number, (typeof scheduleDays)[0]>();
-    current.set(scheduleDay.dayOfWeek, scheduleDay);
-    scheduleDayMap.set(scheduleDay.scheduleId, current);
-  }
+  const masterLabelMap = new Map(
+    activeMasterRows.map((master) => [normalizeScheduleCode(master.code), master.name] as const)
+  );
 
   const assignmentMap = new Map<string, ScheduleAssignmentRow[]>();
   for (const assignment of assignmentRows) {
@@ -746,6 +1087,17 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
     }
   }
 
+  function getScheduleDisplayLabel(scheduleCode: string | null, scheduleName: string | null): string {
+    const candidates = [scheduleCode, scheduleName].filter((value): value is string => Boolean(value));
+
+    for (const candidate of candidates) {
+      const masterLabel = masterLabelMap.get(normalizeScheduleCode(candidate));
+      if (masterLabel) return masterLabel;
+    }
+
+    return scheduleName ?? scheduleCode ?? "Jadwal";
+  }
+
   const days: HrdScheduleOverviewDay[] = [];
   const cursor = startOfLocalDay(periodStart);
   const endCursor = startOfLocalDay(periodEnd);
@@ -754,6 +1106,7 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
     const dateKey = toDateKey(cursor);
     const dayOfWeek = cursor.getDay();
     const counts = new Map<string, HrdScheduleOverviewDayCount>();
+    const groups = new Map<string, HrdScheduleOverviewDayGroup>();
     const ticketByEmployee = ticketMap.get(dateKey) ?? new Map<string, string>();
 
     for (const employee of employeeRows) {
@@ -774,16 +1127,34 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
           count: (counts.get(key)?.count ?? 0) + 1,
           kind: "TICKET",
         });
+
+        const currentGroup =
+          groups.get(key) ?? {
+            key,
+            label,
+            count: 0,
+            kind: "TICKET" as const,
+            employees: [],
+          };
+
+        currentGroup.count += 1;
+        currentGroup.employees.push({
+          employeeId: employee.employeeId,
+          employeeName: employee.employeeName,
+          employeeCode: employee.employeeCode,
+          branchName: employee.branchName ?? "—",
+          divisionName: employee.divisionName ?? "—",
+          positionName: employee.positionName ?? "—",
+          employeeGroup: employee.employeeGroup,
+        });
+        groups.set(key, currentGroup);
         continue;
       }
 
       const assignment = pickLatestAssignmentForDate(assignmentMap.get(employee.employeeId) ?? [], cursor);
       if (!assignment) continue;
 
-      const scheduleDay = scheduleDayMap.get(assignment.scheduleId)?.get(dayOfWeek) ?? null;
-      if (!scheduleDay?.isWorkingDay) continue;
-
-      const label = assignment.scheduleName ?? assignment.scheduleCode ?? "Jadwal";
+      const label = getScheduleDisplayLabel(assignment.scheduleCode, assignment.scheduleName);
       const key = `SHIFT:${label}`;
       counts.set(key, {
         key,
@@ -791,12 +1162,38 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
         count: (counts.get(key)?.count ?? 0) + 1,
         kind: "SHIFT",
       });
+
+      const currentGroup =
+        groups.get(key) ?? {
+          key,
+          label,
+          count: 0,
+          kind: "SHIFT" as const,
+          employees: [],
+        };
+
+      currentGroup.count += 1;
+      currentGroup.employees.push({
+        employeeId: employee.employeeId,
+        employeeName: employee.employeeName,
+        employeeCode: employee.employeeCode,
+        branchName: employee.branchName ?? "—",
+        divisionName: employee.divisionName ?? "—",
+        positionName: employee.positionName ?? "—",
+        employeeGroup: employee.employeeGroup,
+      });
+      groups.set(key, currentGroup);
     }
 
     days.push({
       date: dateKey,
       dayName: dayNameId(dayOfWeek),
       counts: [...counts.values()].sort((left, right) => {
+        if (left.kind !== right.kind) return left.kind === "SHIFT" ? -1 : 1;
+        if (right.count !== left.count) return right.count - left.count;
+        return left.label.localeCompare(right.label);
+      }),
+      groups: [...groups.values()].sort((left, right) => {
         if (left.kind !== right.kind) return left.kind === "SHIFT" ? -1 : 1;
         if (right.count !== left.count) return right.count - left.count;
         return left.label.localeCompare(right.label);

@@ -29,9 +29,17 @@ export default async function DashboardLayout({
     userRoleRow = await getUserRole(user.id);
   } catch (err) {
     if (isDatabaseConnectionError(err)) {
-      redirect("/database-unavailable");
+      try {
+        userRoleRow = await getUserRole(user.id);
+      } catch (retryErr) {
+        if (isDatabaseConnectionError(retryErr)) {
+          redirect("/database-unavailable");
+        }
+        throw retryErr;
+      }
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   if (!userRoleRow) {

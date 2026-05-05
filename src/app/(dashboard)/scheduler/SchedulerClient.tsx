@@ -14,9 +14,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { assignEmployeeSchedule, assignEmployeeSchedulesBulk } from "@/server/actions/schedule";
+import { assignEmployeeSchedule, assignEmployeeSchedulesBulk, getEmployeeScheduleDetail } from "@/server/actions/schedule";
 import { createWorkShiftMaster, deleteWorkShiftMaster, updateWorkShiftMaster } from "@/server/actions/work-schedules";
-import { CalendarCog, CheckCircle2, Filter, Loader2, Users } from "lucide-react";
+import { CalendarCog, CalendarDays, CheckCircle2, Clock, Filter, Loader2, Users } from "lucide-react";
+import type { MyScheduleResult } from "@/server/actions/schedule";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faArrowsRotate } from "@fortawesome/free-solid-svg-icons";
 
 type TeamMember = {
   employeeId: string;
@@ -81,6 +84,8 @@ type ShiftDraft = {
   isActive: boolean;
 };
 
+const DAY_NAMES_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
 function getTodayStr(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -90,6 +95,13 @@ function addDaysStr(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateDisplay(dateStr: string): string {
+  if (!dateStr) return "-";
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!year || !month || !day) return "-";
+  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
 }
 
 export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMasters, canBulkAssign = false }: Props) {
@@ -129,6 +141,11 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
     endTime: "17:00",
     isActive: true,
   });
+  const [scheduleDetailOpen, setScheduleDetailOpen] = useState(false);
+  const [scheduleDetailLoading, setScheduleDetailLoading] = useState(false);
+  const [scheduleDetailError, setScheduleDetailError] = useState<string | null>(null);
+  const [scheduleDetail, setScheduleDetail] = useState<MyScheduleResult | null>(null);
+  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
   const branchOptions = useMemo(
     () =>
@@ -225,6 +242,39 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
     setDialogOpen(true);
   }
 
+  function closeScheduleDetail() {
+    setScheduleDetailOpen(false);
+    setScheduleDetail(null);
+    setSelectedMember(null);
+    setScheduleDetailError(null);
+    setScheduleDetailLoading(false);
+  }
+
+  function openScheduleDetail(member: TeamMember) {
+    setSelectedMember(member);
+    setScheduleDetailOpen(true);
+    setScheduleDetailLoading(true);
+    setScheduleDetailError(null);
+    setScheduleDetail(null);
+
+    startTransition(async () => {
+      try {
+        const result = await getEmployeeScheduleDetail(member.employeeId);
+        if (!result) {
+          setScheduleDetailError("Jadwal karyawan tidak ditemukan.");
+          setScheduleDetailLoading(false);
+          return;
+        }
+
+        setScheduleDetail(result);
+        setScheduleDetailLoading(false);
+      } catch {
+        setScheduleDetailError("Gagal memuat jadwal karyawan.");
+        setScheduleDetailLoading(false);
+      }
+    });
+  }
+
   function openBulkDialog() {
     setBulkForm({
       scheduleId: "",
@@ -255,7 +305,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
     setSuccess(false);
 
     if (!form.scheduleId) {
-      setError("Pilih jadwal terlebih dahulu.");
+      setError("Pilih master shift terlebih dahulu.");
       return;
     }
     if (!form.effectiveStartDate || !form.effectiveEndDate) {
@@ -291,7 +341,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
     setBulkSuccess(false);
 
     if (!bulkForm.scheduleId) {
-      setBulkError("Pilih jadwal terlebih dahulu.");
+      setBulkError("Pilih master shift terlebih dahulu.");
       return;
     }
     if (!bulkForm.effectiveStartDate || !bulkForm.effectiveEndDate) {
@@ -382,10 +432,16 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
       accessorKey: "employeeName",
       header: "Nama Karyawan",
       cell: ({ row }) => (
-        <div>
-          <p className="font-semibold text-slate-800">{row.original.employeeName}</p>
+        <button
+          type="button"
+          onClick={() => openScheduleDetail(row.original)}
+          className="text-left group"
+        >
+          <p className="font-semibold text-slate-800 group-hover:text-teal-700 group-hover:underline">
+            {row.original.employeeName}
+          </p>
           <p className="text-xs text-slate-400 font-mono mt-0.5">{row.original.employeeCode}</p>
-        </div>
+        </button>
       ),
     },
     {
@@ -466,7 +522,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
                 <h2 className="text-sm font-semibold text-slate-900">Filter Tim</h2>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
                 <select
                   value={branchFilter}
                   onChange={(event) => setBranchFilter(event.target.value)}
@@ -512,20 +568,24 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
                   <option value="TEAMWORK">TEAMWORK</option>
                   <option value="MANAGERIAL">MANAGERIAL</option>
                 </select>
-              </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" onClick={resetFilters} className="h-9">
-                  Reset Filter
-                </Button>
-                {canBulkAssign && (
-                  <Button type="button" onClick={openBulkDialog} className="h-9 bg-teal-600 hover:bg-teal-700">
-                    Atur Serentak
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetFilters}
+                    className="h-10 w-10 px-0"
+                    aria-label="Reset Filter"
+                    title="Reset Filter"
+                  >
+                    <FontAwesomeIcon icon={faArrowsRotate} className="h-3.5 w-3.5" />
                   </Button>
-                )}
-                <span className="text-sm text-slate-500">
-                  {filteredTeamMembers.length} karyawan terfilter
-                </span>
+                  {canBulkAssign && (
+                    <Button type="button" onClick={openBulkDialog} className="h-10 bg-teal-600 hover:bg-teal-700">
+                      Atur Serentak
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -590,6 +650,82 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
         </div>
       )}
 
+      <Dialog open={scheduleDetailOpen} onOpenChange={(open) => !open && closeScheduleDetail()}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-900">
+              <CalendarDays size={16} className="text-teal-500" />
+              Jadwal Penuh Karyawan
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm font-semibold text-slate-900">
+                {selectedMember?.employeeName ?? "-"}
+              </p>
+              <p className="text-xs text-slate-500 font-mono">
+                {selectedMember?.employeeCode ?? "-"}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                {selectedMember?.divisionName ?? "-"} · {selectedMember?.positionName ?? "-"}
+              </p>
+            </div>
+
+            {scheduleDetailLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500 py-8 justify-center">
+                <Loader2 size={14} className="animate-spin" />
+                Memuat jadwal...
+              </div>
+            ) : scheduleDetailError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+                <p className="text-xs text-red-700">{scheduleDetailError}</p>
+              </div>
+            ) : scheduleDetail ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                  <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 font-semibold text-teal-700">
+                    {scheduleDetail.scheduleName} ({scheduleDetail.scheduleCode})
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} />
+                    {formatDateDisplay(scheduleDetail.days[0]?.date ?? "")} - {formatDateDisplay(scheduleDetail.days[scheduleDetail.days.length - 1]?.date ?? "")}
+                  </span>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {scheduleDetail.days.map((day) => {
+                    const isTicket = Boolean(day.ticketOverride);
+                    const label = day.ticketOverride ?? (day.dayStatus === "KERJA" ? "KERJA" : day.dayStatus);
+                    const timeLabel = day.startTime && day.endTime ? `${day.startTime} - ${day.endTime}` : "-";
+
+                    return (
+                      <div
+                        key={day.date}
+                        className={`rounded-lg border p-3 ${
+                          isTicket
+                            ? "border-amber-200 bg-amber-50"
+                            : day.isWorkingDay
+                            ? "border-teal-200 bg-teal-50/50"
+                            : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <p className="text-[11px] font-semibold text-slate-900">{formatDateDisplay(day.date)}</p>
+                        <p className="text-[11px] text-slate-500">{DAY_NAMES_ID[day.dayOfWeek]}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{label}</p>
+                        <p className="text-xs text-slate-500">{isTicket ? "Izin / Cuti" : timeLabel}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">Pilih karyawan untuk melihat jadwal.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={dialogOpen} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -616,7 +752,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
                 htmlFor="scheduleId"
                 className="text-xs font-semibold text-slate-600 uppercase tracking-wide"
               >
-                Jadwal Baru
+                Master Shift
               </Label>
               <select
                 id="scheduleId"
@@ -625,7 +761,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
                 required
               >
-                <option value="">— Pilih jadwal —</option>
+                <option value="">— Pilih master shift —</option>
                 {scheduleOptions.map((opt) => (
                   <option key={opt.id} value={opt.id}>
                     {opt.name} ({opt.code})
@@ -750,7 +886,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
 
             <div className="space-y-1.5">
               <Label htmlFor="bulkScheduleId" className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                Jadwal Baru
+                Master Shift
               </Label>
               <select
                 id="bulkScheduleId"
@@ -759,7 +895,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800"
                 required
               >
-                <option value="">— Pilih jadwal —</option>
+                <option value="">— Pilih master shift —</option>
                 {scheduleOptions.map((opt) => (
                   <option key={opt.id} value={opt.id}>
                     {opt.name} ({opt.code})
@@ -854,3 +990,4 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
     </>
   );
 }
+

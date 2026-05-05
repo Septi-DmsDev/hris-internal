@@ -7,6 +7,7 @@ Internal HRIS/HRD Dashboard built with Next.js App Router, TypeScript, Supabase 
 - Auth, user roles, employee login links, and division-scoped access.
 - Employee profiling, histories, branches, divisions, positions, grades, work schedules, and shift masters.
 - TEAMWORK performance point catalog, daily activities, approval workflow, and monthly performance.
+- Input persentase performa bulanan managerial (KABAG/SPV/MANAGERIAL) dari menu `/performance` oleh HRD/SUPER_ADMIN.
 - Ticketing for leave/sick/permission and leave quota handling.
 - Employee review, incident log, and training evaluation.
 - Payroll period 26-25, snapshots, preview, finalization, paid/locked lifecycle, adjustments, payslip PDF, XLSX export, and finance summary.

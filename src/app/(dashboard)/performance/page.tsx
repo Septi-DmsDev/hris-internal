@@ -12,6 +12,7 @@ import PerformanceCatalogClient, {
   type PerformanceActivityRow,
   type PerformanceCatalogEntryRow,
   type PerformanceDivisionTargetRow,
+  type PerformanceManagerialEmployeeOption,
   type PerformanceEmployeeOption,
   type PerformanceMonthlyRow,
   type PerformanceVersionRow,
@@ -183,6 +184,13 @@ export default async function PerformancePage() {
     id: string;
     name: string;
   }>;
+  const managerialOptionRecords = workspace.managerialEmployeeOptions as Array<{
+    id: string;
+    employeeCode: string;
+    fullName: string;
+    divisionId: string | null;
+    divisionName: string | null;
+  }>;
   const activityRecords = workspace.activityEntries as Array<{
     id: string;
     employeeId: string;
@@ -276,6 +284,14 @@ export default async function PerformancePage() {
     name: division.name,
   }));
 
+  const managerialEmployeeOptions: PerformanceManagerialEmployeeOption[] = managerialOptionRecords.map((employee) => ({
+    id: employee.id,
+    employeeCode: employee.employeeCode,
+    fullName: employee.fullName,
+    divisionId: employee.divisionId,
+    divisionName: employee.divisionName ?? "-",
+  }));
+
   const activityRows: PerformanceActivityRow[] = activityRecords.map((entry) => ({
     id: entry.id,
     employeeId: entry.employeeId,
@@ -335,6 +351,7 @@ export default async function PerformancePage() {
         entries={entryRows}
         allCatalogEntries={allCatalogEntries}
         employeeOptions={employeeOptions}
+        managerialEmployeeOptions={managerialEmployeeOptions}
         divisionOptions={divisionOptions}
         activityEntries={activityRows}
         monthlyPerformances={monthlyRows}

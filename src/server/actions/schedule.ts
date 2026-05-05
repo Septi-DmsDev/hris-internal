@@ -18,6 +18,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { UserRole } from "@/types";
 
+type ScheduleTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ScheduleCalendarDay = {
@@ -250,7 +252,7 @@ function resolvePayrollPeriodWindow(now: Date): { periodStart: Date; periodEnd: 
 }
 
 async function replaceEmployeeScheduleRange(
-  tx: any,
+  tx: ScheduleTransaction,
   employeeId: string,
   scheduleId: string,
   effectiveStartDate: Date,

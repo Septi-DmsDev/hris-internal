@@ -37,6 +37,7 @@ Fungsi bisnis yang sudah muncul di code:
 - katalog poin, import workbook, dan entry catalog manual;
 - aktivitas harian TEAMWORK, batch submit, approval SPV/KABAG, HRD flow;
 - generate performa bulanan;
+- input massal persentase performa managerial per periode oleh HRD/SUPER_ADMIN;
 - ticketing izin/sakit/cuti dan leave quota;
 - review karyawan dan incident log;
 - evaluasi training;
@@ -104,7 +105,7 @@ Employee Link
 | Master data | ada | branch, division, position, grade, work schedule, shift master |
 | Employee profiling | ada | create, update, delete, histori, detail page |
 | Self-service | ada | `/me`, `/me/profile`, `/settings`, `/schedule` |
-| Performance point | ada, perlu hardening | self-service TEAMWORK ada; deadline H+1/H+2 masih perlu enforcement lengkap |
+| Performance point | ada, perlu hardening | self-service TEAMWORK ada; input massal managerial ada; deadline H+1/H+2 masih perlu enforcement lengkap |
 | Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
 | Review & incident | ada | review score 5 aspek, validate review, create incident |
 | Training evaluation | ada, gap bisnis | keputusan lulus/gagal ada; rule efektif periode payroll berikutnya belum penuh |

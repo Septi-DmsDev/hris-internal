@@ -22,6 +22,10 @@ Gap yang perlu dibangun:
 - enforcement deadline H+1/H+2/H+1 revisi,
 - audit dan rule tambahan bila activity dibuka ulang setelah payroll.
 
+Fitur yang sudah ada di code:
+
+- input massal persentase performa managerial bulanan oleh HRD/SUPER_ADMIN untuk role KABAG/SPV/MANAGERIAL.
+
 ## 1. Tujuan Modul
 
 Modul ini mengelola:
@@ -152,6 +156,7 @@ Logika penting:
 - only status `DRAFT`, `DITOLAK_SPV`, `REVISI_TW` yang masih bisa diubah,
 - approval menghormati scope divisi SPV,
 - generate monthly menghapus hasil periode lama lalu menulis ulang seluruh employee TEAMWORK aktif.
+- tersedia input massal persentase managerial bulanan untuk KABAG/SPV/MANAGERIAL oleh HRD/SUPER_ADMIN.
 
 ### `src/server/point-engine/count-target-days-for-period.ts`
 
@@ -216,7 +221,7 @@ Logika penting:
 - rule deadline H+1 dan H+2 ada di dokumen bisnis, tetapi belum ada enforcement di code.
 - self-service TW belum ada meski role `TEAMWORK` tersedia di type dan permission helper.
 - generate monthly saat ini belum mengurangi target karena ticket approved; ia hanya membaca working day schedule.
-  Artinya integrasi penuh rule “approved leave tidak masuk target” belum terlihat di generator ini.
+  Artinya integrasi penuh rule "approved leave tidak masuk target" belum terlihat di generator ini.
 
 ## 9. Contoh Alur Nyata
 
@@ -233,3 +238,5 @@ HRD sinkronkan workbook
 → monthly_point_performances terbentuk
 → hasil dipakai training, dashboard, dan payroll TEAMWORK
 ```
+
+

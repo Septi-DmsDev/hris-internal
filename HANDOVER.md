@@ -1,6 +1,6 @@
 # HRD Dashboard - Handover Document
 
-**Tanggal update:** 2026-05-04  
+**Tanggal update:** 2026-05-05  
 **Branch aktif:** `main`  
 **Remote:** `https://github.com/Septi-DmsDev/hris-internal.git`  
 **Status saat ini:** repo sudah memiliki flow MVP lintas phase; dokumentasi utama disinkronkan ulang dengan alur code aktual pada 2026-05-04
@@ -44,6 +44,7 @@ Catatan phase 3 saat ini:
 - finance dashboard sudah ada
 - payslip PDF dan export Excel sudah ada
 - personal self-service access ke slip gaji sudah ada
+- input massal persentase managerial bulanan dari `/performance` sudah ada
 - modul ini sudah usable, tetapi belum berarti semua hardening enterprise selesai
 
 ---
@@ -183,6 +184,7 @@ Sudah ada:
 - SPV/KABAG approval flow
 - HRD override flow
 - monthly point performance
+- input massal persentase managerial bulanan
 - training evaluation
 
 Rule target yang aktif:
@@ -190,6 +192,7 @@ Rule target yang aktif:
 - divisi `OFFSET` target harian `39_000`
 - target performa mengikuti divisi snapshot payroll/awal periode
 - pilihan pekerjaan harian mengikuti divisi aktual harian
+- payroll MANAGERIAL membaca managerial_kpi_summaries per periode
 
 ### Ticketing / Review
 Sudah ada:
@@ -413,3 +416,5 @@ Jika melanjutkan dari nol di PC/sesi lain:
 6. jalankan `pnpm vitest run`
 7. jalankan `pnpm build`
 8. mulai QA dari route `/login` -> `/dashboard` -> `/me` -> modul-modul utama
+
+

@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema/employee";
 import { attendanceTickets } from "@/lib/db/schema/hr";
 import { divisions } from "@/lib/db/schema/master";
+import { managerialKpiSummaries, payrollPeriods } from "@/lib/db/schema/payroll";
 import {
   dailyActivityApprovalLogs,
   dailyActivityEntries,
@@ -27,8 +28,11 @@ import {
   batchSubmitDraftSchema,
   dailyActivityDecisionSchema,
   dailyActivityEntrySchema,
+  managerialMonthlyPerformanceInputSchema,
   monthlyPerformanceGenerationSchema,
 } from "@/lib/validations/point";
+import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
+import { userRoles } from "@/lib/db/schema/auth";
 import { calculateMonthlyPointPerformance } from "@/server/point-engine/calculate-monthly-point-performance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
 import {
@@ -57,6 +61,8 @@ import type { UserRole } from "@/types";
 const PERFORMANCE_ACTIVITY_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 const PERFORMANCE_SELF_SERVICE_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
 const PERFORMANCE_GENERATE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
+const PERFORMANCE_MANAGERIAL_INPUT_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
+const MANAGERIAL_TARGET_ROLES: UserRole[] = ["KABAG", "SPV", "MANAGERIAL"];
 const APPROVABLE_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG"] as const;
 const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const;
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
@@ -156,6 +162,32 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[])
     .from(employees)
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
     .where(and(eq(employees.employeeGroup, "TEAMWORK"), eq(employees.isActive, true)))
+    .orderBy(asc(employees.fullName));
+}
+
+async function getManagerialEmployeeOptions(role: UserRole) {
+  if (!PERFORMANCE_MANAGERIAL_INPUT_ROLES.includes(role)) {
+    return [];
+  }
+
+  return db
+    .select({
+      id: employees.id,
+      employeeCode: employees.employeeCode,
+      fullName: employees.fullName,
+      divisionId: employees.divisionId,
+      divisionName: divisions.name,
+    })
+    .from(employees)
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+    .innerJoin(userRoles, eq(userRoles.employeeId, employees.id))
+    .where(
+      and(
+        eq(employees.employeeGroup, "MANAGERIAL"),
+        eq(employees.isActive, true),
+        inArray(userRoles.role, MANAGERIAL_TARGET_ROLES)
+      )
+    )
     .orderBy(asc(employees.fullName));
 }
 
@@ -369,6 +401,7 @@ export async function getPerformanceWorkspace() {
       canGenerateMonthly: false,
       activeVersion: null,
       employeeOptions: [],
+      managerialEmployeeOptions: [],
       divisionOptions: [],
       catalogEntries: [],
       activityEntries: [],
@@ -386,6 +419,7 @@ export async function getPerformanceWorkspace() {
       canGenerateMonthly: false,
       activeVersion: null,
       employeeOptions: [],
+      managerialEmployeeOptions: [],
       divisionOptions: [],
       catalogEntries: [],
       activityEntries: [],
@@ -394,12 +428,13 @@ export async function getPerformanceWorkspace() {
   }
 
   const activeVersion = await getActivePointCatalogVersion();
-  const [employeeOptions, divisionOptions, activityEntries, monthlyPerformances, catalogEntries] =
+  const [employeeOptions, managerialEmployeeOptions, divisionOptions, activityEntries, monthlyPerformances, catalogEntries] =
     await Promise.all([
       // TEAMWORK tidak butuh dropdown karyawan lain — hanya diri sendiri
       isSelfService
         ? Promise.resolve([])
         : getScopedTeamworkEmployees(role, roleRow.divisionIds),
+      getManagerialEmployeeOptions(role),
       // TEAMWORK ambil divisi aktual dari data employee mereka sendiri
       isSelfService
         ? db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.isActive, true)).orderBy(asc(divisions.name))
@@ -417,6 +452,7 @@ export async function getPerformanceWorkspace() {
     canGenerateMonthly: PERFORMANCE_GENERATE_ROLES.includes(role),
     activeVersion,
     employeeOptions,
+    managerialEmployeeOptions,
     divisionOptions,
     catalogEntries,
     activityEntries,
@@ -835,6 +871,102 @@ export async function generateMonthlyPerformance(input: unknown) {
 
   revalidatePath("/performance");
   return { success: true, generatedEmployees: targetEmployees.length };
+}
+
+export async function inputManagerialMonthlyPerformance(input: unknown) {
+  const authError = await checkRole(PERFORMANCE_MANAGERIAL_INPUT_ROLES);
+  if (authError) return authError;
+
+  const parsed = managerialMonthlyPerformanceInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input performa managerial tidak valid." };
+  }
+
+  const user = await getUser();
+  if (!user) return { error: "Sesi tidak valid." };
+
+  const resolvedPeriod = resolvePayrollPeriod(parsed.data.periodCode);
+  const [period] = await db
+    .select({
+      id: payrollPeriods.id,
+      status: payrollPeriods.status,
+    })
+    .from(payrollPeriods)
+    .where(eq(payrollPeriods.periodCode, resolvedPeriod.periodCode))
+    .limit(1);
+
+  if (!period) {
+    return { error: `Periode payroll ${resolvedPeriod.periodCode} belum tersedia. Buat periode payroll terlebih dahulu.` };
+  }
+
+  if (period.status === "PAID" || period.status === "LOCKED") {
+    return { error: "Periode payroll yang sudah paid/locked tidak bisa diubah lagi." };
+  }
+
+  const targetEmployees = await db
+    .select({
+      id: employees.id,
+    })
+    .from(employees)
+    .innerJoin(userRoles, eq(userRoles.employeeId, employees.id))
+    .where(
+      and(
+        eq(employees.isActive, true),
+        eq(employees.employeeGroup, "MANAGERIAL"),
+        inArray(userRoles.role, MANAGERIAL_TARGET_ROLES)
+      )
+    );
+
+  if (targetEmployees.length === 0) {
+    return { error: "Tidak ada karyawan managerial aktif (KABAG/SPV/MANAGERIAL) untuk periode ini." };
+  }
+
+  await db.transaction(async (tx) => {
+    for (const employee of targetEmployees) {
+      const [existing] = await tx
+        .select({ id: managerialKpiSummaries.id })
+        .from(managerialKpiSummaries)
+        .where(
+          and(
+            eq(managerialKpiSummaries.periodId, period.id),
+            eq(managerialKpiSummaries.employeeId, employee.id)
+          )
+        )
+        .limit(1);
+
+      const payload = {
+        periodId: period.id,
+        employeeId: employee.id,
+        performancePercent: parsed.data.performancePercent.toFixed(2),
+        notes: parsed.data.notes ?? "Input massal performa managerial dari menu Performa Bulanan.",
+        status: "VALIDATED" as const,
+        validatedByUserId: user.id,
+        validatedAt: new Date(),
+      };
+
+      if (existing) {
+        await tx
+          .update(managerialKpiSummaries)
+          .set({
+            ...payload,
+            updatedAt: new Date(),
+          })
+          .where(eq(managerialKpiSummaries.id, existing.id));
+      } else {
+        await tx.insert(managerialKpiSummaries).values(payload);
+      }
+    }
+  });
+
+  revalidatePath("/performance");
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
+  return {
+    success: true,
+    periodCode: resolvedPeriod.periodCode,
+    updatedEmployees: targetEmployees.length,
+    performancePercent: parsed.data.performancePercent,
+  };
 }
 
 export type TwActivityItem = {

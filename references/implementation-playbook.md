@@ -78,6 +78,7 @@ Untuk modul poin kinerja:
 - target poin harian berbasis divisi snapshot saat ini memakai `src/config/constants.ts` dan `calculateMonthlyPointPerformance()`;
 - daftar pekerjaan harian mengikuti divisi aktual harian di action performance;
 - performa bulanan dihitung dari poin approved/locked vs target snapshot.
+- input managerial bulanan tersedia di `src/server/actions/performance.ts` dan menulis ke `managerial_kpi_summaries` untuk role KABAG/SPV/MANAGERIAL.
 
 Untuk payroll:
 - level bonus memakai `resolveBonusLevel()`;

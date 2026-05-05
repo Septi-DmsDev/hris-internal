@@ -25,6 +25,7 @@ import {
   approveDailyActivityEntry,
   deleteActivityEntry,
   generateMonthlyPerformance,
+  inputManagerialMonthlyPerformance,
   rejectDailyActivityEntry,
   saveDailyActivityEntry,
   submitDailyActivityEntry,
@@ -69,6 +70,14 @@ export type PerformanceEmployeeOption = {
 export type PerformanceDivisionOption = {
   id: string;
   name: string;
+};
+
+export type PerformanceManagerialEmployeeOption = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  divisionId: string | null;
+  divisionName: string;
 };
 
 export type PerformanceActivityRow = {
@@ -156,6 +165,12 @@ type MonthlyDraft = {
   periodEndDate: string;
 };
 
+type ManagerialMonthlyInputDraft = {
+  periodCode: string;
+  performancePercent: string;
+  notes: string;
+};
+
 type DecisionAction = "submit" | "approve" | "reject";
 
 type DecisionState = {
@@ -211,6 +226,17 @@ function createMonthlyDraft(): MonthlyDraft {
   };
 }
 
+function createManagerialMonthlyInputDraft(): ManagerialMonthlyInputDraft {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const year = String(today.getFullYear());
+  return {
+    periodCode: `${year}-${month}`,
+    performancePercent: "100",
+    notes: "",
+  };
+}
+
 type PerformanceCatalogClientProps = {
   role: UserRole;
   canManageCatalog: boolean;
@@ -224,6 +250,7 @@ type PerformanceCatalogClientProps = {
   entries: PerformanceCatalogEntryRow[];
   allCatalogEntries: PerformanceCatalogEntryRow[];
   employeeOptions: PerformanceEmployeeOption[];
+  managerialEmployeeOptions: PerformanceManagerialEmployeeOption[];
   divisionOptions: PerformanceDivisionOption[];
   activityEntries: PerformanceActivityRow[];
   monthlyPerformances: PerformanceMonthlyRow[];
@@ -242,6 +269,7 @@ export default function PerformanceCatalogClient({
   entries,
   allCatalogEntries,
   employeeOptions,
+  managerialEmployeeOptions,
   divisionOptions,
   activityEntries,
   monthlyPerformances,
@@ -250,10 +278,14 @@ export default function PerformanceCatalogClient({
   const [activityOpen, setActivityOpen] = useState(false);
   const [decisionState, setDecisionState] = useState<DecisionState | null>(null);
   const [monthlyOpen, setMonthlyOpen] = useState(false);
+  const [managerialMonthlyOpen, setManagerialMonthlyOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [clearCatalogOpen, setClearCatalogOpen] = useState(false);
   const [activityDraft, setActivityDraft] = useState<ActivityDraft>(createActivityDraft());
   const [monthlyDraft, setMonthlyDraft] = useState<MonthlyDraft>(createMonthlyDraft());
+  const [managerialMonthlyDraft, setManagerialMonthlyDraft] = useState<ManagerialMonthlyInputDraft>(
+    createManagerialMonthlyInputDraft()
+  );
   const [decisionNotes, setDecisionNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -303,6 +335,10 @@ export default function PerformanceCatalogClient({
 
   function updateMonthlyDraft(field: keyof MonthlyDraft, value: string) {
     setMonthlyDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateManagerialMonthlyDraft(field: keyof ManagerialMonthlyInputDraft, value: string) {
+    setManagerialMonthlyDraft((current) => ({ ...current, [field]: value }));
   }
 
   async function handleClearCatalog() {
@@ -407,6 +443,30 @@ export default function PerformanceCatalogClient({
       }
       setMonthlyOpen(false);
       setLastResult(`Monthly performance berhasil digenerate untuk ${result.generatedEmployees} karyawan.`);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleInputManagerialMonthlyPerformance() {
+    setPending(true);
+    resetMessages();
+    try {
+      const result = await inputManagerialMonthlyPerformance({
+        periodCode: managerialMonthlyDraft.periodCode,
+        performancePercent: managerialMonthlyDraft.performancePercent,
+        notes: managerialMonthlyDraft.notes,
+      });
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      setManagerialMonthlyOpen(false);
+      setManagerialMonthlyDraft(createManagerialMonthlyInputDraft());
+      setLastResult(
+        `Input managerial ${result.performancePercent.toFixed(2)}% untuk periode ${result.periodCode} berhasil diterapkan ke ${result.updatedEmployees} karyawan.`
+      );
       router.refresh();
     } finally {
       setPending(false);
@@ -867,11 +927,25 @@ export default function PerformanceCatalogClient({
         </TabsContent>
 
         <TabsContent value="monthly" className="space-y-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-800">Performa Bulanan</h2>
-            <p className="text-sm text-slate-500">
-              Rekap poin approved vs target divisi snapshot per periode yang digenerate.
-            </p>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">Performa Bulanan</h2>
+              <p className="text-sm text-slate-500">
+                Rekap poin approved vs target divisi snapshot per periode yang digenerate.
+              </p>
+            </div>
+            {canGenerateMonthly ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  resetMessages();
+                  setManagerialMonthlyOpen(true);
+                }}
+              >
+                Input % Managerial
+              </Button>
+            ) : null}
           </div>
           <DataTable
             data={monthlyPerformances}
@@ -1322,6 +1396,68 @@ export default function PerformanceCatalogClient({
               disabled={pending}
             >
               {pending ? "Menghitung..." : "Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Input Managerial Monthly Dialog */}
+      <Dialog open={managerialMonthlyOpen} onOpenChange={setManagerialMonthlyOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Input Persentase Managerial Bulanan</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-500">
+            Mengisi persentase performa yang sama untuk semua karyawan managerial aktif (role KABAG, SPV, MANAGERIAL) pada satu periode payroll bulanan.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Periode (YYYY-MM)</label>
+              <Input
+                type="month"
+                value={managerialMonthlyDraft.periodCode}
+                onChange={(event) => updateManagerialMonthlyDraft("periodCode", event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Persentase (%)</label>
+              <Input
+                type="number"
+                min="0"
+                max="200"
+                step="0.01"
+                value={managerialMonthlyDraft.performancePercent}
+                onChange={(event) => updateManagerialMonthlyDraft("performancePercent", event.target.value)}
+              />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium text-slate-700">Catatan (opsional)</label>
+              <textarea
+                value={managerialMonthlyDraft.notes}
+                onChange={(event) => updateManagerialMonthlyDraft("notes", event.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 md:col-span-2">
+              Target karyawan managerial terdeteksi: <span className="font-semibold">{managerialEmployeeOptions.length}</span> orang.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setManagerialMonthlyOpen(false)}
+              disabled={pending}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleInputManagerialMonthlyPerformance()}
+              disabled={pending}
+            >
+              {pending ? "Menyimpan..." : "Terapkan"}
             </Button>
           </DialogFooter>
         </DialogContent>

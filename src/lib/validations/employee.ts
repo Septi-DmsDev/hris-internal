@@ -109,6 +109,27 @@ export const workScheduleDaySchema = z
     }
   });
 
+export const employeeOrganizationBulkUpdateSchema = z
+  .object({
+    employeeIds: z.array(z.string().uuid("ID karyawan tidak valid")).min(1, "Pilih minimal satu karyawan."),
+    branchId: z.string().uuid("Cabang tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
+    divisionId: z.string().uuid("Divisi tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
+    positionId: z.string().uuid("Jabatan tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
+    gradeId: z.string().uuid("Grade tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
+    employeeGroup: z.enum(["MANAGERIAL", "TEAMWORK"]).optional(),
+    effectiveDate: z.union([z.coerce.date(), z.literal(""), z.undefined()]).transform((value) => (value === "" ? undefined : value)),
+    notes: optionalText,
+  })
+  .superRefine((value, ctx) => {
+    if (!value.branchId && !value.divisionId && !value.positionId && !value.gradeId && !value.employeeGroup) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["employeeIds"],
+        message: "Pilih minimal satu perubahan struktur yang akan diterapkan.",
+      });
+    }
+  });
+
 export const workScheduleSchema = z
   .object({
     code: z.string().trim().min(1, "Kode jadwal wajib diisi").max(20).toUpperCase(),
@@ -151,6 +172,7 @@ export const workShiftMasterSchema = z
   });
 
 export type EmployeeInput = z.infer<typeof employeeSchema>;
+export type EmployeeOrganizationBulkUpdateInput = z.infer<typeof employeeOrganizationBulkUpdateSchema>;
 export type WorkScheduleDayInput = z.infer<typeof workScheduleDaySchema>;
 export type WorkScheduleInput = z.infer<typeof workScheduleSchema>;
 export type WorkShiftMasterInput = z.infer<typeof workShiftMasterSchema>;

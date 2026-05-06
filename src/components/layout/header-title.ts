@@ -12,7 +12,9 @@ export function resolveHeaderMeta(pathname: string) {
   if (pathname.startsWith("/performance/training")) return { title: "Evaluasi Training", description: "Penilaian masa training" };
   if (pathname.startsWith("/performance")) return { title: "Performa", description: "Poin, target, dan aktivitas" };
   if (pathname.startsWith("/employees/")) return { title: "Detail Karyawan", description: "Profil dan histori karyawan" };
-  if (pathname.startsWith("/employees")) return { title: "Karyawan", description: "Data karyawan aktif" };
+  if (pathname.startsWith("/employees")) return { title: "Karyawan", description: "Kelola data pribadi karyawan" };
+  if (pathname.startsWith("/positioning")) return { title: "Penempatan", description: "Mutasi massal cabang/divisi/jabatan/grade/kelompok" };
+  if (pathname.startsWith("/divisi")) return { title: "Penempatan", description: "Mutasi massal cabang/divisi/jabatan/grade/kelompok" };
   if (pathname.startsWith("/ticketingapproval")) return { title: "Approval Izin", description: "Antrian persetujuan tiket" };
   if (pathname.startsWith("/tickets")) return { title: "Ticketing", description: "Izin, sakit, dan cuti" };
   if (pathname.startsWith("/reviews")) return { title: "Review", description: "Review dan incident kerja" };

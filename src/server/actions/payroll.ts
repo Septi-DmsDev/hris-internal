@@ -40,6 +40,7 @@ import { calculateManagerialPayroll } from "@/server/payroll-engine/calculate-ma
 import { calculateTeamworkPayroll } from "@/server/payroll-engine/calculate-teamwork-payroll";
 import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
 import { resolvePayrollStatusTransition } from "@/server/payroll-engine/resolve-payroll-status-transition";
+import { resolveTenureAllowanceAmount } from "@/server/payroll-engine/resolve-tenure-allowance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -349,7 +350,9 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
       employeeId: employees.id,
       employeeCode: employees.employeeCode,
       employeeName: employees.fullName,
+      positionName: positions.name,
       divisionName: divisions.name,
+      trainingGraduationDate: employees.trainingGraduationDate,
       employeeGroup: employees.employeeGroup,
       payrollStatus: employees.payrollStatus,
       baseSalaryAmount: employeeSalaryConfigs.baseSalaryAmount,
@@ -367,6 +370,7 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
       updatedAt: employeeSalaryConfigs.updatedAt,
     })
     .from(employees)
+    .leftJoin(positions, eq(employees.positionId, positions.id))
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
     .leftJoin(employeeSalaryConfigs, eq(employees.id, employeeSalaryConfigs.employeeId))
     .where(
@@ -376,6 +380,12 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
       )
     )
     .orderBy(asc(employees.fullName));
+
+  const tenureReferenceDate = selectedPeriod?.periodEndDate ?? new Date();
+  const salaryConfigsWithAutoTenure = salaryConfigs.map((row) => ({
+    ...row,
+    tenureAllowanceAmount: resolveTenureAllowanceAmount(row.trainingGraduationDate, tenureReferenceDate).toFixed(2),
+  }));
 
   const managerialKpiRows = activePeriodId
     ? await db
@@ -428,7 +438,7 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
     periods,
     results,
     adjustments,
-    salaryConfigs,
+    salaryConfigs: salaryConfigsWithAutoTenure,
     gradeCompensations,
     managerialKpiRows,
   };
@@ -973,6 +983,7 @@ export async function generatePayrollPreview(input: unknown) {
       employeeGroup: employees.employeeGroup,
       employmentStatus: employees.employmentStatus,
       payrollStatus: employees.payrollStatus,
+      trainingGraduationDate: employees.trainingGraduationDate,
       isActive: employees.isActive,
     })
     .from(employees)
@@ -1118,7 +1129,10 @@ export async function generatePayrollPreview(input: unknown) {
       : undefined;
     const gradeAllowanceAmount = toNumber(salaryConfig?.gradeAllowanceAmount)
       || toNumber(gradeCompensation?.allowanceAmount);
-    const tenureAllowanceAmount = toNumber(salaryConfig?.tenureAllowanceAmount);
+    const tenureAllowanceAmount = resolveTenureAllowanceAmount(
+      employee.trainingGraduationDate,
+      periodEndDate
+    );
     const fulltimeBonusAmount = toNumber(salaryConfig?.fulltimeBonusAmount);
 
     const performance = performanceMap.get(employee.id);

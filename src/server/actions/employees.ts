@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/schema/employee";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import { upsertEmployeeLogin } from "@/server/actions/users";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   checkRole,
   getCurrentUserRole,
@@ -20,7 +21,12 @@ import {
   requireAuth,
 } from "@/lib/auth/session";
 import { userRoles } from "@/lib/db/schema/auth";
-import { employeeSchema, type EmployeeInput } from "@/lib/validations/employee";
+import {
+  employeeOrganizationBulkUpdateSchema,
+  employeeSchema,
+  type EmployeeInput,
+  type EmployeeOrganizationBulkUpdateInput,
+} from "@/lib/validations/employee";
 import { aliasedTable, asc, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -36,6 +42,11 @@ type EmployeeDetailRow = {
   fullName: string;
   nickname: string | null;
   photoUrl: string | null;
+  birthPlace: string | null;
+  birthDate: Date | null;
+  gender: string | null;
+  religion: string | null;
+  maritalStatus: string | null;
   phoneNumber: string | null;
   address: string | null;
   startDate: Date;
@@ -71,6 +82,7 @@ type EmployeeListRow = {
   employeeCode: string;
   fullName: string;
   nickname: string | null;
+  phoneNumber: string | null;
   startDate: Date;
   branchId: string;
   branchName: string | null;
@@ -102,6 +114,10 @@ function ensureEmployeeReadRole(role: UserRole) {
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function toDateOnlyUtc(date: Date) {
+  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0));
 }
 
 function oneDayBefore(date: Date) {
@@ -174,11 +190,11 @@ function matchBranchId(branchRows: Array<{ id: string; name: string }>, rawBranc
 }
 
 function parseImportDate(value: unknown): Date | undefined {
-  if (value instanceof Date) return startOfDay(value);
+  if (value instanceof Date) return toDateOnlyUtc(value);
   if (typeof value === "number" && Number.isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (!parsed) return undefined;
-    return startOfDay(new Date(parsed.y, parsed.m - 1, parsed.d));
+    return toDateOnlyUtc(new Date(parsed.y, parsed.m - 1, parsed.d));
   }
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
@@ -186,16 +202,16 @@ function parseImportDate(value: unknown): Date | undefined {
   const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoMatch) {
     const [, y, m, d] = isoMatch;
-    return startOfDay(new Date(Number(y), Number(m) - 1, Number(d)));
+    return toDateOnlyUtc(new Date(Number(y), Number(m) - 1, Number(d)));
   }
   const slashMatch = normalized.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
   if (slashMatch) {
     const [, d, m, y] = slashMatch;
-    return startOfDay(new Date(Number(y), Number(m) - 1, Number(d)));
+    return toDateOnlyUtc(new Date(Number(y), Number(m) - 1, Number(d)));
   }
   const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) return undefined;
-  return startOfDay(parsed);
+  return toDateOnlyUtc(parsed);
 }
 
 
@@ -305,6 +321,7 @@ export async function getEmployees() {
       employeeCode: employees.employeeCode,
       fullName: employees.fullName,
       nickname: employees.nickname,
+      phoneNumber: employees.phoneNumber,
       startDate: employees.startDate,
       branchId: employees.branchId,
       branchName: branches.name,
@@ -392,6 +409,80 @@ export async function getEmployeeFormOptions() {
   };
 }
 
+export async function getEmployeesForExport() {
+  await requireAuth();
+  const role = await getCurrentUserRole();
+  if (role !== "HRD" && role !== "SUPER_ADMIN") {
+    return { error: "Akses ditolak. Hanya HRD dan Super Admin yang dapat export data karyawan." } as const;
+  }
+
+  const rows = await db
+    .select({
+      id: employees.id,
+      branchName: branches.name,
+      fullName: employees.fullName,
+      birthPlace: employees.birthPlace,
+      birthDate: employees.birthDate,
+      gender: employees.gender,
+      religion: employees.religion,
+      maritalStatus: employees.maritalStatus,
+      address: employees.address,
+      phoneNumber: employees.phoneNumber,
+      startDate: employees.startDate,
+      trainingGraduationDate: employees.trainingGraduationDate,
+      userId: userRoles.userId,
+    })
+    .from(employees)
+    .leftJoin(branches, eq(employees.branchId, branches.id))
+    .leftJoin(userRoles, eq(userRoles.employeeId, employees.id))
+    .orderBy(asc(employees.fullName));
+
+  const admin = createAdminClient();
+  const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  const emailMap = new Map((data?.users ?? []).map((user) => [user.id, user.email ?? ""]));
+
+  return rows.map((row) => ({
+    cabang: row.branchName ?? "-",
+    nama: row.fullName ?? "-",
+    tempatLahir: row.birthPlace ?? "-",
+    tglLahir: row.birthDate,
+    jenisKelamin: row.gender ?? "-",
+    agama: row.religion ?? "-",
+    status: row.maritalStatus ?? "-",
+    alamat: row.address ?? "-",
+    noTelp: row.phoneNumber ?? "-",
+    email: row.userId ? emailMap.get(row.userId) ?? "-" : "-",
+    masukKerja: row.startDate,
+    lolosTraining: row.trainingGraduationDate,
+  }));
+}
+
+export async function getDivisionManagementOptions() {
+  await requireAuth();
+  const role = await getCurrentUserRole();
+  if (role !== "HRD" && role !== "SUPER_ADMIN") {
+    redirect("/dashboard");
+  }
+
+  const [branchRows, divisionRows, positionRows, gradeRows] = await Promise.all([
+    db.select({ id: branches.id, name: branches.name }).from(branches).where(eq(branches.isActive, true)).orderBy(asc(branches.name)),
+    db.select({ id: divisions.id, name: divisions.name }).from(divisions).where(eq(divisions.isActive, true)).orderBy(asc(divisions.name)),
+    db
+      .select({ id: positions.id, name: positions.name, employeeGroup: positions.employeeGroup })
+      .from(positions)
+      .where(eq(positions.isActive, true))
+      .orderBy(asc(positions.name)),
+    db.select({ id: grades.id, name: grades.name, code: grades.code }).from(grades).where(eq(grades.isActive, true)).orderBy(asc(grades.name)),
+  ]);
+
+  return {
+    branches: branchRows,
+    divisions: divisionRows,
+    positions: positionRows,
+    grades: gradeRows,
+  };
+}
+
 export async function getEmployeeById(id: string) {
   await requireAuth();
   const roleRow = await getCurrentUserRoleRow();
@@ -406,6 +497,11 @@ export async function getEmployeeById(id: string) {
       fullName: employees.fullName,
       nickname: employees.nickname,
       photoUrl: employees.photoUrl,
+      birthPlace: employees.birthPlace,
+      birthDate: employees.birthDate,
+      gender: employees.gender,
+      religion: employees.religion,
+      maritalStatus: employees.maritalStatus,
       phoneNumber: employees.phoneNumber,
       address: employees.address,
       startDate: employees.startDate,
@@ -620,6 +716,7 @@ export async function importEmployeesFromXlsx(formData: FormData) {
   const statusIdx = header.findIndex((value) => value === "STATUS");
   const alamatIdx = header.findIndex((value) => value === "ALAMAT");
   const noTelpIdx = header.findIndex((value) => value === "NO TELP");
+  const emailIdx = header.findIndex((value) => value === "EMAIL");
   const masukKerjaIdx = header.findIndex((value) => value === "MASUK KERJA");
   const lolosTrainingIdx = header.findIndex((value) => value === "LOLOS TRAINING");
 
@@ -766,7 +863,8 @@ export async function importEmployeesFromXlsx(formData: FormData) {
 
     importedEmployees += 1;
 
-    const loginEmail = normalizeImportEmail(username);
+    const rawEmail = emailIdx >= 0 ? String(row[emailIdx] ?? "").trim() : "";
+    const loginEmail = normalizeImportEmail(rawEmail || username);
     const loginResult = await upsertEmployeeLogin({
       employeeId,
       email: loginEmail,
@@ -932,6 +1030,96 @@ export async function updateEmployee(id: string, input: unknown) {
 
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);
+  return { success: true };
+}
+
+function resolveBulkNotes(input: EmployeeOrganizationBulkUpdateInput) {
+  const notes = input.notes?.trim();
+  return notes && notes.length > 0 ? notes : "Mutasi massal struktur organisasi";
+}
+
+export async function bulkUpdateEmployeeOrganization(input: unknown) {
+  const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const parsed = employeeOrganizationBulkUpdateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input mutasi massal tidak valid." };
+  }
+
+  const payload = parsed.data;
+  const effectiveDate = payload.effectiveDate ?? startOfDay(new Date());
+  const notes = resolveBulkNotes(payload);
+
+  await db.transaction(async (tx) => {
+    for (const employeeId of payload.employeeIds) {
+      const [existingEmployee] = await tx
+        .select({
+          id: employees.id,
+          branchId: employees.branchId,
+          divisionId: employees.divisionId,
+          positionId: employees.positionId,
+          gradeId: employees.gradeId,
+          employeeGroup: employees.employeeGroup,
+        })
+        .from(employees)
+        .where(eq(employees.id, employeeId))
+        .limit(1);
+
+      if (!existingEmployee) continue;
+
+      const nextBranchId = payload.branchId ?? existingEmployee.branchId;
+      const nextDivisionId = payload.divisionId ?? existingEmployee.divisionId;
+      const nextPositionId = payload.positionId ?? existingEmployee.positionId;
+      const nextGradeId = payload.gradeId ?? existingEmployee.gradeId;
+      const nextEmployeeGroup = payload.employeeGroup ?? existingEmployee.employeeGroup;
+
+      await tx
+        .update(employees)
+        .set({
+          branchId: nextBranchId,
+          divisionId: nextDivisionId,
+          positionId: nextPositionId,
+          gradeId: nextGradeId,
+          employeeGroup: nextEmployeeGroup,
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, employeeId));
+
+      if (existingEmployee.divisionId !== nextDivisionId) {
+        await tx.insert(employeeDivisionHistories).values({
+          employeeId,
+          previousDivisionId: existingEmployee.divisionId,
+          newDivisionId: nextDivisionId,
+          effectiveDate,
+          notes,
+        });
+      }
+
+      if (existingEmployee.positionId !== nextPositionId) {
+        await tx.insert(employeePositionHistories).values({
+          employeeId,
+          previousPositionId: existingEmployee.positionId,
+          newPositionId: nextPositionId,
+          effectiveDate,
+          notes,
+        });
+      }
+
+      if (existingEmployee.gradeId !== nextGradeId) {
+        await tx.insert(employeeGradeHistories).values({
+          employeeId,
+          previousGradeId: existingEmployee.gradeId,
+          newGradeId: nextGradeId,
+          effectiveDate,
+          notes,
+        });
+      }
+    }
+  });
+
+  revalidatePath("/positioning");
+  revalidatePath("/employees");
   return { success: true };
 }
 

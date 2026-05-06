@@ -12,6 +12,9 @@ export default async function TicketingPage() {
   if (role === "HRD") {
     redirect("/ticketingapproval");
   }
+  if (role === "FINANCE") {
+    redirect("/finance");
+  }
 
   const { tickets } = await getTickets();
 

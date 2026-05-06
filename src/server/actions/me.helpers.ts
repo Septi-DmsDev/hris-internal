@@ -31,6 +31,13 @@ function toNumber(value: string | number | null | undefined) {
 }
 
 export function resolveMyAccessState(role: UserRole, employeeId: string | null) {
+  if (role === "FINANCE") {
+    return {
+      canAccess: false,
+      redirectTo: "/finance",
+    };
+  }
+
   if (role === "SUPER_ADMIN" && !employeeId) {
     return {
       canAccess: false,

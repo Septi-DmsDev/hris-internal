@@ -27,10 +27,84 @@ Page / Client Component
 Key folders:
 
 - `src/app/(dashboard)/*` for authenticated routes.
+- `src/app/(auth)/*` for login/auth pages.
 - `src/server/actions/*` for business entry points.
 - `src/server/point-engine/*`, `src/server/payroll-engine/*`, `src/server/ticketing-engine/*`, and `src/server/review-engine/*` for testable rules/helpers.
 - `src/lib/db/schema/*` for Drizzle schema.
-- `src/lib/auth/session.ts` and `src/proxy.ts` for auth/session flow.
+- `src/lib/auth/session.ts` for auth/session flow.
+- `src/lib/validations/*` for Zod schemas.
+- `supabase/migrations/*` for SQL migration history.
+
+## Employee Data Model
+
+Tabel `employees` menyimpan dua kelompok data:
+
+**Data Kerja** (wajib saat create):
+`employee_code`, `full_name`, `branch_id`, `division_id`, `position_id`, `grade_id`, `employee_group`, `employment_status`, `payroll_status`, `start_date`, `supervisor_employee_id`
+
+**Data Diri** (opsional, bisa diisi lewat import atau edit profil):
+`birth_place`, `birth_date`, `gender`, `religion`, `marital_status`, `phone_number`, `address`, `nickname`, `photo_url`, `jobdesk`, `notes`
+
+Tabel terkait per karyawan:
+- `employee_division_histories` / `_position_` / `_grade_` / `_supervisor_` / `_status_histories` — riwayat perubahan
+- `employee_schedule_assignments` — jadwal kerja aktif dan historis
+- `employee_salary_configs` — konfigurasi gaji (1:1)
+- `attendance_tickets` / `leave_quotas` — cuti & izin
+- `daily_activity_entries` / `monthly_point_performances` — performa poin
+- `employee_reviews` / `incident_logs` — review & insiden
+- `payroll_employee_snapshots` / `payroll_results` / `payroll_adjustments` — payroll
+
+## Login & Auth
+
+Login mendukung tiga metode identifier (field `identifier` di form):
+
+1. **Username** (default) — nilai sebelum `@` pada email login, contoh: `srifit` → `srifit@hris.internal`
+2. **Email penuh** — langsung dipakai jika ada karakter `@`
+3. **Nomor telepon** — dicari di `employees.phone_number`, dinormalisasi ke format `62xxxxxxx`, lalu resolve ke email via `admin.auth.admin.getUserById`
+
+Resolusi terjadi di `src/server/actions/auth.ts → resolveIdentifierToEmail()`. Supabase Auth tetap menggunakan `signInWithPassword({ email, password })`.
+
+Format email login yang dibuat saat import: `username@hris.internal` (menggunakan `normalizeImportEmail()` di `src/server/actions/employees.ts`).
+
+## Import Karyawan dari Excel
+
+Format kolom yang didukung (urutan bisa beda, header dicocokkan):
+`CABANG`, `NAMA`, `USERNAME`, `PASSWORD`, `TEMPAT LAHIR`, `TGL LAHIR`, `JENIS KELAMIN`, `AGAMA`, `STATUS`, `ALAMAT`, `NO TELP`, `MASUK KERJA`, `LOLOS TRAINING`
+
+Aturan pemetaan:
+- `STATUS` → `marital_status` (status pernikahan, **bukan** employment status)
+- `LOLOS TRAINING` → `training_graduation_date` sebagai **tanggal** (bukan boolean)
+- Jika `training_graduation_date` ada → `employment_status = REGULER`, sebaliknya `TRAINING`
+- `CABANG` dicocokkan fuzzy ke tabel `branches`
+- `DIVISI` ditentukan otomatis dari branch (ambil divisi pertama milik cabang tersebut)
+- `JABATAN` dan `GRADE` diambil dari fallback master data aktif (default TEAMWORK)
+- Email login dibuat: `username@hris.internal`
+
+Catatan performa: import 300+ baris memerlukan waktu karena setiap baris membuat transaksi DB + Supabase Auth user secara berurutan.
+
+## Database & Migrations
+
+**Koneksi:**
+- `DATABASE_URL` → `localhost:5433` (PgBouncer pooler, untuk operasi normal/DML)
+- Port 5432 (PostgreSQL langsung) tidak diekspos keluar
+- Supabase self-hosted di `https://hris-supa.it-teknos.site`
+
+**Kepemilikan tabel:**
+- Tabel dimiliki oleh `supabase_admin` (superuser), bukan `postgres`
+- User `postgres` hanya punya DML (SELECT/INSERT/UPDATE/DELETE), tidak bisa ALTER TABLE
+- Untuk menjalankan DDL/migration: gunakan **Supabase Studio SQL Editor** atau endpoint pg-meta (`POST /pg/query` dengan service_role key)
+
+**Cara apply migration baru:**
+```bash
+# Via pg-meta API (bisa dijalankan dari script Node.js)
+POST https://hris-supa.it-teknos.site/pg/query
+Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>
+Body: { "query": "ALTER TABLE ..." }
+
+# Atau via Supabase Studio → SQL Editor
+```
+
+Jangan gunakan `drizzle-kit migrate` langsung dari localhost karena `postgres` bukan owner tabel.
 
 ## Critical Rules
 

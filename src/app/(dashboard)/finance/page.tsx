@@ -42,6 +42,7 @@ export default async function FinancePage({ searchParams }: PageProps) {
     employeeId: row.employeeId,
     employeeCode: row.employeeCode,
     employeeName: row.employeeName,
+    positionName: row.positionName ?? "-",
     divisionName: row.divisionName ?? "-",
     employeeGroup: row.employeeGroup ?? "TEAMWORK",
     payrollStatus: row.payrollStatus,

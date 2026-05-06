@@ -18,6 +18,8 @@ export default async function EmployeesPage() {
     id: string;
     employeeCode: string;
     fullName: string;
+    branchName: string | null;
+    phoneNumber: string | null;
     divisionName: string | null;
     positionName: string | null;
     employeeGroup: "MANAGERIAL" | "TEAMWORK";
@@ -38,6 +40,8 @@ export default async function EmployeesPage() {
     id: employee.id,
     employeeCode: employee.employeeCode,
     fullName: employee.fullName,
+    branchName: employee.branchName ?? "-",
+    phoneNumber: employee.phoneNumber ?? "-",
     divisionName: employee.divisionName ?? "-",
     positionName: employee.positionName ?? "-",
     employeeGroup: employee.employeeGroup,

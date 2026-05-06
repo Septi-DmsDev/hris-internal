@@ -151,21 +151,28 @@ export default function FinanceDashboardClient({
         cell: ({ row }) => (
           <div className="space-y-0.5">
             <p className="font-medium text-slate-900">{row.original.employeeName}</p>
-            <p className="text-xs text-slate-500">{row.original.employeeCode} · {row.original.divisionName}</p>
+            <p className="text-xs text-slate-500">{row.original.positionName} · {row.original.divisionName}</p>
           </div>
         ),
       },
       {
-        header: "Grup",
-        accessorKey: "employeeGroup",
+        header: "Status",
+        accessorKey: "payrollStatus",
         cell: ({ row }) => (
-          <Badge variant="outline">{row.original.employeeGroup}</Badge>
+          <Badge variant={row.original.payrollStatus === "REGULER" ? "default" : "secondary"}>
+            {row.original.payrollStatus}
+          </Badge>
         ),
       },
       {
         header: "Gaji Pokok",
         accessorKey: "baseSalaryAmount",
         cell: ({ row }) => <span>{fmt(row.original.baseSalaryAmount)}</span>,
+      },
+      {
+        header: "Tunjangan Masa Kerja",
+        accessorKey: "tenureAllowanceAmount",
+        cell: ({ row }) => <span>{fmt(row.original.tenureAllowanceAmount)}</span>,
       },
       {
         header: "Update",

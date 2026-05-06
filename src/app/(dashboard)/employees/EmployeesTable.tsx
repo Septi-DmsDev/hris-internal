@@ -3,94 +3,20 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/tables/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  createEmployee,
-  deleteEmployee,
-  getEmployeeById,
-  importEmployeesFromXlsx,
-  updateEmployee,
-} from "@/server/actions/employees";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, updateEmployee } from "@/server/actions/employees";
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
-import { Paperclip, Plus, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 
-const EMPLOYEE_GROUP_OPTIONS = [
-  { value: "TEAMWORK", label: "Teamwork" },
-  { value: "MANAGERIAL", label: "Managerial" },
-] as const;
-
-const EMPLOYMENT_STATUS_OPTIONS = [
-  "TRAINING",
-  "REGULER",
-  "DIALIHKAN_TRAINING",
-  "TIDAK_LOLOS",
-  "NONAKTIF",
-  "RESIGN",
-] as const;
-
-const PAYROLL_STATUS_OPTIONS = [
-  "TRAINING",
-  "REGULER",
-  "FINAL_PAYROLL",
-  "NONAKTIF",
-] as const;
-
-const EMPLOYMENT_STATUS_LABEL: Record<
-  (typeof EMPLOYMENT_STATUS_OPTIONS)[number],
-  string
-> = {
-  TRAINING: "Training",
-  REGULER: "Reguler",
-  DIALIHKAN_TRAINING: "Dialihkan Training",
-  TIDAK_LOLOS: "Tidak Lolos",
-  NONAKTIF: "Nonaktif",
-  RESIGN: "Resign",
-};
-
-const PAYROLL_STATUS_LABEL: Record<
-  (typeof PAYROLL_STATUS_OPTIONS)[number],
-  string
-> = {
-  TRAINING: "Training",
-  REGULER: "Reguler",
-  FINAL_PAYROLL: "Final Payroll",
-  NONAKTIF: "Nonaktif",
-};
-
-type Option = {
-  id: string;
-  name: string;
-};
-
-type PositionOption = Option & {
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
-};
-
-type ScheduleOption = Option & {
-  code: string;
-};
+type Option = { id: string; name: string };
+type PositionOption = Option & { employeeGroup: "MANAGERIAL" | "TEAMWORK" };
+type ScheduleOption = Option & { code: string };
 
 export type EmployeeFormOptions = {
   branches: Option[];
@@ -106,16 +32,12 @@ export type EmployeeRow = {
   id: string;
   employeeCode: string;
   fullName: string;
+  branchName: string;
+  phoneNumber: string;
   divisionName: string;
   positionName: string;
   employeeGroup: "MANAGERIAL" | "TEAMWORK";
-  employmentStatus:
-    | "TRAINING"
-    | "REGULER"
-    | "DIALIHKAN_TRAINING"
-    | "TIDAK_LOLOS"
-    | "NONAKTIF"
-    | "RESIGN";
+  employmentStatus: "TRAINING" | "REGULER" | "DIALIHKAN_TRAINING" | "TIDAK_LOLOS" | "NONAKTIF" | "RESIGN";
   payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
   supervisorName: string;
   isActive: boolean;
@@ -125,513 +47,228 @@ export type EmployeeRow = {
 type EmployeeDraft = {
   employeeCode: string;
   fullName: string;
-  nickname: string;
-  photoUrl: string;
-  phoneNumber: string;
-  address: string;
-  startDate: string;
   branchId: string;
+  birthPlace: string;
+  birthDate: string;
+  gender: string;
+  religion: string;
+  maritalStatus: string;
+  address: string;
+  phoneNumber: string;
+  startDate: string;
+  trainingGraduationDate: string;
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
   divisionId: string;
   positionId: string;
-  jobdesk: string;
   gradeId: string;
-  scheduleId: string;
   employeeGroup: "MANAGERIAL" | "TEAMWORK";
-  employmentStatus:
-    | "TRAINING"
-    | "REGULER"
-    | "DIALIHKAN_TRAINING"
-    | "TIDAK_LOLOS"
-    | "NONAKTIF"
-    | "RESIGN";
+  employmentStatus: "TRAINING" | "REGULER" | "DIALIHKAN_TRAINING" | "TIDAK_LOLOS" | "NONAKTIF" | "RESIGN";
   payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
   supervisorEmployeeId: string;
+  scheduleId: string;
   effectiveDate: string;
-  trainingGraduationDate: string;
   isActive: boolean;
-  notes: string;
 };
 
 type EmployeeDetailResult = Awaited<ReturnType<typeof getEmployeeById>>;
 
-type LoginDraft = { email: string; password: string; confirmPassword: string };
-
-function formatDateInput(value: Date | string | null | undefined) {
-  if (!value) return "";
-  if (typeof value === "string") return value.slice(0, 10);
-  return format(value, "yyyy-MM-dd");
+function toLoginEmail(username: string, fallbackEmail: string) {
+  const normalized = username.trim().toLowerCase();
+  if (normalized.includes("@")) return normalized;
+  if (normalized.length > 0) return `${normalized}@hris.internal`;
+  return fallbackEmail.trim();
 }
 
-function createEmptyDraft(): EmployeeDraft {
-  const today = format(new Date(), "yyyy-MM-dd");
+function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultPosition = options.positions.find((position) => position.employeeGroup === "TEAMWORK") ?? options.positions[0];
+  const defaultSupervisor = options.supervisors[0];
+
   return {
     employeeCode: "",
     fullName: "",
-    nickname: "",
-    photoUrl: "",
-    phoneNumber: "",
+    branchId: options.branches[0]?.id ?? "",
+    birthPlace: "",
+    birthDate: "",
+    gender: "",
+    religion: "",
+    maritalStatus: "",
     address: "",
+    phoneNumber: "",
     startDate: today,
-    branchId: "",
-    divisionId: "",
-    positionId: "",
-    jobdesk: "",
-    gradeId: "",
-    scheduleId: "",
-    employeeGroup: "TEAMWORK",
+    trainingGraduationDate: "",
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    divisionId: options.divisions[0]?.id ?? "",
+    positionId: defaultPosition?.id ?? "",
+    gradeId: options.grades[0]?.id ?? "",
+    employeeGroup: defaultPosition?.employeeGroup ?? "TEAMWORK",
     employmentStatus: "TRAINING",
     payrollStatus: "TRAINING",
-    supervisorEmployeeId: "",
+    supervisorEmployeeId: defaultSupervisor?.id ?? "",
+    scheduleId: "",
     effectiveDate: today,
-    trainingGraduationDate: "",
     isActive: true,
-    notes: "",
   };
 }
 
-function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>) {
+function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>, loginEmail: string | null): EmployeeDraft {
   const { employee, currentScheduleAssignment } = detail;
+  const today = new Date().toISOString().slice(0, 10);
 
   return {
     employeeCode: employee.employeeCode,
     fullName: employee.fullName,
-    nickname: employee.nickname ?? "",
-    photoUrl: employee.photoUrl ?? "",
-    phoneNumber: employee.phoneNumber ?? "",
-    address: employee.address ?? "",
-    startDate: formatDateInput(employee.startDate),
     branchId: employee.branchId,
+    birthPlace: employee.birthPlace ?? "",
+    birthDate: employee.birthDate ? new Date(employee.birthDate).toISOString().slice(0, 10) : "",
+    gender: employee.gender ?? "",
+    religion: employee.religion ?? "",
+    maritalStatus: employee.maritalStatus ?? "",
+    address: employee.address ?? "",
+    phoneNumber: employee.phoneNumber ?? "",
+    startDate: new Date(employee.startDate).toISOString().slice(0, 10),
+    trainingGraduationDate: employee.trainingGraduationDate ? new Date(employee.trainingGraduationDate).toISOString().slice(0, 10) : "",
+    username: loginEmail ? loginEmail.split("@")[0] : "",
+    email: loginEmail ?? "",
+    password: "",
+    confirmPassword: "",
     divisionId: employee.divisionId,
     positionId: employee.positionId,
-    jobdesk: employee.jobdesk ?? "",
     gradeId: employee.gradeId,
-    scheduleId: currentScheduleAssignment?.scheduleId ?? "",
     employeeGroup: employee.employeeGroup,
     employmentStatus: employee.employmentStatus,
     payrollStatus: employee.payrollStatus,
     supervisorEmployeeId: employee.supervisorEmployeeId ?? "",
-    effectiveDate: format(new Date(), "yyyy-MM-dd"),
-    trainingGraduationDate: formatDateInput(employee.trainingGraduationDate),
+    scheduleId: currentScheduleAssignment?.scheduleId ?? "",
+    effectiveDate: today,
     isActive: employee.isActive,
-    notes: employee.notes ?? "",
-  } satisfies EmployeeDraft;
+  };
 }
 
 function toActionInput(draft: EmployeeDraft) {
   return {
     employeeCode: draft.employeeCode,
     fullName: draft.fullName,
-    nickname: draft.nickname,
-    photoUrl: draft.photoUrl,
+    birthPlace: draft.birthPlace,
+    birthDate: draft.birthDate,
+    gender: draft.gender,
+    religion: draft.religion,
+    maritalStatus: draft.maritalStatus,
     phoneNumber: draft.phoneNumber,
     address: draft.address,
     startDate: draft.startDate,
     branchId: draft.branchId,
     divisionId: draft.divisionId,
     positionId: draft.positionId,
-    jobdesk: draft.jobdesk,
     gradeId: draft.gradeId,
-    scheduleId: draft.scheduleId,
     employeeGroup: draft.employeeGroup,
     employmentStatus: draft.employmentStatus,
     payrollStatus: draft.payrollStatus,
     supervisorEmployeeId: draft.supervisorEmployeeId,
-    effectiveDate: draft.effectiveDate,
+    scheduleId: draft.scheduleId,
     trainingGraduationDate: draft.trainingGraduationDate,
+    effectiveDate: draft.effectiveDate,
     isActive: draft.isActive,
-    notes: draft.notes,
   };
 }
 
-function DraftField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-slate-700">{label}</label>
-      {children}
-    </div>
-  );
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="space-y-2"><label className="text-sm font-medium text-slate-700">{label}</label>{children}</div>;
 }
 
-function EmployeeForm({
-  draft,
-  onChange,
-  options,
-}: {
-  draft: EmployeeDraft;
-  onChange: (
-    field: keyof EmployeeDraft,
-    value: string | boolean
-  ) => void;
-  options: EmployeeFormOptions;
-}) {
+function EmployeePersonalForm({ draft, onChange, options }: { draft: EmployeeDraft; onChange: (field: keyof EmployeeDraft, value: string) => void; options: EmployeeFormOptions }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <DraftField label="ID Karyawan / NIK">
-        <Input
-          value={draft.employeeCode}
-          onChange={(event) => onChange("employeeCode", event.target.value)}
-          maxLength={30}
-          required
-        />
-      </DraftField>
-      <DraftField label="Nama Lengkap">
-        <Input
-          value={draft.fullName}
-          onChange={(event) => onChange("fullName", event.target.value)}
-          maxLength={150}
-          required
-        />
-      </DraftField>
-      <DraftField label="Nama Panggilan">
-        <Input
-          value={draft.nickname}
-          onChange={(event) => onChange("nickname", event.target.value)}
-          maxLength={100}
-        />
-      </DraftField>
-      <DraftField label="Nomor HP">
-        <Input
-          value={draft.phoneNumber}
-          onChange={(event) => onChange("phoneNumber", event.target.value)}
-          maxLength={30}
-        />
-      </DraftField>
-      <DraftField label="Tanggal Masuk">
-        <Input
-          type="date"
-          value={draft.startDate}
-          onChange={(event) => onChange("startDate", event.target.value)}
-          required
-        />
-      </DraftField>
-      <DraftField label="Tanggal Efektif Perubahan">
-        <Input
-          type="date"
-          value={draft.effectiveDate}
-          onChange={(event) => onChange("effectiveDate", event.target.value)}
-        />
-      </DraftField>
-      <DraftField label="Cabang">
-        <select
-          value={draft.branchId}
-          onChange={(event) => onChange("branchId", event.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          required
-        >
-          <option value="">Pilih cabang</option>
-          {options.branches.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name}
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Divisi">
-        <select
-          value={draft.divisionId}
-          onChange={(event) => onChange("divisionId", event.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          required
-        >
-          <option value="">Pilih divisi</option>
-          {options.divisions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name}
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Jabatan">
-        <select
-          value={draft.positionId}
-          onChange={(event) => onChange("positionId", event.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          required
-        >
-          <option value="">Pilih jabatan</option>
-          {options.positions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name} ({option.employeeGroup})
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Grade">
-        <select
-          value={draft.gradeId}
-          onChange={(event) => onChange("gradeId", event.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          required
-        >
-          <option value="">Pilih grade</option>
-          {options.grades.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name} ({option.code})
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Kelompok Karyawan">
-        <select
-          value={draft.employeeGroup}
-          onChange={(event) =>
-            onChange(
-              "employeeGroup",
-              event.target.value as EmployeeDraft["employeeGroup"]
-            )
-          }
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          {EMPLOYEE_GROUP_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Status Kerja">
-        <select
-          value={draft.employmentStatus}
-          onChange={(event) =>
-            onChange(
-              "employmentStatus",
-              event.target.value as EmployeeDraft["employmentStatus"]
-            )
-          }
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          {EMPLOYMENT_STATUS_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {EMPLOYMENT_STATUS_LABEL[option]}
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Status Payroll">
-        <select
-          value={draft.payrollStatus}
-          onChange={(event) =>
-            onChange(
-              "payrollStatus",
-              event.target.value as EmployeeDraft["payrollStatus"]
-            )
-          }
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          {PAYROLL_STATUS_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {PAYROLL_STATUS_LABEL[option]}
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Supervisor">
-        <select
-          value={draft.supervisorEmployeeId}
-          onChange={(event) =>
-            onChange("supervisorEmployeeId", event.target.value)
-          }
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="">Pilih supervisor</option>
-          {options.supervisors.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.fullName}
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Jadwal Kerja">
-        <select
-          value={draft.scheduleId}
-          onChange={(event) => onChange("scheduleId", event.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="">Belum ditetapkan</option>
-          {options.schedules.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name} ({option.code})
-            </option>
-          ))}
-        </select>
-      </DraftField>
-      <DraftField label="Jobdesk">
-        <Input
-          value={draft.jobdesk}
-          onChange={(event) => onChange("jobdesk", event.target.value)}
-          maxLength={100}
-        />
-      </DraftField>
-      <DraftField label="Tanggal Lulus Training">
-        <Input
-          type="date"
-          value={draft.trainingGraduationDate}
-          onChange={(event) =>
-            onChange("trainingGraduationDate", event.target.value)
-          }
-        />
-      </DraftField>
-      <DraftField label="Foto URL">
-        <Input
-          value={draft.photoUrl}
-          onChange={(event) => onChange("photoUrl", event.target.value)}
-        />
-      </DraftField>
-      <DraftField label="Status Aktif">
-        <select
-          value={draft.isActive ? "true" : "false"}
-          onChange={(event) => onChange("isActive", event.target.value === "true")}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        >
-          <option value="true">Aktif</option>
-          <option value="false">Nonaktif</option>
-        </select>
-      </DraftField>
-      <div className="space-y-2 md:col-span-2">
-        <label className="text-sm font-medium text-slate-700">Alamat</label>
-        <textarea
-          value={draft.address}
-          onChange={(event) => onChange("address", event.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        />
-      </div>
-      <div className="space-y-2 md:col-span-2">
-        <label className="text-sm font-medium text-slate-700">Catatan</label>
-        <textarea
-          value={draft.notes}
-          onChange={(event) => onChange("notes", event.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-        />
-      </div>
+      <Field label="CABANG"><select value={draft.branchId} onChange={(e) => onChange("branchId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" required><option value="">Pilih cabang</option>{options.branches.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field>
+      <Field label="NAMA"><Input value={draft.fullName} onChange={(e) => onChange("fullName", e.target.value)} required /></Field>
+      <Field label="Username"><Input value={draft.username} onChange={(e) => onChange("username", e.target.value)} /></Field>
+      <Field label="Email"><Input type="email" value={draft.email} onChange={(e) => onChange("email", e.target.value)} /></Field>
+      <Field label="Password"><Input type="password" value={draft.password} onChange={(e) => onChange("password", e.target.value)} /></Field>
+      <Field label="Konfirmasi Password"><Input type="password" value={draft.confirmPassword} onChange={(e) => onChange("confirmPassword", e.target.value)} /></Field>
+      <Field label="TEMPAT LAHIR"><Input value={draft.birthPlace} onChange={(e) => onChange("birthPlace", e.target.value)} /></Field>
+      <Field label="TGL LAHIR"><Input type="date" value={draft.birthDate} onChange={(e) => onChange("birthDate", e.target.value)} /></Field>
+      <Field label="JENIS KELAMIN"><Input value={draft.gender} onChange={(e) => onChange("gender", e.target.value)} /></Field>
+      <Field label="AGAMA"><Input value={draft.religion} onChange={(e) => onChange("religion", e.target.value)} /></Field>
+      <Field label="STATUS"><Input value={draft.maritalStatus} onChange={(e) => onChange("maritalStatus", e.target.value)} /></Field>
+      <Field label="NO TELP"><Input value={draft.phoneNumber} onChange={(e) => onChange("phoneNumber", e.target.value)} /></Field>
+      <Field label="MASUK KERJA"><Input type="date" value={draft.startDate} onChange={(e) => onChange("startDate", e.target.value)} /></Field>
+      <Field label="LOLOS TRAINING"><Input type="date" value={draft.trainingGraduationDate} onChange={(e) => onChange("trainingGraduationDate", e.target.value)} /></Field>
+      <div className="space-y-2 md:col-span-2"><label className="text-sm font-medium text-slate-700">ALAMAT</label><textarea value={draft.address} onChange={(e) => onChange("address", e.target.value)} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
     </div>
   );
 }
 
-type EmployeesTableProps = {
-  data: EmployeeRow[];
-  options: EmployeeFormOptions;
-};
-
-export default function EmployeesTable({
-  data,
-  options,
-}: EmployeesTableProps) {
+export default function EmployeesTable({ data, options }: { data: EmployeeRow[]; options: EmployeeFormOptions }) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<EmployeeRow | null>(null);
   const [deletingRow, setDeletingRow] = useState<EmployeeRow | null>(null);
-  const [draft, setDraft] = useState<EmployeeDraft>(createEmptyDraft());
+  const [draft, setDraft] = useState<EmployeeDraft>(createEmptyDraft(options));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
-  const [loginDraft, setLoginDraft] = useState<LoginDraft>({ email: "", password: "", confirmPassword: "" });
-  const [existingLoginEmail, setExistingLoginEmail] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPending, setImportPending] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
-  function handleDraftChange(
-    field: keyof EmployeeDraft,
-    value: string | boolean
-  ) {
+  function onDraftChange(field: keyof EmployeeDraft, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
-  function resetCreateDialog() {
-    setDraft(createEmptyDraft());
+  function openCreate() {
+    setDraft(createEmptyDraft(options));
     setFormError(null);
     setCreateOpen(true);
-  }
-
-  function openImportDialog() {
-    setImportFile(null);
-    setImportError(null);
-    setImportSuccess(null);
-    setImportOpen(true);
-  }
-
-  function closeImportDialog() {
-    setImportOpen(false);
-    setImportFile(null);
-    setImportError(null);
-    setImportSuccess(null);
   }
 
   async function submitCreate() {
     setPending(true);
     setFormError(null);
     try {
+      if (draft.password && draft.password !== draft.confirmPassword) {
+        setFormError("Konfirmasi password tidak cocok.");
+        return;
+      }
+
       const result = await createEmployee(toActionInput(draft));
       if (result && "error" in result) {
         setFormError(result.error);
         return;
       }
+
+      const email = toLoginEmail(draft.username, draft.email);
+      if (email && draft.password && result && "employeeId" in result) {
+        const loginResult = await upsertEmployeeLogin({ employeeId: result.employeeId, email, password: draft.password });
+        if (loginResult?.error) {
+          setFormError(`Data karyawan tersimpan, tetapi akun login gagal: ${loginResult.error}`);
+          return;
+        }
+      }
+
       setCreateOpen(false);
-      setDraft(createEmptyDraft());
       router.refresh();
     } finally {
       setPending(false);
     }
   }
 
-  async function handleImportSubmit() {
-    setImportPending(true);
-    setImportError(null);
-    setImportSuccess(null);
-
-    try {
-      if (!importFile) {
-        setImportError("Pilih file Excel terlebih dahulu.");
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append("file", importFile);
-
-      const result = await importEmployeesFromXlsx(formData);
-      if (result && "error" in result) {
-        setImportError(result.error ?? "Import gagal.");
-        return;
-      }
-
-      const summary = result && "success" in result
-        ? `Import selesai: ${result.importedEmployees} karyawan, ${result.importedLogins} akun login.`
-        : "Import selesai.";
-      setImportSuccess(summary);
-      router.refresh();
-    } finally {
-      setImportPending(false);
-    }
-  }
-
   async function openEdit(row: EmployeeRow) {
-    setLoadingEditId(row.id);
+    setPending(true);
     setFormError(null);
     try {
-      const [detail, loginInfo] = await Promise.all([
-        getEmployeeById(row.id),
-        getEmployeeLoginInfo(row.id),
-      ]);
+      const [detail, loginInfo] = await Promise.all([getEmployeeById(row.id), getEmployeeLoginInfo(row.id)]);
       if (!detail) {
         setFormError("Detail karyawan tidak ditemukan.");
         return;
       }
-      setDraft(createDraftFromEmployee(detail));
-      setExistingLoginEmail(loginInfo?.email ?? null);
-      setLoginDraft({ email: loginInfo?.email ?? "", password: "", confirmPassword: "" });
+      setDraft(createDraftFromEmployee(detail, loginInfo?.email ?? null));
       setEditingRow(row);
     } finally {
-      setLoadingEditId(null);
+      setPending(false);
     }
   }
 
@@ -639,28 +276,51 @@ export default function EmployeesTable({
     if (!editingRow) return;
     setPending(true);
     setFormError(null);
+
     try {
+      if (draft.password && draft.password !== draft.confirmPassword) {
+        setFormError("Konfirmasi password tidak cocok.");
+        return;
+      }
+
       const result = await updateEmployee(editingRow.id, toActionInput(draft));
       if (result && "error" in result) {
         setFormError(result.error);
         return;
       }
-      if (loginDraft.email) {
-        if (loginDraft.password && loginDraft.password !== loginDraft.confirmPassword) {
-          setFormError("Konfirmasi password tidak cocok.");
-          return;
-        }
-        const loginResult = await upsertEmployeeLogin({
-          employeeId: editingRow.id,
-          email: loginDraft.email,
-          password: loginDraft.password || undefined,
-        });
+
+      const loginEmail = toLoginEmail(draft.username, draft.email);
+      if (loginEmail) {
+        const loginResult = await upsertEmployeeLogin({ employeeId: editingRow.id, email: loginEmail, password: draft.password || undefined });
         if (loginResult?.error) {
           setFormError(loginResult.error);
           return;
         }
       }
+
       setEditingRow(null);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function submitImport() {
+    setPending(true);
+    setFormError(null);
+    try {
+      if (!importFile) {
+        setFormError("Pilih file Excel terlebih dahulu.");
+        return;
+      }
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const result = await importEmployeesFromXlsx(formData);
+      if (result && "error" in result) {
+        setFormError(result.error ?? "Import gagal.");
+        return;
+      }
+      setImportOpen(false);
       router.refresh();
     } finally {
       setPending(false);
@@ -684,295 +344,50 @@ export default function EmployeesTable({
     }
   }
 
-  const columns: ColumnDef<EmployeeRow>[] = useMemo(
-    () => [
-      {
-        header: "Karyawan",
-        accessorKey: "fullName",
-        cell: ({ row }) => (
-          <div className="space-y-1">
-            <Link
-              href={`/employees/${row.original.id}`}
-              className="font-medium text-slate-900 hover:underline"
-            >
-              {row.original.fullName}
-            </Link>
-            <p className="text-xs text-slate-500">{row.original.employeeCode}</p>
-          </div>
-        ),
-      },
-      { header: "Divisi", accessorKey: "divisionName" },
-      { header: "Jabatan", accessorKey: "positionName" },
-      {
-        header: "Kelompok",
-        accessorKey: "employeeGroup",
-        cell: ({ row }) => (
-          <Badge variant={row.original.employeeGroup === "MANAGERIAL" ? "outline" : "secondary"}>
-            {row.original.employeeGroup === "MANAGERIAL" ? "Managerial" : "Teamwork"}
-          </Badge>
-        ),
-      },
-      {
-        header: "Status",
-        accessorKey: "employmentStatus",
-        cell: ({ row }) => (
-          <div className="space-y-1">
-            <Badge variant={row.original.isActive ? "default" : "secondary"}>
-              {EMPLOYMENT_STATUS_LABEL[row.original.employmentStatus]}
-            </Badge>
-            <p className="text-xs text-slate-500">
-              Payroll: {PAYROLL_STATUS_LABEL[row.original.payrollStatus]}
-            </p>
-          </div>
-        ),
-      },
-      {
-        header: "Supervisor",
-        accessorKey: "supervisorName",
-        cell: ({ row }) => row.original.supervisorName || "-",
-      },
-      {
-        header: "Aksi",
-        id: "actions",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/employees/${row.original.id}`}>Detail</Link>
-            </Button>
-            {options.canManage ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void openEdit(row.original)}
-                  disabled={loadingEditId === row.original.id}
-                >
-                  {loadingEditId === row.original.id ? "Memuat..." : "Edit"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    setFormError(null);
-                    setDeletingRow(row.original);
-                  }}
-                >
-                  Hapus
-                </Button>
-              </>
-            ) : null}
-          </div>
-        ),
-      },
-    ],
-    [loadingEditId, options.canManage]
-  );
+  const columns: ColumnDef<EmployeeRow>[] = useMemo(() => [
+    { header: "CABANG", accessorKey: "branchName" },
+    {
+      header: "NAMA",
+      accessorKey: "fullName",
+      cell: ({ row }) => <Link href={`/employees/${row.original.id}`} className="font-medium text-slate-900 hover:underline">{row.original.fullName}</Link>,
+    },
+    { header: "NO TELP", accessorKey: "phoneNumber" },
+    { header: "MASUK KERJA", accessorKey: "startDate" },
+    {
+      header: "STATUS",
+      accessorKey: "employmentStatus",
+      cell: ({ row }) => {
+        const status = row.original.employmentStatus;
+        const statusClass =
+          status === "REGULER"
+            ? "bg-blue-100 text-blue-700 hover:bg-blue-100"
+            : status === "TRAINING"
+              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+              : row.original.isActive
+                ? ""
+                : "bg-slate-100 text-slate-600 hover:bg-slate-100";
 
-  const toolbarSlot = options.canManage ? (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-9 border-slate-200"
-        onClick={openImportDialog}
-      >
-        <Upload size={14} className="mr-1.5" />
-        Import Excel
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        className="h-9 bg-teal-600 hover:bg-teal-700"
-        onClick={resetCreateDialog}
-      >
-        <Plus size={14} className="mr-1.5" />
-        Tambah Karyawan
-      </Button>
-    </div>
-  ) : undefined;
+        return (
+          <Badge variant="secondary" className={statusClass}>
+            {status}
+          </Badge>
+        );
+      },
+    },
+    { header: "Aksi", id: "actions", cell: ({ row }) => <div className="flex gap-2"><Button asChild variant="outline" size="sm"><Link href={`/employees/${row.original.id}`}>Detail</Link></Button>{options.canManage ? <><Button variant="outline" size="sm" onClick={() => void openEdit(row.original)}>Edit</Button><Button variant="destructive" size="sm" onClick={() => setDeletingRow(row.original)}>Hapus</Button></> : null}</div> },
+  ], [options.canManage]);
 
   return (
     <div className="space-y-3">
-      <DataTable
-        data={data}
-        columns={columns}
-        searchKey="fullName"
-        searchPlaceholder="Cari nama karyawan..."
-        toolbarSlot={toolbarSlot}
-      />
+      <DataTable data={data} columns={columns} searchKey="fullName" searchPlaceholder="Cari nama karyawan..." toolbarSlot={options.canManage ? <div className="flex gap-2"><Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><Upload size={14} className="mr-1.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><Upload size={14} className="mr-1.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
 
-      <Dialog open={importOpen} onOpenChange={(open) => (open ? setImportOpen(true) : closeImportDialog())}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Import Karyawan dari Excel</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Format didukung: CABANG, NAMA, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, MASUK KERJA, LOLOS TRAINING. Default kelompok: TEAMWORK. Divisi, jabatan, grade, dan supervisor akan diisi otomatis dari master data aktif.
-            </div>
+      <Dialog open={importOpen} onOpenChange={setImportOpen}><DialogContent><DialogHeader><DialogTitle>Import Karyawan</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-slate-600">Format: CABANG, NAMA, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, EMAIL, MASUK KERJA, LOLOS TRAINING.</p><Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Batal</Button><Button onClick={() => void submitImport()} disabled={pending}>{pending ? "Mengimpor..." : "Import"}</Button></DialogFooter></div></DialogContent></Dialog>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">File Excel</label>
-              <Input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
-              />
-            </div>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Tambah Karyawan</DialogTitle></DialogHeader><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Batal</Button><Button onClick={() => void submitCreate()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
 
-            {importError ? <p className="text-sm text-red-600">{importError}</p> : null}
-            {importSuccess ? <p className="text-sm text-teal-700">{importSuccess}</p> : null}
+      <Dialog open={editingRow !== null} onOpenChange={(open) => { if (!open) setEditingRow(null); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Edit Karyawan</DialogTitle></DialogHeader><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setEditingRow(null)}>Batal</Button><Button onClick={() => void submitEdit()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeImportDialog} disabled={importPending}>
-                Batal
-              </Button>
-              <Button type="button" onClick={() => void handleImportSubmit()} disabled={importPending}>
-                {importPending ? "Mengimpor..." : "Import"}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Tambah Karyawan</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <EmployeeForm
-              draft={draft}
-              onChange={handleDraftChange}
-              options={options}
-            />
-            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCreateOpen(false)}
-                disabled={pending}
-              >
-                Batal
-              </Button>
-              <Button type="button" onClick={() => void submitCreate()} disabled={pending}>
-                {pending ? "Menyimpan..." : "Simpan"}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={editingRow !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditingRow(null);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Edit Karyawan</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <EmployeeForm
-              draft={draft}
-              onChange={handleDraftChange}
-              options={options}
-            />
-
-            {options.canManage && (
-              <div className="border-t border-slate-100 pt-4 space-y-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-700">Akun Login Sistem</p>
-                  {existingLoginEmail ? (
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Akun aktif: <span className="font-medium text-slate-700">{existingLoginEmail}</span>
-                    </p>
-                  ) : (
-                    <p className="text-xs text-slate-400 mt-0.5">Karyawan ini belum memiliki akun login.</p>
-                  )}
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <DraftField label="Email Login">
-                    <Input
-                      type="email"
-                      value={loginDraft.email}
-                      onChange={(e) => setLoginDraft((v) => ({ ...v, email: e.target.value }))}
-                      placeholder="email@perusahaan.com"
-                    />
-                  </DraftField>
-                  <DraftField label={existingLoginEmail ? "Password Baru (kosongkan jika tidak diubah)" : "Password"}>
-                    <Input
-                      type="password"
-                      value={loginDraft.password}
-                      onChange={(e) => setLoginDraft((v) => ({ ...v, password: e.target.value }))}
-                      placeholder="Min. 8 karakter"
-                    />
-                  </DraftField>
-                  {loginDraft.password && (
-                    <DraftField label="Konfirmasi Password">
-                      <Input
-                        type="password"
-                        value={loginDraft.confirmPassword}
-                        onChange={(e) => setLoginDraft((v) => ({ ...v, confirmPassword: e.target.value }))}
-                        placeholder="Ulangi password"
-                      />
-                    </DraftField>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditingRow(null)}
-                disabled={pending}
-              >
-                Batal
-              </Button>
-              <Button type="button" onClick={() => void submitEdit()} disabled={pending}>
-                {pending ? "Menyimpan..." : "Simpan Perubahan"}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
-        open={deletingRow !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeletingRow(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Karyawan</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`Data karyawan "${deletingRow?.fullName ?? ""}" akan dihapus beserta histori terkait.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                void handleDelete();
-              }}
-              disabled={pending}
-            >
-              {pending ? "Menghapus..." : "Hapus"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <AlertDialog open={deletingRow !== null} onOpenChange={(open) => { if (!open) setDeletingRow(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus Karyawan</AlertDialogTitle><AlertDialogDescription>{`Data karyawan \"${deletingRow?.fullName ?? ""}\" akan dinonaktifkan.`}</AlertDialogDescription></AlertDialogHeader>{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }}>{pending ? "Menghapus..." : "Hapus"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );
 }

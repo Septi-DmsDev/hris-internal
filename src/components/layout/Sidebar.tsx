@@ -13,6 +13,7 @@ import {
   CreditCard,
   TrendingUp,
   Database,
+  Building2,
   Settings,
   UserCog,
   LogOut,
@@ -36,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Saya",
     href: "/me",
     icon: User,
-    roles: ["KABAG", "FINANCE", "PAYROLL_VIEWER"],
+    roles: ["KABAG", "PAYROLL_VIEWER"],
     group: "main",
   },
   {
@@ -54,6 +55,13 @@ const NAV_ITEMS: NavItem[] = [
     group: "main",
   },
   {
+    label: "Penempatan",
+    href: "/positioning",
+    icon: Building2,
+    roles: ["SUPER_ADMIN", "HRD"],
+    group: "main",
+  },
+  {
     label: "Performa",
     href: "/performance",
     icon: BarChart3,
@@ -64,7 +72,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Ticketing",
     href: "/tickets",
     icon: Ticket,
-    roles: ["SUPER_ADMIN", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "FINANCE", "PAYROLL_VIEWER"],
+    roles: ["SUPER_ADMIN", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "PAYROLL_VIEWER"],
     group: "main",
   },
   {

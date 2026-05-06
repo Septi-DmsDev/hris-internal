@@ -73,6 +73,7 @@ export type PayrollSalaryConfigRow = {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  positionName: string;
   divisionName: string;
   employeeGroup: "TEAMWORK" | "MANAGERIAL";
   payrollStatus: string;

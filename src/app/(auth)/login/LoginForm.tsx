@@ -26,7 +26,7 @@ export default function LoginForm() {
 
   const onSubmit = handleSubmit((data) => {
     const fd = new FormData();
-    fd.append("email", data.email);
+    fd.append("identifier", data.identifier);
     fd.append("password", data.password);
     startTransition(() => {
       formAction(fd);
@@ -36,17 +36,18 @@ export default function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="identifier">Username / Email / No. Telepon</Label>
         <Input
-          id="email"
-          type="email"
-          placeholder="hrd@perusahaan.com"
-          aria-describedby={errors.email ? "email-error" : undefined}
-          {...register("email")}
+          id="identifier"
+          type="text"
+          placeholder="Contoh: srifit atau 08xxx"
+          autoComplete="username"
+          aria-describedby={errors.identifier ? "identifier-error" : undefined}
+          {...register("identifier")}
         />
-        {errors.email && (
-          <p id="email-error" role="alert" className="text-sm text-red-500">
-            {errors.email.message}
+        {errors.identifier && (
+          <p id="identifier-error" role="alert" className="text-sm text-red-500">
+            {errors.identifier.message}
           </p>
         )}
       </div>
@@ -56,6 +57,7 @@ export default function LoginForm() {
           id="password"
           type="password"
           placeholder="••••••••"
+          autoComplete="current-password"
           aria-describedby={errors.password ? "password-error" : undefined}
           {...register("password")}
         />

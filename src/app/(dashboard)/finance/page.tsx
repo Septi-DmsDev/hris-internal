@@ -79,15 +79,29 @@ export default async function FinancePage({ searchParams }: PageProps) {
     isActive: row.isActive ?? true,
   }));
 
-  const adjustments: PayrollAdjustmentRow[] = workspace.adjustments.map((row) => ({
-    id: row.id,
-    employeeId: row.employeeId,
-    employeeName: row.employeeName ?? "-",
-    adjustmentType: row.adjustmentType,
-    amount: Number(row.amount),
-    reason: row.reason,
-    createdAt: format(row.createdAt, "yyyy-MM-dd HH:mm"),
-  }));
+  const adjustments: PayrollAdjustmentRow[] = workspace.adjustments.map((row) => {
+    const parts = row.reason.split("::");
+    const category = parts[0] ?? row.adjustmentType;
+    let description: string;
+    if (category === "CICILAN") {
+      const tenor = parts[1];
+      const desc = parts.slice(2).join("::");
+      description = desc ? `Tenor ${tenor}bl — ${desc}` : `Tenor ${tenor}bl`;
+    } else {
+      description = parts.slice(1).join("::") || "-";
+    }
+    return {
+      id: row.id,
+      employeeId: row.employeeId,
+      employeeName: row.employeeName ?? "-",
+      adjustmentType: row.adjustmentType,
+      category,
+      amount: Number(row.amount),
+      description,
+      reason: row.reason,
+      createdAt: format(row.createdAt, "yyyy-MM-dd HH:mm"),
+    };
+  });
 
   return (
     <FinanceDashboardClient

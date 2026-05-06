@@ -14,6 +14,11 @@ import {
   upsertEmployeeSalaryConfig,
   upsertGradeCompensationConfig,
 } from "@/server/actions/payroll";
+import {
+  ADJUSTMENT_CATEGORIES,
+  ADJUSTMENT_CATEGORY_LABELS,
+  type AdjustmentCategory,
+} from "@/lib/validations/payroll";
 import type {
   PayrollAdjustmentRow,
   PayrollGradeCompensationRow,
@@ -56,9 +61,10 @@ type GradeDraft = {
 
 type AdjustmentDraft = {
   employeeId: string;
-  adjustmentType: "ADDITION" | "DEDUCTION";
+  category: AdjustmentCategory;
   amount: string;
-  reason: string;
+  description: string;
+  tenorMonthsRemaining: string;
 };
 
 function fmt(amount: number | null) {
@@ -120,9 +126,10 @@ export default function FinanceDashboardClient({
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>({
     employeeId: salaryConfigs[0]?.employeeId ?? "",
-    adjustmentType: "DEDUCTION",
+    category: "BPJS",
     amount: "",
-    reason: "",
+    description: "",
+    tenorMonthsRemaining: "",
   });
 
   async function runAction(action: () => Promise<{ error?: string; success?: boolean }>) {
@@ -251,33 +258,55 @@ export default function FinanceDashboardClient({
     [canManage]
   );
 
+  const categoryBadgeVariant = (category: string, adjustmentType: string) => {
+    if (category === "MANUAL_ADDITION" || adjustmentType === "ADDITION") return "default" as const;
+    if (category === "GANTI_RUGI_PERSONAL" || category === "GANTI_RUGI_TEAM") return "destructive" as const;
+    return "secondary" as const;
+  };
+
+  const categoryLabel = (category: string, adjustmentType: string) => {
+    const known = ADJUSTMENT_CATEGORY_LABELS[category as AdjustmentCategory];
+    if (known) return known;
+    return adjustmentType === "ADDITION" ? "Penambahan" : "Potongan";
+  };
+
   const adjustmentColumns: ColumnDef<PayrollAdjustmentRow>[] = useMemo(
     () => [
       {
         header: "Karyawan",
         accessorKey: "employeeName",
+        cell: ({ row }) => <span className="font-medium">{row.original.employeeName}</span>,
       },
       {
-        header: "Tipe",
-        accessorKey: "adjustmentType",
+        header: "Kategori",
+        accessorKey: "category",
         cell: ({ row }) => (
-          <Badge variant={row.original.adjustmentType === "ADDITION" ? "default" : "destructive"}>
-            {row.original.adjustmentType}
+          <Badge variant={categoryBadgeVariant(row.original.category, row.original.adjustmentType)}>
+            {categoryLabel(row.original.category, row.original.adjustmentType)}
           </Badge>
         ),
       },
       {
         header: "Nominal",
         accessorKey: "amount",
-        cell: ({ row }) => <span>{fmt(row.original.amount)}</span>,
+        cell: ({ row }) => (
+          <span className={row.original.adjustmentType === "DEDUCTION" ? "text-rose-600 font-medium" : "text-emerald-600 font-medium"}>
+            {row.original.adjustmentType === "DEDUCTION" ? "−" : "+"}{fmt(row.original.amount)}
+          </span>
+        ),
       },
-      { header: "Alasan", accessorKey: "reason" },
+      {
+        header: "Keterangan",
+        accessorKey: "description",
+        cell: ({ row }) => <span className="text-slate-500 text-sm">{row.original.description}</span>,
+      },
       {
         header: "Tanggal",
         accessorKey: "createdAt",
         cell: ({ row }) => <span className="text-xs text-slate-500">{row.original.createdAt}</span>,
       },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
@@ -359,9 +388,10 @@ export default function FinanceDashboardClient({
                   onClick={() => {
                     setAdjustmentDraft({
                       employeeId: salaryConfigs[0]?.employeeId ?? "",
-                      adjustmentType: "DEDUCTION",
+                      category: "BPJS",
                       amount: "",
-                      reason: "",
+                      description: "",
+                      tenorMonthsRemaining: "",
                     });
                     setError(null);
                     setSuccess(null);
@@ -548,6 +578,54 @@ export default function FinanceDashboardClient({
             <DialogTitle>Tambah Adjustment</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {/* Category */}
+            <div className="space-y-1">
+              <label className="text-xs text-slate-500">Kategori</label>
+              <select
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={adjustmentDraft.category}
+                onChange={(e) =>
+                  setAdjustmentDraft((v) => ({
+                    ...v,
+                    category: e.target.value as AdjustmentCategory,
+                    employeeId:
+                      e.target.value === "GANTI_RUGI_TEAM"
+                        ? (salaryConfigs.find((s) => s.employeeGroup === "MANAGERIAL")?.employeeId ?? v.employeeId)
+                        : v.employeeId,
+                  }))
+                }
+              >
+                <optgroup label="Penambah Gaji">
+                  <option value="MANUAL_ADDITION">Penambahan Manual</option>
+                </optgroup>
+                <optgroup label="Pengurang Gaji">
+                  <option value="BPJS">BPJS</option>
+                  <option value="KASBON">Kasbon (maks Rp 300.000/periode)</option>
+                  <option value="GANTI_RUGI_PERSONAL">Ganti Rugi Personal (sekali per periode)</option>
+                  <option value="GANTI_RUGI_TEAM">Ganti Rugi Team (Managerial only, sekali per periode)</option>
+                  <option value="CICILAN">Cicilan (isi sisa tenor)</option>
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Info banner per category */}
+            {adjustmentDraft.category === "KASBON" && (
+              <p className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                Kasbon dibatasi maksimum Rp 300.000 per karyawan per periode.
+              </p>
+            )}
+            {adjustmentDraft.category === "GANTI_RUGI_TEAM" && (
+              <p className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
+                Hanya karyawan Managerial yang dapat dikenakan Ganti Rugi Team.
+              </p>
+            )}
+            {(adjustmentDraft.category === "GANTI_RUGI_PERSONAL" || adjustmentDraft.category === "GANTI_RUGI_TEAM") && (
+              <p className="rounded-md bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
+                Hanya satu kali per karyawan per periode.
+              </p>
+            )}
+
+            {/* Employee select */}
             <div className="space-y-1">
               <label className="text-xs text-slate-500">Karyawan</label>
               <select
@@ -556,46 +634,75 @@ export default function FinanceDashboardClient({
                 onChange={(e) => setAdjustmentDraft((v) => ({ ...v, employeeId: e.target.value }))}
               >
                 <option value="">Pilih karyawan</option>
-                {salaryConfigs.map((row) => (
-                  <option key={row.employeeId} value={row.employeeId}>
-                    {row.employeeName} · {row.employeeCode}
-                  </option>
-                ))}
+                {salaryConfigs
+                  .filter((row) =>
+                    adjustmentDraft.category === "GANTI_RUGI_TEAM"
+                      ? row.employeeGroup === "MANAGERIAL"
+                      : true
+                  )
+                  .map((row) => (
+                    <option key={row.employeeId} value={row.employeeId}>
+                      {row.employeeName} · {row.employeeCode}
+                      {row.employeeGroup === "MANAGERIAL" ? " [M]" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
+
+            {/* Amount */}
             <div className="space-y-1">
-              <label className="text-xs text-slate-500">Tipe</label>
-              <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                value={adjustmentDraft.adjustmentType}
-                onChange={(e) =>
-                  setAdjustmentDraft((v) => ({ ...v, adjustmentType: e.target.value as "ADDITION" | "DEDUCTION" }))
-                }
-              >
-                <option value="ADDITION">ADDITION — Tambah</option>
-                <option value="DEDUCTION">DEDUCTION — Kurang</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-500">Nominal (Rp)</label>
+              <label className="text-xs text-slate-500">
+                Nominal (Rp){adjustmentDraft.category === "KASBON" ? " — maks 300.000" : ""}
+              </label>
               <Input
                 type="number"
                 placeholder="Nominal"
+                min={1}
+                max={adjustmentDraft.category === "KASBON" ? 300000 : undefined}
                 value={adjustmentDraft.amount}
                 onChange={(e) => setAdjustmentDraft((v) => ({ ...v, amount: e.target.value }))}
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-slate-500">Alasan</label>
-              <Input
-                placeholder="Alasan adjustment"
-                value={adjustmentDraft.reason}
-                onChange={(e) => setAdjustmentDraft((v) => ({ ...v, reason: e.target.value }))}
-              />
-            </div>
+
+            {/* Tenor — CICILAN only */}
+            {adjustmentDraft.category === "CICILAN" && (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">Sisa Tenor (bulan)</label>
+                <Input
+                  type="number"
+                  placeholder="Contoh: 12"
+                  min={1}
+                  max={120}
+                  value={adjustmentDraft.tenorMonthsRemaining}
+                  onChange={(e) => setAdjustmentDraft((v) => ({ ...v, tenorMonthsRemaining: e.target.value }))}
+                />
+              </div>
+            )}
+
+            {/* Description — not required for BPJS */}
+            {adjustmentDraft.category !== "BPJS" && (
+              <div className="space-y-1">
+                <label className="text-xs text-slate-500">
+                  Keterangan{adjustmentDraft.category === "MANUAL_ADDITION" ? " (wajib)" : " (opsional)"}
+                </label>
+                <Input
+                  placeholder={
+                    adjustmentDraft.category === "MANUAL_ADDITION"
+                      ? "Alasan penambahan"
+                      : adjustmentDraft.category === "CICILAN"
+                      ? "Nama barang / keterangan pinjaman"
+                      : "Keterangan"
+                  }
+                  value={adjustmentDraft.description}
+                  onChange={(e) => setAdjustmentDraft((v) => ({ ...v, description: e.target.value }))}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjustmentOpen(false)} disabled={pending}>Batal</Button>
+            <Button variant="outline" onClick={() => setAdjustmentOpen(false)} disabled={pending}>
+              Batal
+            </Button>
             <Button
               disabled={pending || !activePeriodId}
               onClick={async () => {
@@ -604,9 +711,10 @@ export default function FinanceDashboardClient({
                   addPayrollAdjustment({
                     periodId: activePeriodId,
                     employeeId: adjustmentDraft.employeeId,
-                    adjustmentType: adjustmentDraft.adjustmentType,
+                    category: adjustmentDraft.category,
                     amount: adjustmentDraft.amount,
-                    reason: adjustmentDraft.reason,
+                    description: adjustmentDraft.description || undefined,
+                    tenorMonthsRemaining: adjustmentDraft.tenorMonthsRemaining || undefined,
                   })
                 );
                 if (ok) setAdjustmentOpen(false);

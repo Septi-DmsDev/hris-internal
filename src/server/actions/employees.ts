@@ -28,7 +28,7 @@ import {
   type EmployeeInput,
   type EmployeeOrganizationBulkUpdateInput,
 } from "@/lib/validations/employee";
-import { aliasedTable, and, asc, desc, eq, inArray } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -1247,4 +1247,60 @@ export async function purgeAllEmployees() {
 
   revalidatePath("/employees");
   return { success: true, deletedAuthAccounts: usersToDelete.length };
+}
+
+export async function createMissingEmployeeAccounts(defaultPassword: string) {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  if (!defaultPassword || defaultPassword.length < 8) {
+    return { error: "Password minimal 8 karakter." };
+  }
+
+  // Find active employees who don't have a user_roles entry (no auth account)
+  const employeesWithoutAccount = await db
+    .select({
+      id: employees.id,
+      fullName: employees.fullName,
+      phoneNumber: employees.phoneNumber,
+      employeeGroup: employees.employeeGroup,
+    })
+    .from(employees)
+    .leftJoin(userRoles, eq(employees.id, userRoles.employeeId))
+    .where(and(eq(employees.isActive, true), isNull(userRoles.employeeId)));
+
+  if (employeesWithoutAccount.length === 0) {
+    return { success: true, createdCount: 0, message: "Semua karyawan aktif sudah memiliki akun login." };
+  }
+
+  const admin = createAdminClient();
+  let createdCount = 0;
+  const errors: string[] = [];
+
+  for (const emp of employeesWithoutAccount) {
+    const username = emp.fullName.trim().toLowerCase().replace(/\s+/g, ".");
+    const email = `${username}@hris.internal`;
+    const role: UserRole = emp.employeeGroup === "MANAGERIAL" ? "MANAGERIAL" : "TEAMWORK";
+
+    const result = await upsertEmployeeLogin({
+      employeeId: emp.id,
+      email,
+      password: defaultPassword,
+      role,
+    });
+
+    if (result && "error" in result) {
+      errors.push(`${emp.fullName}: ${result.error}`);
+    } else {
+      createdCount++;
+    }
+  }
+
+  revalidatePath("/employees");
+  return {
+    success: true,
+    createdCount,
+    totalMissing: employeesWithoutAccount.length,
+    errors: errors.length > 0 ? errors : undefined,
+  };
 }

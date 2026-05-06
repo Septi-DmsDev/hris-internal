@@ -62,7 +62,9 @@ export type PayrollAdjustmentRow = {
   employeeId: string;
   employeeName: string;
   adjustmentType: string;
+  category: string;
   amount: number;
+  description: string;
   reason: string;
   createdAt: string;
 };

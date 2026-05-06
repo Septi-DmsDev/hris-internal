@@ -9,12 +9,33 @@ export const payrollPeriodActionSchema = z.object({
   periodId: z.uuid(),
 });
 
+export const ADJUSTMENT_CATEGORIES = [
+  "MANUAL_ADDITION",
+  "GANTI_RUGI_PERSONAL",
+  "GANTI_RUGI_TEAM",
+  "BPJS",
+  "CICILAN",
+  "KASBON",
+] as const;
+
+export type AdjustmentCategory = (typeof ADJUSTMENT_CATEGORIES)[number];
+
+export const ADJUSTMENT_CATEGORY_LABELS: Record<AdjustmentCategory, string> = {
+  MANUAL_ADDITION: "Penambahan Manual",
+  GANTI_RUGI_PERSONAL: "Ganti Rugi Personal",
+  GANTI_RUGI_TEAM: "Ganti Rugi Team",
+  BPJS: "BPJS",
+  CICILAN: "Cicilan",
+  KASBON: "Kasbon",
+};
+
 export const payrollAdjustmentSchema = z.object({
   periodId: z.uuid(),
   employeeId: z.uuid(),
-  adjustmentType: z.enum(["ADDITION", "DEDUCTION"]),
+  category: z.enum(ADJUSTMENT_CATEGORIES),
   amount: z.coerce.number().positive(),
-  reason: z.string().trim().min(3).max(500),
+  description: z.string().trim().max(300).optional(),
+  tenorMonthsRemaining: z.coerce.number().int().min(1).max(120).optional(),
 });
 
 export const managerialKpiSummarySchema = z.object({
@@ -64,6 +85,7 @@ export const gradeCompensationConfigSchema = z.object({
 export type CreatePayrollPeriodInput = z.infer<typeof createPayrollPeriodSchema>;
 export type PayrollPeriodActionInput = z.infer<typeof payrollPeriodActionSchema>;
 export type PayrollAdjustmentInput = z.infer<typeof payrollAdjustmentSchema>;
+export type AdjustmentCategoryInput = AdjustmentCategory;
 export type ManagerialKpiSummaryInput = z.infer<typeof managerialKpiSummarySchema>;
 export type SalaryConfigInput = z.infer<typeof salaryConfigSchema>;
 export type GradeCompensationConfigInput = z.infer<typeof gradeCompensationConfigSchema>;

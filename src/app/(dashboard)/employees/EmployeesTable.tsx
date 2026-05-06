@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, purgeAllEmployees, updateEmployee } from "@/server/actions/employees";
+import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, purgeAllEmployees, createMissingEmployeeAccounts, updateEmployee } from "@/server/actions/employees";
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
 import { Plus, Upload } from "lucide-react";
 
@@ -211,6 +211,9 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
   const [editingRow, setEditingRow] = useState<EmployeeRow | null>(null);
   const [deletingRow, setDeletingRow] = useState<EmployeeRow | null>(null);
   const [purgeOpen, setPurgeOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncPassword, setSyncPassword] = useState("");
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [draft, setDraft] = useState<EmployeeDraft>(createEmptyDraft(options));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -362,6 +365,28 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
     }
   }
 
+  async function handleSyncAccounts() {
+    setPending(true);
+    setSyncResult(null);
+    try {
+      const result = await createMissingEmployeeAccounts(syncPassword);
+      if (result && "error" in result) {
+        setSyncResult(`Error: ${result.error}`);
+        return;
+      }
+      if (result && "success" in result) {
+        const r = result as { createdCount: number; totalMissing?: number; message?: string; errors?: string[] };
+        const msg = r.message
+          ? r.message
+          : `${r.createdCount} dari ${r.totalMissing ?? r.createdCount} akun berhasil dibuat.`;
+        setSyncResult(msg + (r.errors?.length ? ` Gagal: ${r.errors.slice(0, 3).join("; ")}` : ""));
+        router.refresh();
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
   const columns: ColumnDef<EmployeeRow>[] = useMemo(() => [
     { header: "CABANG", accessorKey: "branchName" },
     {
@@ -397,7 +422,7 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
 
   return (
     <div className="space-y-3">
-      <DataTable data={data} columns={columns} searchKey="fullName" searchPlaceholder="Cari nama karyawan..." toolbarSlot={options.canManage ? <div className="flex gap-2">{options.isSuperAdmin && <Button type="button" variant="destructive" size="sm" onClick={() => { setFormError(null); setPurgeOpen(true); }}>Hapus Semua</Button>}<Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><Upload size={14} className="mr-1.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><Upload size={14} className="mr-1.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
+      <DataTable data={data} columns={columns} searchKey="fullName" searchPlaceholder="Cari nama karyawan..." toolbarSlot={options.canManage ? <div className="flex gap-2">{options.isSuperAdmin && <><Button type="button" variant="destructive" size="sm" onClick={() => { setFormError(null); setPurgeOpen(true); }}>Hapus Semua</Button><Button type="button" variant="outline" size="sm" onClick={() => { setSyncResult(null); setSyncPassword(""); setSyncOpen(true); }}>Sync Akun</Button></>}<Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><Upload size={14} className="mr-1.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><Upload size={14} className="mr-1.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}><DialogContent><DialogHeader><DialogTitle>Import Karyawan</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-slate-600">Format: CABANG, NAMA, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, EMAIL, MASUK KERJA, LOLOS TRAINING.</p><Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Batal</Button><Button onClick={() => void submitImport()} disabled={pending}>{pending ? "Mengimpor..." : "Import"}</Button></DialogFooter></div></DialogContent></Dialog>
 
@@ -428,6 +453,43 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog Sync Missing Auth Accounts */}
+      <Dialog open={syncOpen} onOpenChange={(open) => { if (!open) setSyncOpen(false); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sync Akun Login Karyawan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Buat akun login Supabase Auth untuk karyawan aktif yang belum memiliki akun. Role disesuaikan otomatis (Managerial → MANAGERIAL, lainnya → TEAMWORK).
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-500">Password Default (min. 8 karakter)</label>
+              <Input
+                type="password"
+                placeholder="Password default untuk semua akun baru"
+                value={syncPassword}
+                onChange={(e) => setSyncPassword(e.target.value)}
+              />
+            </div>
+            {syncResult ? (
+              <p className={`text-sm rounded-md px-3 py-2 ${syncResult.startsWith("Error") ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+                {syncResult}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={pending}>Tutup</Button>
+            <Button
+              disabled={pending || syncPassword.length < 8}
+              onClick={() => void handleSyncAccounts()}
+            >
+              {pending ? "Memproses..." : "Buat Akun"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

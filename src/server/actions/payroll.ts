@@ -35,6 +35,7 @@ import {
   gradeCompensationConfigSchema,
   payrollPeriodActionSchema,
   salaryConfigSchema,
+  type AdjustmentCategory,
 } from "@/lib/validations/payroll";
 import { calculateManagerialPayroll } from "@/server/payroll-engine/calculate-managerial-payroll";
 import { calculateTeamworkPayroll } from "@/server/payroll-engine/calculate-teamwork-payroll";
@@ -42,7 +43,7 @@ import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-pe
 import { resolvePayrollStatusTransition } from "@/server/payroll-engine/resolve-payroll-status-transition";
 import { resolveTenureAllowanceAmount } from "@/server/payroll-engine/resolve-tenure-allowance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
-import { and, asc, count, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { PayrollAdjustmentType, PayrollPeriodStatus, UserRole } from "@/types";
 import { canReadPayrollEmployeeDetail } from "./payroll.helpers";
@@ -877,6 +878,17 @@ export async function createPayrollPeriod(input: unknown) {
   return { success: true, periodId: period.id };
 }
 
+function encodeAdjustmentReason(
+  category: AdjustmentCategory,
+  description?: string,
+  tenorMonthsRemaining?: number
+): string {
+  if (category === "CICILAN") {
+    return `CICILAN::${tenorMonthsRemaining ?? 0}::${description ?? ""}`;
+  }
+  return description ? `${category}::${description}` : category;
+}
+
 export async function addPayrollAdjustment(input: unknown) {
   const access = await assertPayrollWriteAccess();
   if ("error" in access) return access;
@@ -889,13 +901,12 @@ export async function addPayrollAdjustment(input: unknown) {
   const user = await getUser();
   if (!user) return { error: "Sesi tidak valid." };
 
+  const { periodId, employeeId, category, amount, description, tenorMonthsRemaining } = parsed.data;
+
   const [period] = await db
-    .select({
-      id: payrollPeriods.id,
-      status: payrollPeriods.status,
-    })
+    .select({ id: payrollPeriods.id, status: payrollPeriods.status })
     .from(payrollPeriods)
-    .where(eq(payrollPeriods.id, parsed.data.periodId))
+    .where(eq(payrollPeriods.id, periodId))
     .limit(1);
 
   if (!period) return { error: "Periode payroll tidak ditemukan." };
@@ -903,28 +914,85 @@ export async function addPayrollAdjustment(input: unknown) {
     return { error: "Adjustment tidak bisa ditambahkan pada periode yang sudah paid/locked." };
   }
 
+  const [employee] = await db
+    .select({ id: employees.id, employeeGroup: employees.employeeGroup })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+  if (!employee) return { error: "Karyawan tidak ditemukan." };
+
+  // Business rule: GANTI_RUGI_TEAM — managerial only
+  if (category === "GANTI_RUGI_TEAM" && employee.employeeGroup !== "MANAGERIAL") {
+    return { error: "Ganti Rugi Team hanya berlaku untuk karyawan Managerial." };
+  }
+
+  // Business rule: GANTI_RUGI_PERSONAL / GANTI_RUGI_TEAM — max once per employee per period
+  if (category === "GANTI_RUGI_PERSONAL" || category === "GANTI_RUGI_TEAM") {
+    const [existing] = await db
+      .select({ id: payrollAdjustments.id })
+      .from(payrollAdjustments)
+      .where(
+        and(
+          eq(payrollAdjustments.periodId, periodId),
+          eq(payrollAdjustments.employeeId, employeeId),
+          like(payrollAdjustments.reason, `${category}%`)
+        )
+      )
+      .limit(1);
+    if (existing) {
+      const label = category === "GANTI_RUGI_PERSONAL" ? "Ganti Rugi Personal" : "Ganti Rugi Team";
+      return { error: `${label} sudah ada untuk karyawan ini di periode ini.` };
+    }
+  }
+
+  // Business rule: KASBON — max Rp 300.000 per employee per period
+  if (category === "KASBON") {
+    const existingKasbon = await db
+      .select({ amount: payrollAdjustments.amount })
+      .from(payrollAdjustments)
+      .where(
+        and(
+          eq(payrollAdjustments.periodId, periodId),
+          eq(payrollAdjustments.employeeId, employeeId),
+          like(payrollAdjustments.reason, "KASBON%")
+        )
+      );
+    const existingTotal = existingKasbon.reduce((acc, row) => acc + Number(row.amount), 0);
+    const remaining = 300000 - existingTotal;
+    if (amount > remaining) {
+      return {
+        error: `Total kasbon melebihi batas Rp 300.000/periode. Sisa: Rp ${remaining.toLocaleString("id-ID")}.`,
+      };
+    }
+  }
+
+  // CICILAN requires tenor
+  if (category === "CICILAN" && !tenorMonthsRemaining) {
+    return { error: "Sisa tenor cicilan wajib diisi." };
+  }
+
+  const adjustmentType: PayrollAdjustmentType = category === "MANUAL_ADDITION" ? "ADDITION" : "DEDUCTION";
+  const reason = encodeAdjustmentReason(category, description, tenorMonthsRemaining);
+
   await db.transaction(async (tx) => {
     await tx.insert(payrollAdjustments).values({
-      periodId: parsed.data.periodId,
-      employeeId: parsed.data.employeeId,
-      adjustmentType: parsed.data.adjustmentType as PayrollAdjustmentType,
-      amount: parsed.data.amount.toFixed(2),
-      reason: parsed.data.reason,
+      periodId,
+      employeeId,
+      adjustmentType,
+      amount: amount.toFixed(2),
+      reason,
       appliedByUserId: user.id,
       appliedByRole: access.role,
     });
 
     await tx.insert(payrollAuditLogs).values({
-      periodId: parsed.data.periodId,
-      employeeId: parsed.data.employeeId,
+      periodId,
+      employeeId,
       action: "ADD_ADJUSTMENT",
       actorUserId: user.id,
       actorRole: access.role,
-      notes: parsed.data.reason,
-      payload: {
-        adjustmentType: parsed.data.adjustmentType,
-        amount: parsed.data.amount,
-      },
+      notes: reason,
+      payload: { category, adjustmentType, amount },
     });
   });
 

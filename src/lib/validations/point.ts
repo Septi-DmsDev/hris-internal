@@ -48,6 +48,16 @@ export const managerialMonthlyPerformanceInputSchema = z.object({
   notes: z.string().trim().optional().transform((value) => value || undefined),
 });
 
+export const employeeMonthlyPerformanceInputSchema = z.object({
+  employeeId: z.string().uuid("Karyawan tidak valid."),
+  periodCode: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}$/, "Periode wajib format YYYY-MM."),
+  performancePercent: z.coerce.number().min(0, "Persentase minimal 0%.").max(200, "Persentase maksimal 200%."),
+  notes: z.string().trim().optional().transform((value) => value || undefined),
+});
+
 export const upsertCatalogEntrySchema = z.object({
   id: z.string().uuid().optional(),
   divisionName: z.string().trim().min(1, "Divisi wajib diisi."),
@@ -75,4 +85,5 @@ export type DailyActivityEntryInput = z.infer<typeof dailyActivityEntrySchema>;
 export type DailyActivityDecisionInput = z.infer<typeof dailyActivityDecisionSchema>;
 export type MonthlyPerformanceGenerationInput = z.infer<typeof monthlyPerformanceGenerationSchema>;
 export type ManagerialMonthlyPerformanceInput = z.infer<typeof managerialMonthlyPerformanceInputSchema>;
+export type EmployeeMonthlyPerformanceInput = z.infer<typeof employeeMonthlyPerformanceInputSchema>;
 export type BatchSubmitDraftInput = z.infer<typeof batchSubmitDraftSchema>;

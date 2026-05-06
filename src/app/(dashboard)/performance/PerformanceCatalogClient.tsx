@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "cmdk";
 import {
   clearAllCatalogData,
   upsertCatalogEntry,
@@ -25,7 +26,7 @@ import {
   approveDailyActivityEntry,
   deleteActivityEntry,
   generateMonthlyPerformance,
-  inputManagerialMonthlyPerformance,
+  inputEmployeeMonthlyPerformance,
   rejectDailyActivityEntry,
   saveDailyActivityEntry,
   submitDailyActivityEntry,
@@ -166,9 +167,18 @@ type MonthlyDraft = {
 };
 
 type ManagerialMonthlyInputDraft = {
+  employeeId: string;
   periodCode: string;
   performancePercent: string;
   notes: string;
+};
+
+type MonthlyEmployeePickerOption = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  divisionName: string;
+  employeeGroup: "TEAMWORK" | "MANAGERIAL";
 };
 
 type DecisionAction = "submit" | "approve" | "reject";
@@ -231,6 +241,7 @@ function createManagerialMonthlyInputDraft(): ManagerialMonthlyInputDraft {
   const month = String(today.getMonth() + 1).padStart(2, "0");
   const year = String(today.getFullYear());
   return {
+    employeeId: "",
     periodCode: `${year}-${month}`,
     performancePercent: "100",
     notes: "",
@@ -340,6 +351,28 @@ export default function PerformanceCatalogClient({
   function updateManagerialMonthlyDraft(field: keyof ManagerialMonthlyInputDraft, value: string) {
     setManagerialMonthlyDraft((current) => ({ ...current, [field]: value }));
   }
+
+  const monthlyEmployeeOptions = useMemo(() => {
+    const teamwork: MonthlyEmployeePickerOption[] = employeeOptions.map((employee) => ({
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+      divisionName: employee.divisionName,
+      employeeGroup: "TEAMWORK" as const,
+    }));
+    const managerial: MonthlyEmployeePickerOption[] = managerialEmployeeOptions.map((employee) => ({
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      fullName: employee.fullName,
+      divisionName: employee.divisionName,
+      employeeGroup: "MANAGERIAL" as const,
+    }));
+    const byId = new Map<string, MonthlyEmployeePickerOption>();
+    for (const item of [...teamwork, ...managerial]) {
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    }
+    return Array.from(byId.values()).sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }, [employeeOptions, managerialEmployeeOptions]);
 
   async function handleClearCatalog() {
     setPending(true);
@@ -453,7 +486,8 @@ export default function PerformanceCatalogClient({
     setPending(true);
     resetMessages();
     try {
-      const result = await inputManagerialMonthlyPerformance({
+      const result = await inputEmployeeMonthlyPerformance({
+        employeeId: managerialMonthlyDraft.employeeId,
         periodCode: managerialMonthlyDraft.periodCode,
         performancePercent: managerialMonthlyDraft.performancePercent,
         notes: managerialMonthlyDraft.notes,
@@ -464,8 +498,12 @@ export default function PerformanceCatalogClient({
       }
       setManagerialMonthlyOpen(false);
       setManagerialMonthlyDraft(createManagerialMonthlyInputDraft());
+      const syncNote =
+        result.employeeGroup === "MANAGERIAL" && !result.payrollPeriodReady
+          ? " KPI payroll managerial akan otomatis tersinkron saat periode payroll dibuat."
+          : "";
       setLastResult(
-        `Input managerial ${result.performancePercent.toFixed(2)}% untuk periode ${result.periodCode} berhasil diterapkan ke ${result.updatedEmployees} karyawan.`
+        `Performa ${result.performancePercent.toFixed(2)}% untuk ${result.employeeName} (${result.employeeGroup}) periode ${result.periodCode} berhasil disimpan.${syncNote}`
       );
       router.refresh();
     } finally {
@@ -940,10 +978,11 @@ export default function PerformanceCatalogClient({
                 variant="outline"
                 onClick={() => {
                   resetMessages();
+                  setManagerialMonthlyDraft(createManagerialMonthlyInputDraft());
                   setManagerialMonthlyOpen(true);
                 }}
               >
-                Input % Managerial
+                Input Performa Karyawan
               </Button>
             ) : null}
           </div>
@@ -1405,11 +1444,58 @@ export default function PerformanceCatalogClient({
       <Dialog open={managerialMonthlyOpen} onOpenChange={setManagerialMonthlyOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Input Persentase Managerial Bulanan</DialogTitle>
+            <DialogTitle>Input Performa Bulanan Karyawan</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-500">
-            Mengisi persentase performa yang sama untuk semua karyawan managerial aktif (role KABAG, SPV, MANAGERIAL) pada satu periode payroll bulanan.
-          </p>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">Pilih Karyawan</label>
+            {managerialMonthlyDraft.employeeId ? (
+              <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
+                <span className="font-medium text-teal-800">
+                  {(() => {
+                    const emp = monthlyEmployeeOptions.find(
+                      (e) => e.id === managerialMonthlyDraft.employeeId
+                    );
+                    return emp
+                      ? `${emp.fullName} · ${emp.employeeCode} · ${emp.divisionName}`
+                      : "";
+                  })()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateManagerialMonthlyDraft("employeeId", "")}
+                  className="ml-2 text-teal-500 hover:text-teal-700 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
+            <Command className="rounded-md border border-input bg-white overflow-hidden">
+              <CommandInput
+                placeholder="Ketik nama, kode, atau divisi..."
+                className="w-full border-0 border-b border-slate-200 px-3 py-2 text-sm outline-none placeholder:text-slate-400"
+              />
+              <CommandList className="max-h-52 overflow-y-auto">
+                <CommandEmpty className="py-6 text-center text-sm text-slate-400">
+                  Karyawan tidak ditemukan.
+                </CommandEmpty>
+                {monthlyEmployeeOptions.map((employee) => (
+                  <CommandItem
+                    key={employee.id}
+                    value={`${employee.fullName} ${employee.employeeCode} ${employee.divisionName} ${employee.employeeGroup}`}
+                    onSelect={() => updateManagerialMonthlyDraft("employeeId", employee.id)}
+                    className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 data-[selected=true]:bg-slate-100"
+                  >
+                    <span className="font-medium text-slate-900">{employee.fullName}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500 text-xs">{employee.employeeCode}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500 text-xs">{employee.divisionName}</span>
+                    <span className="ml-auto text-xs text-slate-400">{employee.employeeGroup}</span>
+                  </CommandItem>
+                ))}
+              </CommandList>
+            </Command>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Periode (YYYY-MM)</label>
@@ -1439,9 +1525,6 @@ export default function PerformanceCatalogClient({
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 md:col-span-2">
-              Target karyawan managerial terdeteksi: <span className="font-semibold">{managerialEmployeeOptions.length}</span> orang.
-            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1455,7 +1538,7 @@ export default function PerformanceCatalogClient({
             <Button
               type="button"
               onClick={() => void handleInputManagerialMonthlyPerformance()}
-              disabled={pending}
+              disabled={pending || !managerialMonthlyDraft.employeeId}
             >
               {pending ? "Menyimpan..." : "Terapkan"}
             </Button>

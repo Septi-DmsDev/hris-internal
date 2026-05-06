@@ -28,13 +28,14 @@ import {
   batchSubmitDraftSchema,
   dailyActivityDecisionSchema,
   dailyActivityEntrySchema,
-  managerialMonthlyPerformanceInputSchema,
+  employeeMonthlyPerformanceInputSchema,
   monthlyPerformanceGenerationSchema,
 } from "@/lib/validations/point";
 import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
 import { userRoles } from "@/lib/db/schema/auth";
 import { calculateMonthlyPointPerformance } from "@/server/point-engine/calculate-monthly-point-performance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
+import { resolvePointTargetForDivision } from "@/config/constants";
 import {
   getActivePointCatalogVersion,
   getPointCatalogEntriesByVersion,
@@ -873,13 +874,13 @@ export async function generateMonthlyPerformance(input: unknown) {
   return { success: true, generatedEmployees: targetEmployees.length };
 }
 
-export async function inputManagerialMonthlyPerformance(input: unknown) {
+export async function inputEmployeeMonthlyPerformance(input: unknown) {
   const authError = await checkRole(PERFORMANCE_MANAGERIAL_INPUT_ROLES);
   if (authError) return authError;
 
-  const parsed = managerialMonthlyPerformanceInputSchema.safeParse(input);
+  const parsed = employeeMonthlyPerformanceInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Input performa managerial tidak valid." };
+    return { error: parsed.error.issues[0]?.message ?? "Input performa bulanan tidak valid." };
   }
 
   const user = await getUser();
@@ -895,34 +896,99 @@ export async function inputManagerialMonthlyPerformance(input: unknown) {
     .where(eq(payrollPeriods.periodCode, resolvedPeriod.periodCode))
     .limit(1);
 
-  if (!period) {
-    return { error: `Periode payroll ${resolvedPeriod.periodCode} belum tersedia. Buat periode payroll terlebih dahulu.` };
-  }
-
-  if (period.status === "PAID" || period.status === "LOCKED") {
+  if (period && (period.status === "PAID" || period.status === "LOCKED")) {
     return { error: "Periode payroll yang sudah paid/locked tidak bisa diubah lagi." };
   }
 
-  const targetEmployees = await db
+  const [employee] = await db
     .select({
       id: employees.id,
+      fullName: employees.fullName,
+      employeeCode: employees.employeeCode,
+      employeeGroup: employees.employeeGroup,
+      isActive: employees.isActive,
     })
     .from(employees)
-    .innerJoin(userRoles, eq(userRoles.employeeId, employees.id))
-    .where(
-      and(
-        eq(employees.isActive, true),
-        eq(employees.employeeGroup, "MANAGERIAL"),
-        inArray(userRoles.role, MANAGERIAL_TARGET_ROLES)
-      )
-    );
+    .where(eq(employees.id, parsed.data.employeeId))
+    .limit(1);
 
-  if (targetEmployees.length === 0) {
-    return { error: "Tidak ada karyawan managerial aktif (KABAG/SPV/MANAGERIAL) untuk periode ini." };
+  if (!employee || !employee.isActive) {
+    return { error: "Karyawan tidak ditemukan atau sudah tidak aktif." };
   }
 
+  if (employee.employeeGroup === "MANAGERIAL") {
+    const [managerialRole] = await db
+      .select({ role: userRoles.role })
+      .from(userRoles)
+      .where(
+        and(
+          eq(userRoles.employeeId, employee.id),
+          inArray(userRoles.role, MANAGERIAL_TARGET_ROLES)
+        )
+      )
+      .limit(1);
+
+    if (!managerialRole) {
+      return { error: "Karyawan managerial belum memiliki role managerial yang valid (KABAG/SPV/MANAGERIAL)." };
+    }
+  }
+
+  let managerialKpiSynced = false;
+
   await db.transaction(async (tx) => {
-    for (const employee of targetEmployees) {
+    const divisionSnapshot = await resolveDivisionSnapshotForPeriod(employee.id, resolvedPeriod.periodStartDate);
+    const rawTargetDays = await resolveTargetDaysForPeriod(
+      employee.id,
+      resolvedPeriod.periodStartDate,
+      resolvedPeriod.periodEndDate
+    );
+    const [leaveAggregate] = await tx
+      .select({
+        daysCount: sql<number>`coalesce(sum(${attendanceTickets.daysCount}), 0)`,
+      })
+      .from(attendanceTickets)
+      .where(
+        and(
+          eq(attendanceTickets.employeeId, employee.id),
+          lte(attendanceTickets.startDate, resolvedPeriod.periodEndDate),
+          gte(attendanceTickets.endDate, resolvedPeriod.periodStartDate),
+          inArray(attendanceTickets.status, ["APPROVED_SPV", "APPROVED_HRD", "AUTO_APPROVED", "LOCKED"])
+        )
+      );
+
+    const leaveDays = leaveAggregate?.daysCount ?? 0;
+    const targetDays = Math.max(0, rawTargetDays - leaveDays);
+    const targetDailyPoints = resolvePointTargetForDivision(divisionSnapshot.divisionSnapshotName);
+    const totalTargetPoints = targetDailyPoints * targetDays;
+    const totalApprovedPoints = Number(
+      ((totalTargetPoints * parsed.data.performancePercent) / 100).toFixed(2)
+    );
+
+    await tx
+      .delete(monthlyPointPerformances)
+      .where(
+        and(
+          eq(monthlyPointPerformances.employeeId, employee.id),
+          eq(monthlyPointPerformances.periodStartDate, resolvedPeriod.periodStartDate),
+          eq(monthlyPointPerformances.periodEndDate, resolvedPeriod.periodEndDate)
+        )
+      );
+
+    await tx.insert(monthlyPointPerformances).values({
+      employeeId: employee.id,
+      periodStartDate: resolvedPeriod.periodStartDate,
+      periodEndDate: resolvedPeriod.periodEndDate,
+      divisionSnapshotId: divisionSnapshot.divisionSnapshotId,
+      divisionSnapshotName: divisionSnapshot.divisionSnapshotName,
+      targetDailyPoints,
+      targetDays,
+      totalTargetPoints,
+      totalApprovedPoints: totalApprovedPoints.toFixed(2),
+      performancePercent: parsed.data.performancePercent.toFixed(2),
+      status: "FINALIZED",
+    });
+
+    if (employee.employeeGroup === "MANAGERIAL" && period) {
       const [existing] = await tx
         .select({ id: managerialKpiSummaries.id })
         .from(managerialKpiSummaries)
@@ -938,7 +1004,7 @@ export async function inputManagerialMonthlyPerformance(input: unknown) {
         periodId: period.id,
         employeeId: employee.id,
         performancePercent: parsed.data.performancePercent.toFixed(2),
-        notes: parsed.data.notes ?? "Input massal performa managerial dari menu Performa Bulanan.",
+        notes: parsed.data.notes ?? "Input performa bulanan dari menu Performa.",
         status: "VALIDATED" as const,
         validatedByUserId: user.id,
         validatedAt: new Date(),
@@ -955,17 +1021,23 @@ export async function inputManagerialMonthlyPerformance(input: unknown) {
       } else {
         await tx.insert(managerialKpiSummaries).values(payload);
       }
+      managerialKpiSynced = true;
     }
   });
 
   revalidatePath("/performance");
-  revalidatePath("/payroll");
-  revalidatePath("/finance");
+  if (managerialKpiSynced) {
+    revalidatePath("/payroll");
+    revalidatePath("/finance");
+  }
   return {
     success: true,
     periodCode: resolvedPeriod.periodCode,
-    updatedEmployees: targetEmployees.length,
+    employeeName: `${employee.fullName} (${employee.employeeCode})`,
+    employeeGroup: employee.employeeGroup,
     performancePercent: parsed.data.performancePercent,
+    payrollPeriodReady: Boolean(period),
+    managerialKpiSynced,
   };
 }
 

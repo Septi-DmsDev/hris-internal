@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, updateEmployee } from "@/server/actions/employees";
+import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, purgeAllEmployees, updateEmployee } from "@/server/actions/employees";
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
 import { Plus, Upload } from "lucide-react";
 
@@ -26,6 +26,7 @@ export type EmployeeFormOptions = {
   schedules: ScheduleOption[];
   supervisors: Array<{ id: string; fullName: string }>;
   canManage: boolean;
+  isSuperAdmin: boolean;
 };
 
 export type EmployeeRow = {
@@ -209,6 +210,7 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<EmployeeRow | null>(null);
   const [deletingRow, setDeletingRow] = useState<EmployeeRow | null>(null);
+  const [purgeOpen, setPurgeOpen] = useState(false);
   const [draft, setDraft] = useState<EmployeeDraft>(createEmptyDraft(options));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -344,6 +346,22 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
     }
   }
 
+  async function handlePurge() {
+    setPending(true);
+    setFormError(null);
+    try {
+      const result = await purgeAllEmployees();
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      setPurgeOpen(false);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
   const columns: ColumnDef<EmployeeRow>[] = useMemo(() => [
     { header: "CABANG", accessorKey: "branchName" },
     {
@@ -379,7 +397,7 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
 
   return (
     <div className="space-y-3">
-      <DataTable data={data} columns={columns} searchKey="fullName" searchPlaceholder="Cari nama karyawan..." toolbarSlot={options.canManage ? <div className="flex gap-2"><Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><Upload size={14} className="mr-1.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><Upload size={14} className="mr-1.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
+      <DataTable data={data} columns={columns} searchKey="fullName" searchPlaceholder="Cari nama karyawan..." toolbarSlot={options.canManage ? <div className="flex gap-2">{options.isSuperAdmin && <Button type="button" variant="destructive" size="sm" onClick={() => { setFormError(null); setPurgeOpen(true); }}>Hapus Semua</Button>}<Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><Upload size={14} className="mr-1.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><Upload size={14} className="mr-1.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}><DialogContent><DialogHeader><DialogTitle>Import Karyawan</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-slate-600">Format: CABANG, NAMA, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, EMAIL, MASUK KERJA, LOLOS TRAINING.</p><Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Batal</Button><Button onClick={() => void submitImport()} disabled={pending}>{pending ? "Mengimpor..." : "Import"}</Button></DialogFooter></div></DialogContent></Dialog>
 
@@ -388,6 +406,28 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
       <Dialog open={editingRow !== null} onOpenChange={(open) => { if (!open) setEditingRow(null); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Edit Karyawan</DialogTitle></DialogHeader><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setEditingRow(null)}>Batal</Button><Button onClick={() => void submitEdit()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
 
       <AlertDialog open={deletingRow !== null} onOpenChange={(open) => { if (!open) setDeletingRow(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus Karyawan</AlertDialogTitle><AlertDialogDescription>{`Data karyawan \"${deletingRow?.fullName ?? ""}\" akan dinonaktifkan.`}</AlertDialogDescription></AlertDialogHeader>{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }}>{pending ? "Menghapus..." : "Hapus"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+
+      <AlertDialog open={purgeOpen} onOpenChange={(open) => { if (!open) setPurgeOpen(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Semua Data Karyawan</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini akan menghapus <strong>seluruh data karyawan</strong>, riwayat, payroll snapshot, dan akun login karyawan (kecuali akun SUPER_ADMIN, HRD, dan FINANCE). Data tidak dapat dipulihkan. Lanjutkan?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => { e.preventDefault(); void handlePurge(); }}
+              disabled={pending}
+            >
+              {pending ? "Menghapus..." : "Ya, Hapus Semua"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

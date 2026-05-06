@@ -9,15 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  addPayrollAdjustment,
   createPayrollPeriod,
   finalizePayroll,
   generatePayrollPreview,
   lockPayrollPeriod,
   markPayrollPaid,
-  upsertManagerialKpiSummary,
-  upsertEmployeeSalaryConfig,
 } from "@/server/actions/payroll";
 import type { UserRole } from "@/types";
 
@@ -92,18 +90,6 @@ export type PayrollSalaryConfigRow = {
   updatedAt: string;
 };
 
-export type PayrollManagerialKpiRow = {
-  id: string;
-  employeeId: string;
-  employeeCode: string;
-  employeeName: string;
-  divisionName: string;
-  performancePercent: number;
-  status: string;
-  notes: string;
-  updatedAt: string;
-};
-
 export type PayrollGradeCompensationRow = {
   gradeId: string;
   gradeName: string;
@@ -145,46 +131,12 @@ type Props = {
   activePeriodId: string | null;
   periods: PayrollPeriodRow[];
   results: PayrollResultRow[];
-  adjustments: PayrollAdjustmentRow[];
-  salaryConfigs: PayrollSalaryConfigRow[];
-  managerialKpiRows: PayrollManagerialKpiRow[];
   financeSummary: PayrollFinanceSummary;
   divisionSummaries: PayrollDivisionSummaryRow[];
 };
 
 type PeriodDraft = {
   periodCode: string;
-  notes: string;
-};
-
-type AdjustmentDraft = {
-  employeeId: string;
-  adjustmentType: "ADDITION" | "DEDUCTION";
-  amount: string;
-  reason: string;
-};
-
-type SalaryConfigDraft = {
-  employeeId: string;
-  employeeLabel: string;
-  baseSalaryAmount: string;
-  gradeAllowanceAmount: string;
-  tenureAllowanceAmount: string;
-  dailyAllowanceAmount: string;
-  performanceBonusBaseAmount: string;
-  achievementBonus140Amount: string;
-  achievementBonus165Amount: string;
-  fulltimeBonusAmount: string;
-  disciplineBonusAmount: string;
-  teamBonusAmount: string;
-  overtimeRateAmount: string;
-  notes: string;
-};
-
-type ManagerialKpiDraft = {
-  employeeId: string;
-  employeeLabel: string;
-  performancePercent: string;
   notes: string;
 };
 
@@ -203,55 +155,11 @@ function currentPeriodCode() {
 }
 
 function formatCurrency(amount: number) {
-  return `Rp ${amount.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
+  return `Rp ${amount.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 }
 
 function createPeriodDraft(): PeriodDraft {
-  return {
-    periodCode: currentPeriodCode(),
-    notes: "",
-  };
-}
-
-function createAdjustmentDraft(employeeId = ""): AdjustmentDraft {
-  return {
-    employeeId,
-    adjustmentType: "ADDITION",
-    amount: "",
-    reason: "",
-  };
-}
-
-function asInputValue(value: number | null) {
-  return value == null ? "" : String(value);
-}
-
-function createSalaryConfigDraft(row?: PayrollSalaryConfigRow): SalaryConfigDraft {
-  return {
-    employeeId: row?.employeeId ?? "",
-    employeeLabel: row ? `${row.employeeName} · ${row.employeeCode}` : "",
-    baseSalaryAmount: asInputValue(row?.baseSalaryAmount ?? null),
-    gradeAllowanceAmount: asInputValue(row?.gradeAllowanceAmount ?? null),
-    tenureAllowanceAmount: asInputValue(row?.tenureAllowanceAmount ?? null),
-    dailyAllowanceAmount: asInputValue(row?.dailyAllowanceAmount ?? null),
-    performanceBonusBaseAmount: asInputValue(row?.performanceBonusBaseAmount ?? null),
-    achievementBonus140Amount: asInputValue(row?.achievementBonus140Amount ?? null),
-    achievementBonus165Amount: asInputValue(row?.achievementBonus165Amount ?? null),
-    fulltimeBonusAmount: asInputValue(row?.fulltimeBonusAmount ?? null),
-    disciplineBonusAmount: asInputValue(row?.disciplineBonusAmount ?? null),
-    teamBonusAmount: asInputValue(row?.teamBonusAmount ?? null),
-    overtimeRateAmount: asInputValue(row?.overtimeRateAmount ?? null),
-    notes: row?.notes ?? "",
-  };
-}
-
-function createManagerialKpiDraft(row?: PayrollManagerialKpiRow): ManagerialKpiDraft {
-  return {
-    employeeId: row?.employeeId ?? "",
-    employeeLabel: row ? `${row.employeeName} · ${row.employeeCode}` : "",
-    performancePercent: row ? String(row.performancePercent) : "",
-    notes: row?.notes ?? "",
-  };
+  return { periodCode: currentPeriodCode(), notes: "" };
 }
 
 export default function PayrollClient({
@@ -260,9 +168,6 @@ export default function PayrollClient({
   activePeriodId,
   periods,
   results,
-  adjustments,
-  salaryConfigs,
-  managerialKpiRows,
   financeSummary,
   divisionSummaries,
 }: Props) {
@@ -271,193 +176,19 @@ export default function PayrollClient({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [periodOpen, setPeriodOpen] = useState(false);
-  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
-  const [salaryConfigOpen, setSalaryConfigOpen] = useState(false);
-  const [managerialKpiOpen, setManagerialKpiOpen] = useState(false);
   const [periodDraft, setPeriodDraft] = useState<PeriodDraft>(createPeriodDraft());
-  const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>(createAdjustmentDraft());
-  const [salaryConfigDraft, setSalaryConfigDraft] = useState<SalaryConfigDraft>(createSalaryConfigDraft());
-  const [managerialKpiDraft, setManagerialKpiDraft] = useState<ManagerialKpiDraft>(createManagerialKpiDraft());
+  const [activeTab, setActiveTab] = useState<"payroll" | "history">("payroll");
 
-  const selectedPeriod = periods.find((period) => period.id === activePeriodId) ?? null;
-  const totalTakeHome = results.reduce((sum, row) => sum + row.takeHomePay, 0);
-  const totalAdjustments = adjustments.reduce(
-    (sum, row) => sum + (row.adjustmentType === "ADDITION" ? row.amount : -row.amount),
-    0
-  );
+  const selectedPeriod = periods.find((p) => p.id === activePeriodId) ?? null;
+
+  const canFinalize =
+    canManage &&
+    !!activePeriodId &&
+    !["FINALIZED", "PAID", "LOCKED"].includes(selectedPeriod?.status ?? "");
+  const canMarkPaid = canManage && !!activePeriodId && selectedPeriod?.status === "FINALIZED";
+  const canLock = canManage && !!activePeriodId && selectedPeriod?.status === "PAID";
 
   const resultColumns: ColumnDef<PayrollResultRow>[] = useMemo(
-    () => [
-      {
-        header: "Karyawan",
-        accessorKey: "employeeName",
-        cell: ({ row }) => (
-          <div className="space-y-0.5">
-            <p className="font-medium text-slate-900">{row.original.employeeName}</p>
-            <p className="text-xs text-slate-500">
-              {row.original.employeeCode} · {row.original.divisionName} · {row.original.employeeGroup}
-            </p>
-          </div>
-        ),
-      },
-      {
-        header: "Status",
-        accessorKey: "payrollStatus",
-        cell: ({ row }) => <Badge variant="outline">{row.original.payrollStatus}</Badge>,
-      },
-      {
-        header: "Performa",
-        accessorKey: "performancePercent",
-        cell: ({ row }) => <span>{row.original.performancePercent.toFixed(2)}%</span>,
-      },
-      {
-        header: "Addition",
-        accessorKey: "totalAdditionAmount",
-        cell: ({ row }) => <span>{formatCurrency(row.original.totalAdditionAmount)}</span>,
-      },
-      {
-        header: "Deduction",
-        accessorKey: "totalDeductionAmount",
-        cell: ({ row }) => <span>{formatCurrency(row.original.totalDeductionAmount)}</span>,
-      },
-      {
-        header: "THP",
-        accessorKey: "takeHomePay",
-        cell: ({ row }) => <span className="font-semibold text-slate-900">{formatCurrency(row.original.takeHomePay)}</span>,
-      },
-      {
-        header: "Aksi",
-        id: "actions",
-        cell: ({ row }) => (
-          <div className="flex gap-2">
-            {activePeriodId ? (
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/payroll/${activePeriodId}/${row.original.employeeId}`}>Detail</Link>
-              </Button>
-            ) : null}
-            {activePeriodId ? (
-              <Button asChild size="sm" variant="outline">
-                <a href={`/payroll/${activePeriodId}/${row.original.employeeId}/payslip.pdf`} target="_blank" rel="noreferrer">
-                  PDF
-                </a>
-              </Button>
-            ) : null}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!canManage || !activePeriodId || selectedPeriod?.status === "PAID" || selectedPeriod?.status === "LOCKED"}
-              onClick={() => {
-                setError(null);
-                setSuccess(null);
-                setAdjustmentDraft(createAdjustmentDraft(row.original.employeeId));
-                setAdjustmentOpen(true);
-              }}
-            >
-              Adjustment
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    [activePeriodId, canManage, selectedPeriod?.status]
-  );
-
-  const adjustmentColumns: ColumnDef<PayrollAdjustmentRow>[] = useMemo(
-    () => [
-      {
-        header: "Karyawan",
-        accessorKey: "employeeName",
-      },
-      {
-        header: "Tipe",
-        accessorKey: "adjustmentType",
-        cell: ({ row }) => (
-          <Badge variant={row.original.adjustmentType === "ADDITION" ? "default" : "secondary"}>
-            {row.original.adjustmentType}
-          </Badge>
-        ),
-      },
-      {
-        header: "Nominal",
-        accessorKey: "amount",
-        cell: ({ row }) => <span>{formatCurrency(row.original.amount)}</span>,
-      },
-      {
-        header: "Alasan",
-        accessorKey: "reason",
-      },
-      {
-        header: "Waktu",
-        accessorKey: "createdAt",
-      },
-    ],
-    []
-  );
-
-  const salaryConfigColumns: ColumnDef<PayrollSalaryConfigRow>[] = useMemo(
-    () => [
-      {
-        header: "Karyawan",
-        accessorKey: "employeeName",
-        cell: ({ row }) => (
-          <div className="space-y-0.5">
-            <p className="font-medium text-slate-900">{row.original.employeeName}</p>
-            <p className="text-xs text-slate-500">
-              {row.original.employeeCode} · {row.original.divisionName} · {row.original.employeeGroup}
-            </p>
-          </div>
-        ),
-      },
-      {
-        header: "Gaji Pokok",
-        accessorKey: "baseSalaryAmount",
-        cell: ({ row }) => <span>{row.original.baseSalaryAmount != null ? formatCurrency(row.original.baseSalaryAmount) : "-"}</span>,
-      },
-      {
-        header: "Bonus Kinerja Base",
-        accessorKey: "performanceBonusBaseAmount",
-        cell: ({ row }) => (
-          <span>{row.original.performanceBonusBaseAmount != null ? formatCurrency(row.original.performanceBonusBaseAmount) : "-"}</span>
-        ),
-      },
-      {
-        header: "Fulltime",
-        accessorKey: "fulltimeBonusAmount",
-        cell: ({ row }) => <span>{row.original.fulltimeBonusAmount != null ? formatCurrency(row.original.fulltimeBonusAmount) : "-"}</span>,
-      },
-      {
-        header: "Team",
-        accessorKey: "teamBonusAmount",
-        cell: ({ row }) => <span>{row.original.teamBonusAmount != null ? formatCurrency(row.original.teamBonusAmount) : "-"}</span>,
-      },
-      {
-        header: "Update",
-        accessorKey: "updatedAt",
-      },
-      {
-        header: "Aksi",
-        id: "salary-config-actions",
-        cell: ({ row }) => (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canManage}
-            onClick={() => {
-              setError(null);
-              setSuccess(null);
-              setSalaryConfigDraft(createSalaryConfigDraft(row.original));
-              setSalaryConfigOpen(true);
-            }}
-          >
-            Edit Nominal
-          </Button>
-        ),
-      },
-    ],
-    [canManage]
-  );
-
-  const managerialKpiColumns: ColumnDef<PayrollManagerialKpiRow>[] = useMemo(
     () => [
       {
         header: "Karyawan",
@@ -472,40 +203,59 @@ export default function PayrollClient({
         ),
       },
       {
-        header: "KPI %",
-        accessorKey: "performancePercent",
-        cell: ({ row }) => <span>{row.original.performancePercent.toFixed(2)}%</span>,
+        header: "Salary",
+        id: "salary",
+        cell: ({ row }) => {
+          const v =
+            row.original.baseSalaryPaid +
+            row.original.gradeAllowancePaid +
+            row.original.tenureAllowancePaid;
+          return <span className="tabular-nums text-sm">{formatCurrency(v)}</span>;
+        },
       },
       {
-        header: "Status",
-        accessorKey: "status",
-        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
+        header: "+ Bonus / Tunjangan",
+        id: "bonus",
+        cell: ({ row }) => {
+          const v =
+            row.original.bonusKinerjaAmount +
+            row.original.bonusPrestasiAmount +
+            row.original.bonusFulltimeAmount +
+            row.original.bonusDisciplineAmount +
+            row.original.bonusTeamAmount;
+          return <span className="tabular-nums text-sm text-emerald-700">{formatCurrency(v)}</span>;
+        },
       },
       {
-        header: "Update",
-        accessorKey: "updatedAt",
-      },
-      {
-        header: "Aksi",
-        id: "managerial-kpi-actions",
+        header: "- Tagihan / Ganti Rugi",
+        id: "deduction",
         cell: ({ row }) => (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={!canManage || !activePeriodId || selectedPeriod?.status === "PAID" || selectedPeriod?.status === "LOCKED"}
-            onClick={() => {
-              setError(null);
-              setSuccess(null);
-              setManagerialKpiDraft(createManagerialKpiDraft(row.original));
-              setManagerialKpiOpen(true);
-            }}
-          >
-            Edit KPI
-          </Button>
+          <span className="tabular-nums text-sm text-red-600">
+            {formatCurrency(row.original.totalDeductionAmount)}
+          </span>
         ),
       },
+      {
+        header: "Total THP",
+        accessorKey: "takeHomePay",
+        cell: ({ row }) => (
+          <span className="font-semibold tabular-nums text-slate-900">
+            {formatCurrency(row.original.takeHomePay)}
+          </span>
+        ),
+      },
+      {
+        header: "",
+        id: "actions",
+        cell: ({ row }) =>
+          activePeriodId ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/payroll/${activePeriodId}/${row.original.employeeId}`}>Detail</Link>
+            </Button>
+          ) : null,
+      },
     ],
-    [activePeriodId, canManage, selectedPeriod?.status]
+    [activePeriodId]
   );
 
   const divisionSummaryColumns: ColumnDef<PayrollDivisionSummaryRow>[] = useMemo(
@@ -515,25 +265,93 @@ export default function PayrollClient({
       {
         header: "Total THP",
         accessorKey: "totalTakeHomePay",
-        cell: ({ row }) => <span>{formatCurrency(row.original.totalTakeHomePay)}</span>,
+        cell: ({ row }) => (
+          <span className="tabular-nums">{formatCurrency(row.original.totalTakeHomePay)}</span>
+        ),
       },
       {
-        header: "Addition",
+        header: "Bonus / Tunjangan",
         accessorKey: "totalAdditions",
-        cell: ({ row }) => <span>{formatCurrency(row.original.totalAdditions)}</span>,
+        cell: ({ row }) => (
+          <span className="tabular-nums text-emerald-700">{formatCurrency(row.original.totalAdditions)}</span>
+        ),
       },
       {
-        header: "Deduction",
+        header: "Tagihan / Ganti Rugi",
         accessorKey: "totalDeductions",
-        cell: ({ row }) => <span>{formatCurrency(row.original.totalDeductions)}</span>,
+        cell: ({ row }) => (
+          <span className="tabular-nums text-red-600">{formatCurrency(row.original.totalDeductions)}</span>
+        ),
       },
       {
         header: "Avg Performa",
         accessorKey: "averagePerformancePercent",
-        cell: ({ row }) => <span>{row.original.averagePerformancePercent.toFixed(2)}%</span>,
+        cell: ({ row }) => <span>{row.original.averagePerformancePercent.toFixed(1)}%</span>,
       },
     ],
     []
+  );
+
+  const historyColumns: ColumnDef<PayrollPeriodRow>[] = useMemo(
+    () => [
+      {
+        header: "Periode",
+        accessorKey: "periodCode",
+        cell: ({ row }) => (
+          <div>
+            <p className="font-medium text-slate-900">{row.original.periodCode}</p>
+            <p className="text-xs text-slate-500">{row.original.periodLabel}</p>
+          </div>
+        ),
+      },
+      {
+        header: "Status",
+        accessorKey: "status",
+        cell: ({ row }) => (
+          <Badge variant={STATUS_VARIANT[row.original.status] ?? "outline"}>
+            {row.original.status}
+          </Badge>
+        ),
+      },
+      {
+        header: "Finalisasi",
+        accessorKey: "finalizedAt",
+        cell: ({ row }) => (
+          <span className="text-sm text-slate-500">{row.original.finalizedAt}</span>
+        ),
+      },
+      {
+        header: "Aksi",
+        id: "actions",
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                router.push(`/payroll?periodId=${row.original.id}`);
+                setActiveTab("payroll");
+              }}
+            >
+              Edit
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <a href={`/payroll/${row.original.id}/export.xlsx`}>Rekap .xlsx</a>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <a
+                href={`/payroll/${row.original.id}/slips.pdf`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Slip .pdf
+              </a>
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [router]
   );
 
   async function handleCreatePeriod() {
@@ -591,88 +409,6 @@ export default function PayrollClient({
     }
   }
 
-  async function handleAddAdjustment() {
-    if (!activePeriodId) return;
-    setPending(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const result = await addPayrollAdjustment({
-        periodId: activePeriodId,
-        employeeId: adjustmentDraft.employeeId,
-        adjustmentType: adjustmentDraft.adjustmentType,
-        amount: Number(adjustmentDraft.amount),
-        reason: adjustmentDraft.reason,
-      });
-      if (result && "error" in result) {
-        setError(result.error ?? "Gagal menambahkan adjustment.");
-        return;
-      }
-      setSuccess("Adjustment payroll berhasil ditambahkan.");
-      setAdjustmentOpen(false);
-      setAdjustmentDraft(createAdjustmentDraft());
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleSaveSalaryConfig() {
-    setPending(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const result = await upsertEmployeeSalaryConfig({
-        employeeId: salaryConfigDraft.employeeId,
-        baseSalaryAmount: salaryConfigDraft.baseSalaryAmount,
-        gradeAllowanceAmount: salaryConfigDraft.gradeAllowanceAmount,
-        tenureAllowanceAmount: salaryConfigDraft.tenureAllowanceAmount,
-        dailyAllowanceAmount: salaryConfigDraft.dailyAllowanceAmount,
-        performanceBonusBaseAmount: salaryConfigDraft.performanceBonusBaseAmount,
-        achievementBonus140Amount: salaryConfigDraft.achievementBonus140Amount,
-        achievementBonus165Amount: salaryConfigDraft.achievementBonus165Amount,
-        fulltimeBonusAmount: salaryConfigDraft.fulltimeBonusAmount,
-        disciplineBonusAmount: salaryConfigDraft.disciplineBonusAmount,
-        teamBonusAmount: salaryConfigDraft.teamBonusAmount,
-        overtimeRateAmount: salaryConfigDraft.overtimeRateAmount,
-        notes: salaryConfigDraft.notes,
-      });
-      if (result && "error" in result) {
-        setError(result.error ?? "Gagal menyimpan salary config.");
-        return;
-      }
-      setSuccess("Salary config payroll berhasil disimpan.");
-      setSalaryConfigOpen(false);
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleSaveManagerialKpi() {
-    if (!activePeriodId) return;
-    setPending(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const result = await upsertManagerialKpiSummary({
-        periodId: activePeriodId,
-        employeeId: managerialKpiDraft.employeeId,
-        performancePercent: managerialKpiDraft.performancePercent,
-        notes: managerialKpiDraft.notes,
-      });
-      if (result && "error" in result) {
-        setError(result.error ?? "Gagal menyimpan KPI managerial.");
-        return;
-      }
-      setSuccess("KPI managerial berhasil disimpan.");
-      setManagerialKpiOpen(false);
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function handleMarkPaid() {
     if (!activePeriodId) return;
     setPending(true);
@@ -710,71 +446,32 @@ export default function PayrollClient({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Role</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{role}</p>
+    <Tabs
+      value={activeTab}
+      onValueChange={(v) => setActiveTab(v as "payroll" | "history")}
+      className="space-y-4"
+    >
+      {/* Toolbar row */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setError(null);
+                setSuccess(null);
+                setPeriodDraft(createPeriodDraft());
+                setPeriodOpen(true);
+              }}
+            >
+              + Periode
+            </Button>
+          )}
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Total THP Preview</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(financeSummary.totalTakeHomePay || totalTakeHome)}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Total Addition</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(financeSummary.totalAdditions)}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Total Deduction</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(financeSummary.totalDeductions)}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Net Adjustment</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(totalAdjustments)}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        {canManage && (
-          <Button
-            onClick={() => {
-              setError(null);
-              setSuccess(null);
-              setPeriodDraft(createPeriodDraft());
-              setPeriodOpen(true);
-            }}
-          >
-            Buat Periode
-          </Button>
-        )}
-        {canManage && activePeriodId && (
-          <Button variant="outline" onClick={() => void handleGeneratePreview()} disabled={pending}>
-            Generate Preview
-          </Button>
-        )}
-        {canManage && activePeriodId && selectedPeriod?.status !== "FINALIZED" && selectedPeriod?.status !== "PAID" && selectedPeriod?.status !== "LOCKED" && (
-          <Button onClick={() => void handleFinalize()} disabled={pending || results.length === 0}>
-            Finalisasi Payroll
-          </Button>
-        )}
-        {canManage && activePeriodId && selectedPeriod?.status === "FINALIZED" && (
-          <Button onClick={() => void handleMarkPaid()} disabled={pending}>
-            Tandai PAID
-          </Button>
-        )}
-        {canManage && activePeriodId && selectedPeriod?.status === "PAID" && (
-          <Button variant="secondary" onClick={() => void handleLockPeriod()} disabled={pending}>
-            Kunci Periode
-          </Button>
-        )}
-        {activePeriodId && (
-          <Button asChild variant="outline">
-            <a href={`/payroll/${activePeriodId}/export.xlsx`}>Export Excel</a>
-          </Button>
-        )}
-        <Button asChild variant="ghost">
-          <Link href={activePeriodId ? `/finance?periodId=${activePeriodId}` : "/finance"}>Buka Finance Dashboard</Link>
-        </Button>
+        <TabsList>
+          <TabsTrigger value="payroll">Payroll</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+        </TabsList>
       </div>
 
       {success && (
@@ -788,157 +485,154 @@ export default function PayrollClient({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <div className="space-y-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-sm font-medium text-slate-900">Periode Payroll</p>
-            <p className="mt-1 text-xs text-slate-500">Pilih periode untuk melihat preview dan adjustment.</p>
-          </div>
-          {periods.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-              Belum ada periode payroll.
-            </div>
-          ) : (
-            periods.map((period) => {
-              const isActive = period.id === activePeriodId;
-              return (
-                <Link
-                  key={period.id}
-                  href={`/payroll?periodId=${period.id}`}
-                  className={`block rounded-xl border p-4 transition-colors ${
-                    isActive
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium">{period.periodCode}</p>
-                    <Badge variant={STATUS_VARIANT[period.status] ?? "outline"}>{period.status}</Badge>
-                  </div>
-                  <p className={`mt-2 text-sm ${isActive ? "text-slate-200" : "text-slate-500"}`}>{period.periodLabel}</p>
-                  <p className={`mt-2 text-xs ${isActive ? "text-slate-300" : "text-slate-400"}`}>
-                    Preview: {period.previewGeneratedAt}
-                  </p>
-                  <p className={`text-xs ${isActive ? "text-slate-300" : "text-slate-400"}`}>
-                    Finalisasi: {period.finalizedAt}
-                  </p>
-                </Link>
-              );
-            })
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  {selectedPeriod ? `Preview ${selectedPeriod.periodCode}` : "Belum ada periode dipilih"}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {selectedPeriod ? selectedPeriod.periodLabel : "Buat atau pilih periode payroll terlebih dahulu."}
-                </p>
-              </div>
-              {selectedPeriod && <Badge variant={STATUS_VARIANT[selectedPeriod.status] ?? "outline"}>{selectedPeriod.status}</Badge>}
-            </div>
-            {selectedPeriod?.notes && (
-              <p className="mt-3 text-sm text-slate-600">{selectedPeriod.notes}</p>
+      {/* PAYROLL TAB */}
+      <TabsContent value="payroll" className="mt-0 space-y-5">
+        {/* Period selector + action bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            {periods.length > 0 ? (
+              <select
+                value={activePeriodId ?? ""}
+                onChange={(e) => router.push(`/payroll?periodId=${e.target.value}`)}
+                className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-900 outline-none focus:border-slate-400"
+              >
+                {!activePeriodId && <option value="">Pilih periode...</option>}
+                {periods.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.periodCode}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm text-slate-500">Belum ada periode payroll</span>
+            )}
+            {selectedPeriod && (
+              <>
+                <span className="text-sm text-slate-500">{selectedPeriod.periodLabel}</span>
+                <Badge variant={STATUS_VARIANT[selectedPeriod.status] ?? "outline"}>
+                  {selectedPeriod.status}
+                </Badge>
+              </>
             )}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {canManage && activePeriodId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleGeneratePreview()}
+                disabled={pending}
+              >
+                Generate Preview
+              </Button>
+            )}
+            {canFinalize && (
+              <Button
+                size="sm"
+                onClick={() => void handleFinalize()}
+                disabled={pending || results.length === 0}
+              >
+                Finalisasi
+              </Button>
+            )}
+            {canMarkPaid && (
+              <Button size="sm" onClick={() => void handleMarkPaid()} disabled={pending}>
+                Tandai PAID
+              </Button>
+            )}
+            {canLock && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleLockPeriod()}
+                disabled={pending}
+              >
+                Kunci Periode
+              </Button>
+            )}
+            {activePeriodId && (
+              <Button asChild variant="outline" size="sm">
+                <a href={`/payroll/${activePeriodId}/export.xlsx`}>Export .xlsx</a>
+              </Button>
+            )}
+          </div>
+        </div>
 
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-base font-semibold text-slate-900">Hasil Payroll</h4>
-              <p className="text-sm text-slate-500">
-                Preview payroll gabungan TEAMWORK dan MANAGERIAL berbasis snapshot periode, sumber performa final,
-                ticket approved, incident, dan adjustment.
-              </p>
+        {!activePeriodId ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-sm text-slate-500">
+            Pilih atau buat periode payroll untuk memulai.
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Finance summary strip */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-xs text-slate-500">Karyawan</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {financeSummary.employeeCount}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-xs text-slate-500">Total THP</p>
+                <p className="mt-1 text-base font-bold text-slate-900 tabular-nums">
+                  {formatCurrency(financeSummary.totalTakeHomePay)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-xs text-slate-500">Total Bonus</p>
+                <p className="mt-1 text-base font-bold text-emerald-700 tabular-nums">
+                  {formatCurrency(financeSummary.totalAdditions)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-xs text-slate-500">Total Potongan</p>
+                <p className="mt-1 text-base font-bold text-red-600 tabular-nums">
+                  {formatCurrency(financeSummary.totalDeductions)}
+                </p>
+              </div>
             </div>
+
+            {/* Results table */}
             <DataTable
               data={results}
               columns={resultColumns}
               searchKey="employeeName"
-              searchPlaceholder="Cari karyawan payroll..."
+              searchPlaceholder="Cari karyawan..."
             />
-          </div>
 
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-base font-semibold text-slate-900">Finance Summary per Divisi</h4>
-              <p className="text-sm text-slate-500">
-                Ringkasan total THP, addition, deduction, dan rata-rata performa untuk periode aktif.
-              </p>
-            </div>
-            <DataTable
-              data={divisionSummaries}
-              columns={divisionSummaryColumns}
-              searchKey="divisionName"
-              searchPlaceholder="Cari divisi payroll..."
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-base font-semibold text-slate-900">Adjustment</h4>
-              <p className="text-sm text-slate-500">Riwayat penyesuaian manual per periode payroll.</p>
-            </div>
-            <DataTable
-              data={adjustments}
-              columns={adjustmentColumns}
-              searchKey="employeeName"
-              searchPlaceholder="Cari adjustment..."
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">KPI Managerial</h4>
-                <p className="text-sm text-slate-500">
-                  Sumber performa final untuk karyawan MANAGERIAL pada periode aktif.
-                </p>
+            {/* Division summary */}
+            {divisionSummaries.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-slate-700">Ringkasan per Divisi</h4>
+                <DataTable
+                  data={divisionSummaries}
+                  columns={divisionSummaryColumns}
+                  searchKey="divisionName"
+                  searchPlaceholder="Cari divisi..."
+                />
               </div>
-              {canManage && activePeriodId ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setError(null);
-                    setSuccess(null);
-                    setManagerialKpiDraft(createManagerialKpiDraft());
-                    setManagerialKpiOpen(true);
-                  }}
-                >
-                  Input KPI
-                </Button>
-              ) : null}
-            </div>
-            <DataTable
-              data={managerialKpiRows}
-              columns={managerialKpiColumns}
-              searchKey="employeeName"
-              searchPlaceholder="Cari KPI managerial..."
-            />
+            )}
           </div>
+        )}
+      </TabsContent>
 
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Salary Config</h4>
-                <p className="text-sm text-slate-500">
-                  Master nominal payroll aktif yang dipakai saat generate preview periode.
-                </p>
-              </div>
-            </div>
-            <DataTable
-              data={salaryConfigs}
-              columns={salaryConfigColumns}
-              searchKey="employeeName"
-              searchPlaceholder="Cari salary config..."
-            />
+      {/* HISTORY TAB */}
+      <TabsContent value="history" className="mt-0">
+        {periods.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center text-sm text-slate-500">
+            Belum ada periode payroll yang dibuat.
           </div>
-        </div>
-      </div>
+        ) : (
+          <DataTable
+            data={periods}
+            columns={historyColumns}
+            searchKey="periodCode"
+            searchPlaceholder="Cari periode..."
+          />
+        )}
+      </TabsContent>
 
+      {/* Create Period Dialog */}
       <Dialog open={periodOpen} onOpenChange={setPeriodOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -949,15 +643,15 @@ export default function PayrollClient({
               <label className="text-sm font-medium text-slate-700">Periode Anchor (YYYY-MM)</label>
               <Input
                 value={periodDraft.periodCode}
-                onChange={(event) => setPeriodDraft((draft) => ({ ...draft, periodCode: event.target.value }))}
-                placeholder="2026-04"
+                onChange={(e) => setPeriodDraft((d) => ({ ...d, periodCode: e.target.value }))}
+                placeholder="2026-05"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Catatan</label>
               <Input
                 value={periodDraft.notes}
-                onChange={(event) => setPeriodDraft((draft) => ({ ...draft, notes: event.target.value }))}
+                onChange={(e) => setPeriodDraft((d) => ({ ...d, notes: e.target.value }))}
                 placeholder="Opsional"
               />
             </div>
@@ -972,218 +666,6 @@ export default function PayrollClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Dialog open={adjustmentOpen} onOpenChange={setAdjustmentOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Tambah Adjustment Payroll</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Karyawan</label>
-              <select
-                className="flex h-9 w-full rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-xs"
-                value={adjustmentDraft.employeeId}
-                onChange={(event) => setAdjustmentDraft((draft) => ({ ...draft, employeeId: event.target.value }))}
-              >
-                <option value="">Pilih karyawan</option>
-                {results.map((row) => (
-                  <option key={row.employeeId} value={row.employeeId}>
-                    {row.employeeName} · {row.employeeCode}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tipe</label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-xs"
-                  value={adjustmentDraft.adjustmentType}
-                  onChange={(event) =>
-                    setAdjustmentDraft((draft) => ({
-                      ...draft,
-                      adjustmentType: event.target.value as AdjustmentDraft["adjustmentType"],
-                    }))
-                  }
-                >
-                  <option value="ADDITION">ADDITION</option>
-                  <option value="DEDUCTION">DEDUCTION</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Nominal</label>
-                <Input
-                  type="number"
-                  value={adjustmentDraft.amount}
-                  onChange={(event) => setAdjustmentDraft((draft) => ({ ...draft, amount: event.target.value }))}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Alasan</label>
-              <Input
-                value={adjustmentDraft.reason}
-                onChange={(event) => setAdjustmentDraft((draft) => ({ ...draft, reason: event.target.value }))}
-                placeholder="Alasan adjustment"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjustmentOpen(false)} disabled={pending}>
-              Batal
-            </Button>
-            <Button onClick={() => void handleAddAdjustment()} disabled={pending || !activePeriodId}>
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={salaryConfigOpen} onOpenChange={setSalaryConfigOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Atur Salary Config Payroll</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              {salaryConfigDraft.employeeLabel || "Pilih karyawan dari tabel salary config."}
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Gaji Pokok</label>
-                <Input value={salaryConfigDraft.baseSalaryAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, baseSalaryAmount: event.target.value }))} type="number" placeholder="1200000" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tunjangan Grade</label>
-                <Input value={salaryConfigDraft.gradeAllowanceAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, gradeAllowanceAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tunjangan Masa Kerja</label>
-                <Input value={salaryConfigDraft.tenureAllowanceAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, tenureAllowanceAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Uang Harian</label>
-                <Input value={salaryConfigDraft.dailyAllowanceAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, dailyAllowanceAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Base Bonus Kinerja</label>
-                <Input value={salaryConfigDraft.performanceBonusBaseAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, performanceBonusBaseAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Bonus Prestasi 140</label>
-                <Input value={salaryConfigDraft.achievementBonus140Amount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, achievementBonus140Amount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Bonus Prestasi 165</label>
-                <Input value={salaryConfigDraft.achievementBonus165Amount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, achievementBonus165Amount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Bonus Fulltime</label>
-                <Input value={salaryConfigDraft.fulltimeBonusAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, fulltimeBonusAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Bonus Disiplin</label>
-                <Input value={salaryConfigDraft.disciplineBonusAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, disciplineBonusAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Bonus Team</label>
-                <Input value={salaryConfigDraft.teamBonusAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, teamBonusAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Tarif Overtime</label>
-                <Input value={salaryConfigDraft.overtimeRateAmount} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, overtimeRateAmount: event.target.value }))} type="number" placeholder="0" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Catatan</label>
-                <Input value={salaryConfigDraft.notes} onChange={(event) => setSalaryConfigDraft((draft) => ({ ...draft, notes: event.target.value }))} placeholder="Opsional" />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSalaryConfigOpen(false)} disabled={pending}>
-              Batal
-            </Button>
-            <Button onClick={() => void handleSaveSalaryConfig()} disabled={pending || !salaryConfigDraft.employeeId}>
-              Simpan Nominal
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={managerialKpiOpen} onOpenChange={setManagerialKpiOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Input KPI Managerial</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              {managerialKpiDraft.employeeLabel || "Pilih karyawan managerial dari tabel KPI."}
-            </div>
-            {!managerialKpiDraft.employeeId ? (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Karyawan Managerial</label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-xs"
-                  value={managerialKpiDraft.employeeId}
-                  onChange={(event) => {
-                    const row = salaryConfigs.find(
-                      (item) => item.employeeId === event.target.value && item.employeeGroup === "MANAGERIAL"
-                    );
-                    setManagerialKpiDraft({
-                      employeeId: event.target.value,
-                      employeeLabel: row ? `${row.employeeName} · ${row.employeeCode}` : "",
-                      performancePercent: "",
-                      notes: "",
-                    });
-                  }}
-                >
-                  <option value="">Pilih karyawan managerial</option>
-                  {salaryConfigs
-                    .filter((row) => row.employeeGroup === "MANAGERIAL")
-                    .map((row) => (
-                      <option key={row.employeeId} value={row.employeeId}>
-                        {row.employeeName} · {row.employeeCode} · {row.divisionName}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            ) : null}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">KPI Final (%)</label>
-              <Input
-                type="number"
-                value={managerialKpiDraft.performancePercent}
-                onChange={(event) =>
-                  setManagerialKpiDraft((draft) => ({ ...draft, performancePercent: event.target.value }))
-                }
-                placeholder="92.5"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Catatan</label>
-              <Input
-                value={managerialKpiDraft.notes}
-                onChange={(event) => setManagerialKpiDraft((draft) => ({ ...draft, notes: event.target.value }))}
-                placeholder="Opsional"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setManagerialKpiOpen(false)} disabled={pending}>
-              Batal
-            </Button>
-            <Button
-              onClick={() => void handleSaveManagerialKpi()}
-              disabled={pending || !activePeriodId || !managerialKpiDraft.employeeId || !managerialKpiDraft.performancePercent}
-            >
-              Simpan KPI
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </Tabs>
   );
 }
-

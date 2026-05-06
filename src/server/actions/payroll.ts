@@ -1091,6 +1091,123 @@ export async function generatePayrollPreview(input: unknown) {
     adjustmentsByEmployee.set(row.employeeId, current);
   }
 
+  // ── Bulk-fetch history snapshots (replaces ~900 per-employee queries) ──────
+  const divHistoryRows = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: employeeDivisionHistories.employeeId,
+          divisionId: employeeDivisionHistories.newDivisionId,
+          divisionName: divisions.name,
+          effectiveDate: employeeDivisionHistories.effectiveDate,
+        })
+        .from(employeeDivisionHistories)
+        .leftJoin(divisions, eq(employeeDivisionHistories.newDivisionId, divisions.id))
+        .where(and(
+          inArray(employeeDivisionHistories.employeeId, employeeIds),
+          lte(employeeDivisionHistories.effectiveDate, periodStartDate)
+        ))
+    : [];
+  const latestDivByEmployee = new Map<string, { divisionId: string | null; divisionName: string | null; effectiveDate: Date }>();
+  for (const row of divHistoryRows) {
+    const existing = latestDivByEmployee.get(row.employeeId);
+    if (!existing || row.effectiveDate > existing.effectiveDate) {
+      latestDivByEmployee.set(row.employeeId, { divisionId: row.divisionId, divisionName: row.divisionName, effectiveDate: row.effectiveDate });
+    }
+  }
+
+  const posHistoryRows = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: employeePositionHistories.employeeId,
+          positionId: employeePositionHistories.newPositionId,
+          positionName: positions.name,
+          effectiveDate: employeePositionHistories.effectiveDate,
+        })
+        .from(employeePositionHistories)
+        .leftJoin(positions, eq(employeePositionHistories.newPositionId, positions.id))
+        .where(and(
+          inArray(employeePositionHistories.employeeId, employeeIds),
+          lte(employeePositionHistories.effectiveDate, periodStartDate)
+        ))
+    : [];
+  const latestPosByEmployee = new Map<string, { positionId: string | null; positionName: string | null; effectiveDate: Date }>();
+  for (const row of posHistoryRows) {
+    const existing = latestPosByEmployee.get(row.employeeId);
+    if (!existing || row.effectiveDate > existing.effectiveDate) {
+      latestPosByEmployee.set(row.employeeId, { positionId: row.positionId, positionName: row.positionName, effectiveDate: row.effectiveDate });
+    }
+  }
+
+  const gradeHistoryRows = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: employeeGradeHistories.employeeId,
+          gradeId: employeeGradeHistories.newGradeId,
+          gradeName: grades.name,
+          effectiveDate: employeeGradeHistories.effectiveDate,
+        })
+        .from(employeeGradeHistories)
+        .leftJoin(grades, eq(employeeGradeHistories.newGradeId, grades.id))
+        .where(and(
+          inArray(employeeGradeHistories.employeeId, employeeIds),
+          lte(employeeGradeHistories.effectiveDate, periodStartDate)
+        ))
+    : [];
+  const latestGradeByEmployee = new Map<string, { gradeId: string | null; gradeName: string | null; effectiveDate: Date }>();
+  for (const row of gradeHistoryRows) {
+    const existing = latestGradeByEmployee.get(row.employeeId);
+    if (!existing || row.effectiveDate > existing.effectiveDate) {
+      latestGradeByEmployee.set(row.employeeId, { gradeId: row.gradeId, gradeName: row.gradeName, effectiveDate: row.effectiveDate });
+    }
+  }
+
+  // ── Bulk-fetch schedule assignments + work days ───────────────────────────
+  const allAssignments = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: employeeScheduleAssignments.employeeId,
+          scheduleId: employeeScheduleAssignments.scheduleId,
+          effectiveStartDate: employeeScheduleAssignments.effectiveStartDate,
+          effectiveEndDate: employeeScheduleAssignments.effectiveEndDate,
+        })
+        .from(employeeScheduleAssignments)
+        .where(and(
+          inArray(employeeScheduleAssignments.employeeId, employeeIds),
+          lte(employeeScheduleAssignments.effectiveStartDate, periodEndDate),
+          or(
+            gte(employeeScheduleAssignments.effectiveEndDate, periodStartDate),
+            isNull(employeeScheduleAssignments.effectiveEndDate)
+          )
+        ))
+    : [];
+
+  const allScheduleIds = [...new Set(allAssignments.map((a) => a.scheduleId))];
+  const allWorkDayRows = allScheduleIds.length > 0
+    ? await db
+        .select({
+          scheduleId: workScheduleDays.scheduleId,
+          dayOfWeek: workScheduleDays.dayOfWeek,
+          isWorkingDay: workScheduleDays.isWorkingDay,
+        })
+        .from(workScheduleDays)
+        .where(inArray(workScheduleDays.scheduleId, allScheduleIds))
+    : [];
+
+  const workingDaysBySchedule = new Map<string, number[]>();
+  for (const row of allWorkDayRows) {
+    if (!row.isWorkingDay) continue;
+    const current = workingDaysBySchedule.get(row.scheduleId) ?? [];
+    current.push(row.dayOfWeek);
+    workingDaysBySchedule.set(row.scheduleId, current);
+  }
+
+  const assignmentsByEmployee = new Map<string, typeof allAssignments>();
+  for (const row of allAssignments) {
+    const current = assignmentsByEmployee.get(row.employeeId) ?? [];
+    current.push(row);
+    assignmentsByEmployee.set(row.employeeId, current);
+  }
+
   const computedRows: Array<{
     snapshot: typeof payrollEmployeeSnapshots.$inferInsert;
     result: typeof payrollResults.$inferInsert;
@@ -1101,25 +1218,40 @@ export async function generatePayrollPreview(input: unknown) {
     const activeEmploymentDays = resolveActiveEmploymentDays(employee.startDate, periodStartDate, periodEndDate);
     if (activeEmploymentDays <= 0) continue;
 
-    const divisionSnapshot = await resolveDivisionSnapshot(
-      employee.id,
-      periodStartDate,
-      employee.divisionId,
-      employee.divisionName
-    );
-    const positionSnapshot = await resolvePositionSnapshot(
-      employee.id,
-      periodStartDate,
-      employee.positionId,
-      employee.positionName
-    );
-    const gradeSnapshot = await resolveGradeSnapshot(
-      employee.id,
-      periodStartDate,
-      employee.gradeId,
-      employee.gradeName
-    );
-    const scheduledWorkDays = await resolveScheduledWorkDays(employee.id, periodStartDate, periodEndDate);
+    // Division snapshot — from pre-fetched bulk data
+    const divHistory = latestDivByEmployee.get(employee.id);
+    const divisionSnapshot = {
+      divisionSnapshotId: divHistory?.divisionId ?? employee.divisionId,
+      divisionSnapshotName: divHistory?.divisionName ?? employee.divisionName ?? "UNKNOWN",
+    };
+
+    // Position snapshot
+    const posHistory = latestPosByEmployee.get(employee.id);
+    const positionSnapshot = {
+      positionSnapshotId: posHistory?.positionId ?? employee.positionId,
+      positionSnapshotName: posHistory?.positionName ?? employee.positionName ?? "UNKNOWN",
+    };
+
+    // Grade snapshot
+    const gradeHistory = latestGradeByEmployee.get(employee.id);
+    const gradeSnapshot = {
+      gradeSnapshotId: gradeHistory?.gradeId ?? employee.gradeId,
+      gradeSnapshotName: gradeHistory?.gradeName ?? employee.gradeName ?? null,
+    };
+
+    // Scheduled work days — from pre-fetched bulk data
+    const employeeAssignments = assignmentsByEmployee.get(employee.id) ?? [];
+    const scheduledWorkDays = employeeAssignments.length > 0
+      ? countTargetDaysForPeriod({
+          periodStartDate,
+          periodEndDate,
+          assignments: employeeAssignments.map((a) => ({
+            effectiveStartDate: a.effectiveStartDate,
+            effectiveEndDate: a.effectiveEndDate,
+            workingDays: workingDaysBySchedule.get(a.scheduleId) ?? [],
+          })),
+        })
+      : 0;
 
     const salaryConfig = salaryConfigMap.get(employee.id);
     const baseSalaryAmount = toNumber(salaryConfig?.baseSalaryAmount)
@@ -1359,15 +1491,21 @@ export async function generatePayrollPreview(input: unknown) {
     await tx.delete(payrollResults).where(eq(payrollResults.periodId, parsed.data.periodId));
     await tx.delete(payrollEmployeeSnapshots).where(eq(payrollEmployeeSnapshots.periodId, parsed.data.periodId));
 
-    for (const row of computedRows) {
-      const [snapshot] = await tx.insert(payrollEmployeeSnapshots).values(row.snapshot).returning({
-        id: payrollEmployeeSnapshots.id,
-      });
+    if (computedRows.length > 0) {
+      // Batch insert all snapshots, then batch insert all results
+      const insertedSnapshots = await tx
+        .insert(payrollEmployeeSnapshots)
+        .values(computedRows.map((row) => row.snapshot))
+        .returning({ id: payrollEmployeeSnapshots.id, employeeId: payrollEmployeeSnapshots.employeeId });
 
-      await tx.insert(payrollResults).values({
-        ...row.result,
-        snapshotId: snapshot.id,
-      });
+      const snapshotIdByEmployee = new Map(insertedSnapshots.map((s) => [s.employeeId, s.id]));
+
+      await tx.insert(payrollResults).values(
+        computedRows.map((row) => ({
+          ...row.result,
+          snapshotId: snapshotIdByEmployee.get(row.snapshot.employeeId) ?? "",
+        }))
+      );
     }
 
     await tx

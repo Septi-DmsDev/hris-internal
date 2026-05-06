@@ -20,6 +20,8 @@ export async function GET() {
   const rows = result.map((row) => ({
     CABANG: row.cabang,
     NAMA: row.nama,
+    USERNAME: row.email && row.email !== "-" ? row.email.split("@")[0] : row.nama.trim().toLowerCase().replace(/\s+/g, "."),
+    PASSWORD: "",
     "TEMPAT LAHIR": row.tempatLahir,
     "TGL LAHIR": formatDate(row.tglLahir),
     "JENIS KELAMIN": row.jenisKelamin,

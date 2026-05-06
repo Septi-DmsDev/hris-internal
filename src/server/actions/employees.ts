@@ -21,13 +21,14 @@ import {
   requireAuth,
 } from "@/lib/auth/session";
 import { userRoles } from "@/lib/db/schema/auth";
+import { payrollEmployeeSnapshots, payrollResults } from "@/lib/db/schema/payroll";
 import {
   employeeOrganizationBulkUpdateSchema,
   employeeSchema,
   type EmployeeInput,
   type EmployeeOrganizationBulkUpdateInput,
 } from "@/lib/validations/employee";
-import { aliasedTable, asc, desc, eq, inArray } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -406,6 +407,7 @@ export async function getEmployeeFormOptions() {
     schedules: scheduleRows,
     supervisors: supervisorRows,
     canManage: role === "HRD" || role === "SUPER_ADMIN",
+    isSuperAdmin: role === "SUPER_ADMIN",
   };
 }
 
@@ -774,6 +776,18 @@ export async function importEmployeesFromXlsx(formData: FormData) {
         "Master data belum lengkap. Pastikan ada divisi, jabatan, dan grade aktif sebelum import.",
     };
   }
+  // Pre-fetch existing employees for upsert matching (fullName + birthDate)
+  const existingForUpsert = await db
+    .select({ id: employees.id, fullName: employees.fullName, birthDate: employees.birthDate })
+    .from(employees);
+  const existingByNameBirth = new Map<string, string>();
+  for (const row of existingForUpsert) {
+    if (row.birthDate) {
+      const key = `${row.fullName.toLowerCase().trim()}|${row.birthDate.toISOString().slice(0, 10)}`;
+      existingByNameBirth.set(key, row.id);
+    }
+  }
+
   const outcomes: ImportOutcome[] = [];
   let importedEmployees = 0;
   let importedLogins = 0;
@@ -841,48 +855,93 @@ export async function importEmployeesFromXlsx(formData: FormData) {
       notes: undefined,
     };
 
+    // Check for upsert match by fullName + birthDate
+    const birthDateForMatch = tglLahirIdx >= 0 ? parseImportDate(row[tglLahirIdx]) : undefined;
+    const upsertKey = birthDateForMatch
+      ? `${fullName.toLowerCase().trim()}|${birthDateForMatch.toISOString().slice(0, 10)}`
+      : null;
+    const upsertTargetId = upsertKey ? (existingByNameBirth.get(upsertKey) ?? null) : null;
+
+    const rawEmail = emailIdx >= 0 ? String(row[emailIdx] ?? "").trim() : "";
+    const loginEmail = normalizeImportEmail(rawEmail || username);
+
     let employeeId: string;
-    try {
-      employeeId = await db.transaction(async (tx) => persistEmployeeRecord(tx, employeeInput));
-    } catch (error) {
-      const dbError = unwrapDbError(error);
-      const details = [dbError.message, dbError.detail, dbError.constraint].filter(Boolean).join(" | ");
-      outcomes.push({
-        rowNumber,
-        name: fullName,
-        success: false,
-        message:
-          dbError.code === "23505"
-            ? "ID karyawan atau data unik sudah dipakai."
-            : dbError.code === "23503"
-              ? "Referensi master tidak valid."
-            : details || "Gagal membuat data karyawan.",
-      });
-      continue;
+    let isUpsert = false;
+
+    if (upsertTargetId) {
+      // UPDATE existing employee personal + branch data
+      isUpsert = true;
+      try {
+        await db
+          .update(employees)
+          .set({
+            fullName,
+            branchId,
+            birthPlace: employeeInput.birthPlace ?? null,
+            birthDate: employeeInput.birthDate,
+            gender: employeeInput.gender ?? null,
+            religion: employeeInput.religion ?? null,
+            maritalStatus: employeeInput.maritalStatus ?? null,
+            phoneNumber: employeeInput.phoneNumber ?? null,
+            address: employeeInput.address ?? null,
+            startDate: employeeInput.startDate,
+            trainingGraduationDate: employeeInput.trainingGraduationDate,
+            employmentStatus: employeeInput.employmentStatus,
+            payrollStatus: employeeInput.payrollStatus,
+            updatedAt: new Date(),
+          })
+          .where(eq(employees.id, upsertTargetId));
+        employeeId = upsertTargetId;
+      } catch (error) {
+        const dbError = unwrapDbError(error);
+        outcomes.push({ rowNumber, name: fullName, success: false, message: dbError.message || "Gagal update data karyawan." });
+        continue;
+      }
+    } else {
+      // INSERT new employee
+      try {
+        employeeId = await db.transaction(async (tx) => persistEmployeeRecord(tx, employeeInput));
+      } catch (error) {
+        const dbError = unwrapDbError(error);
+        const details = [dbError.message, dbError.detail, dbError.constraint].filter(Boolean).join(" | ");
+        outcomes.push({
+          rowNumber,
+          name: fullName,
+          success: false,
+          message:
+            dbError.code === "23505"
+              ? "ID karyawan atau data unik sudah dipakai."
+              : dbError.code === "23503"
+                ? "Referensi master tidak valid."
+              : details || "Gagal membuat data karyawan.",
+        });
+        continue;
+      }
     }
 
     importedEmployees += 1;
 
-    const rawEmail = emailIdx >= 0 ? String(row[emailIdx] ?? "").trim() : "";
-    const loginEmail = normalizeImportEmail(rawEmail || username);
-    const loginResult = await upsertEmployeeLogin({
-      employeeId,
-      email: loginEmail,
-      password,
-      role: importEmployeeGroup,
-    });
-    if (loginResult && "error" in loginResult) {
-      outcomes.push({
-        rowNumber,
-        name: fullName,
-        success: false,
-        message: `Data karyawan tersimpan, tetapi akun login gagal: ${loginResult.error}`,
+    // Handle auth: skip if upsert and no password provided
+    if (!isUpsert || password) {
+      const loginResult = await upsertEmployeeLogin({
+        employeeId,
+        email: loginEmail,
+        password: password || undefined,
+        role: importEmployeeGroup,
       });
-      continue;
+      if (loginResult && "error" in loginResult) {
+        outcomes.push({
+          rowNumber,
+          name: fullName,
+          success: false,
+          message: `Data karyawan tersimpan, tetapi akun login gagal: ${loginResult.error}`,
+        });
+        continue;
+      }
+      importedLogins += 1;
     }
 
-    importedLogins += 1;
-    outcomes.push({ rowNumber, name: fullName, success: true });
+    outcomes.push({ rowNumber, name: fullName, success: true, message: isUpsert ? "Diperbarui (upsert)" : undefined });
   }
 
   if (importedEmployees === 0) {
@@ -1159,4 +1218,33 @@ export async function deleteEmployee(id: string) {
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);
   return { success: true };
+}
+
+export async function purgeAllEmployees() {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  // Get user IDs for non-admin roles so we can delete their Supabase Auth accounts
+  const rolesToDelete: UserRole[] = ["TEAMWORK", "MANAGERIAL", "SPV", "KABAG", "PAYROLL_VIEWER"];
+  const usersToDelete = await db
+    .select({ userId: userRoles.userId })
+    .from(userRoles)
+    .where(inArray(userRoles.role, rolesToDelete));
+
+  // payroll_results and payroll_employee_snapshots have RESTRICT FK on employees —
+  // must delete them before deleting employees
+  await db.delete(payrollResults);
+  await db.delete(payrollEmployeeSnapshots);
+
+  // Delete all employees (CASCADE handles all other related tables)
+  await db.delete(employees);
+
+  // Delete Supabase Auth accounts for non-admin users
+  const admin = createAdminClient();
+  for (const { userId } of usersToDelete) {
+    await admin.auth.admin.deleteUser(userId);
+  }
+
+  revalidatePath("/employees");
+  return { success: true, deletedAuthAccounts: usersToDelete.length };
 }

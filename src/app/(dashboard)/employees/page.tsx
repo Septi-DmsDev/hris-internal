@@ -60,6 +60,7 @@ export default async function EmployeesPage() {
     schedules: options.schedules,
     supervisors: options.supervisors,
     canManage: options.canManage,
+    isSuperAdmin: options.isSuperAdmin,
   };
 
   return (

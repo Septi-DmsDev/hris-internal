@@ -1,12 +1,9 @@
 import { format } from "date-fns";
 import PayrollClient, {
   type PayrollDivisionSummaryRow,
-  type PayrollAdjustmentRow,
   type PayrollFinanceSummary,
-  type PayrollManagerialKpiRow,
   type PayrollPeriodRow,
   type PayrollResultRow,
-  type PayrollSalaryConfigRow,
 } from "./PayrollClient";
 import { getPayrollWorkspace } from "@/server/actions/payroll";
 import { summarizePayrollResults } from "@/server/payroll-engine/summarize-payroll-results";
@@ -69,51 +66,6 @@ export default async function PayrollPage({ searchParams }: PageProps) {
     status: row.status,
   }));
 
-  const adjustments: PayrollAdjustmentRow[] = workspace.adjustments.map((row) => ({
-    id: row.id,
-    employeeId: row.employeeId,
-    employeeName: row.employeeName ?? "-",
-    adjustmentType: row.adjustmentType,
-    amount: Number(row.amount),
-    reason: row.reason,
-    createdAt: format(row.createdAt, "yyyy-MM-dd HH:mm"),
-  }));
-
-  const salaryConfigs: PayrollSalaryConfigRow[] = workspace.salaryConfigs.map((row) => ({
-    employeeId: row.employeeId,
-    employeeCode: row.employeeCode,
-    employeeName: row.employeeName,
-    positionName: row.positionName ?? "-",
-    divisionName: row.divisionName ?? "-",
-    employeeGroup: row.employeeGroup ?? "TEAMWORK",
-    payrollStatus: row.payrollStatus,
-    baseSalaryAmount: row.baseSalaryAmount != null ? Number(row.baseSalaryAmount) : null,
-    gradeAllowanceAmount: row.gradeAllowanceAmount != null ? Number(row.gradeAllowanceAmount) : null,
-    tenureAllowanceAmount: row.tenureAllowanceAmount != null ? Number(row.tenureAllowanceAmount) : null,
-    dailyAllowanceAmount: row.dailyAllowanceAmount != null ? Number(row.dailyAllowanceAmount) : null,
-    performanceBonusBaseAmount: row.performanceBonusBaseAmount != null ? Number(row.performanceBonusBaseAmount) : null,
-    achievementBonus140Amount: row.achievementBonus140Amount != null ? Number(row.achievementBonus140Amount) : null,
-    achievementBonus165Amount: row.achievementBonus165Amount != null ? Number(row.achievementBonus165Amount) : null,
-    fulltimeBonusAmount: row.fulltimeBonusAmount != null ? Number(row.fulltimeBonusAmount) : null,
-    disciplineBonusAmount: row.disciplineBonusAmount != null ? Number(row.disciplineBonusAmount) : null,
-    teamBonusAmount: row.teamBonusAmount != null ? Number(row.teamBonusAmount) : null,
-    overtimeRateAmount: row.overtimeRateAmount != null ? Number(row.overtimeRateAmount) : null,
-    notes: row.notes ?? "",
-    updatedAt: row.updatedAt ? format(row.updatedAt, "yyyy-MM-dd HH:mm") : "-",
-  }));
-
-  const managerialKpiRows: PayrollManagerialKpiRow[] = workspace.managerialKpiRows.map((row) => ({
-    id: row.id,
-    employeeId: row.employeeId,
-    employeeCode: row.employeeCode ?? "-",
-    employeeName: row.employeeName ?? "-",
-    divisionName: row.divisionName ?? "-",
-    performancePercent: Number(row.performancePercent),
-    status: row.status,
-    notes: row.notes ?? "",
-    updatedAt: row.updatedAt ? format(row.updatedAt, "yyyy-MM-dd HH:mm") : "-",
-  }));
-
   const summary = summarizePayrollResults(
     results.map((row) => ({
       employeeId: row.employeeId,
@@ -143,9 +95,6 @@ export default async function PayrollPage({ searchParams }: PageProps) {
         activePeriodId={workspace.activePeriodId}
         periods={periods}
         results={results}
-        adjustments={adjustments}
-        salaryConfigs={salaryConfigs}
-        managerialKpiRows={managerialKpiRows}
         financeSummary={financeSummary}
         divisionSummaries={divisionSummaries}
       />

@@ -356,7 +356,7 @@ export default function PayrollClient({
                 Slip .pdf
               </a>
             </Button>
-            {canDelete && ["FINALIZED", "PAID"].includes(row.original.status) && (
+            {canDelete && row.original.status !== "LOCKED" && (
               <Button
                 size="sm"
                 variant="destructive"
@@ -675,8 +675,9 @@ export default function PayrollClient({
             <AlertDialogTitle>Hapus Periode {deleteConfirmCode}?</AlertDialogTitle>
             <AlertDialogDescription>
               Tindakan ini tidak dapat dibatalkan. Semua data payroll (snapshot, hasil, adjustment)
-              untuk periode <strong>{deleteConfirmCode}</strong> akan dihapus permanen. Aktivitas
-              harian yang terkunci akan dibuka kembali ke status disetujui.
+              untuk periode <strong>{deleteConfirmCode}</strong> akan dihapus permanen.
+              Jika periode sudah difinalisasi, aktivitas harian yang terkunci akan dibuka
+              kembali ke status disetujui.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -114,7 +114,7 @@ export default async function PayrollPage({ searchParams }: PageProps) {
     <div className="space-y-6">
       <PayrollClient
         canManage={workspace.canManage}
-        canDelete={workspace.role === "SUPER_ADMIN"}
+        canDelete={workspace.canManage}
         activePeriodId={workspace.activePeriodId}
         periods={periods}
         results={results}

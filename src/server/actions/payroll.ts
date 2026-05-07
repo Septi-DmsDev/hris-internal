@@ -2089,12 +2089,8 @@ export async function lockPayrollPeriod(input: unknown) {
 }
 
 export async function deletePayrollPeriod(input: unknown) {
-  await requireAuth();
-  const roleRow = await getCurrentUserRoleRow();
-  const role = roleRow.role as UserRole;
-  if (role !== "SUPER_ADMIN") {
-    return { error: "Hanya SUPER_ADMIN yang dapat menghapus periode payroll." };
-  }
+  const access = await assertPayrollWriteAccess();
+  if ("error" in access) return access;
 
   const parsed = payrollPeriodActionSchema.safeParse(input);
   if (!parsed.success) {
@@ -2117,12 +2113,9 @@ export async function deletePayrollPeriod(input: unknown) {
   if (period.status === "LOCKED") {
     return { error: "Periode yang sudah dikunci (LOCKED) tidak bisa dihapus." };
   }
-  if (!["FINALIZED", "PAID"].includes(period.status)) {
-    return { error: "Hanya periode FINALIZED atau PAID yang bisa dihapus." };
-  }
 
   await db.transaction(async (tx) => {
-    // Buka kunci aktivitas harian yang dikunci saat finalisasi
+    // Buka kunci aktivitas harian yang dikunci saat finalisasi (hanya berlaku jika FINALIZED/PAID)
     await tx
       .update(dailyActivityEntries)
       .set({ status: "DISETUJUI_SPV", lockedAt: null, updatedAt: new Date() })
@@ -2134,7 +2127,7 @@ export async function deletePayrollPeriod(input: unknown) {
         )
       );
 
-    // Buka kunci performa bulanan (kembali ke FINALIZED, status sebelum payroll finalisasi)
+    // Buka kunci performa bulanan
     await tx
       .update(monthlyPointPerformances)
       .set({ status: "FINALIZED", updatedAt: new Date() })

@@ -36,7 +36,7 @@ User buka /reviews
 ```text
 Create review
 → createReview()
-→ checkRole(["SUPER_ADMIN","HRD","SPV"])
+→ checkRole(["SUPER_ADMIN","HRD","KABAG","SPV"])
 → validasi input
 → jika SPV, cek employee ada di scope divisi
 → hitung total score dan category
@@ -53,7 +53,7 @@ Fungsi utama:
 semua logika review dan incident.
 
 Export utama:
-`getReviews()`, `createReview()`, `validateReview()`, `createIncident()`
+`getReviews()`, `createReview()`, `validateReview()`, `createIncident()`, `deleteIncident()`
 
 Logika penting:
 
@@ -73,6 +73,8 @@ Logika penting:
   - lainnya Buruk
 - `reviewerEmployeeId` sengaja diisi `null` karena repo belum punya mapping aman dari auth user ke employee.
 - incident bisa mencatat `payrollDeduction`.
+- `getReviews()` hanya menampilkan incident aktif.
+- `deleteIncident()` melakukan soft-delete dengan `isActive=false`, bukan hard delete.
 
 ### `src/app/(dashboard)/reviews/page.tsx`
 
@@ -93,11 +95,12 @@ Logika penting:
 
 ## 5. Business Rules yang Diterapkan
 
-- role modul: `SUPER_ADMIN`, `HRD`, `SPV`.
-- SPV hanya boleh membuat review/incident untuk karyawan di divisinya.
+- role modul: `SUPER_ADMIN`, `HRD`, `KABAG`, `SPV`.
+- SPV/KABAG hanya boleh membuat atau menghapus review/incident untuk karyawan di divisinya.
 - review dibuat dengan status `SUBMITTED`.
 - validasi review hanya oleh `SUPER_ADMIN` atau `HRD`.
-- incident type mencakup `SP1` dan `SP2`, yang nantinya dipakai payroll untuk penalty bonus.
+- incident type mencakup `SP1` dan `SP2`, yang dipakai payroll untuk mengurangi performa absolut 10/20 poin sebelum tier bonus dipilih.
+- incident yang dihapus/nonaktif tidak tampil di Incident Log dan tidak dibaca payroll.
 
 ## 6. Data yang Dibaca dan Ditulis
 
@@ -113,6 +116,7 @@ Logika penting:
 - SPV tanpa `divisionId` tidak bisa membuat review scoped.
 - review hanya bisa divalidasi saat status `SUBMITTED`.
 - `payrollDeduction` pada incident bersifat opsional.
+- hapus incident bersifat soft-delete agar row historis tidak langsung hilang dari database.
 
 ## 8. Hal yang Perlu Diperhatikan Developer
 

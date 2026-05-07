@@ -31,8 +31,8 @@ export const STANDAR_LULUS_TRAINING: Record<string, number> = {
   "Blangko / Pabrik": 80,
 };
 
-export const SP_MULTIPLIER: Record<string, number> = {
-  NONE: 1.0,
-  SP1: 0.9,
-  SP2: 0.8,
-};
+export const SP_PERFORMANCE_PENALTY_PERCENT = {
+  NONE: 0,
+  SP1: 10,
+  SP2: 20,
+} as const;

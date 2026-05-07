@@ -16,6 +16,17 @@ function formatCurrency(amount: number) {
   return `Rp ${amount.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
 }
 
+function formatIncidentPayrollImpact(
+  incidentType: string,
+  payrollDeduction: string | number | null | undefined
+) {
+  if (incidentType === "SP1" || incidentType === "SP2") {
+    return `Penalty performa -${incidentType === "SP2" ? 20 : 10}%`;
+  }
+
+  return `Potongan: ${payrollDeduction ? formatCurrency(Number(payrollDeduction)) : "-"}`;
+}
+
 export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
   const { periodId, employeeId } = await params;
   const detailResult = await getPayrollEmployeeDetail(periodId, employeeId);
@@ -70,7 +81,19 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
     manualAdjustmentAmount?: number;
     scheduledWorkDays?: number;
     activeEmploymentDays?: number;
+    rawPerformancePercent?: number;
+    adjustedPerformancePercent?: number;
+    spPerformancePenaltyType?: string;
+    spPerformancePenaltyPercent?: number;
   };
+  const rawPerformancePercent = Number(
+    breakdownMeta.rawPerformancePercent ?? detail.performancePercent
+  );
+  const adjustedPerformancePercent = Number(
+    breakdownMeta.adjustedPerformancePercent ?? detail.performancePercent
+  );
+  const spPerformancePenaltyPercent = Number(breakdownMeta.spPerformancePenaltyPercent ?? 0);
+  const spPerformancePenaltyType = breakdownMeta.spPerformancePenaltyType ?? "NONE";
 
   const payslipBreakdown = buildPayslipBreakdown({
     baseSalaryPaid: Number(detail.baseSalaryPaid),
@@ -138,7 +161,7 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-sm text-slate-500">Performa</p>
-          <p className="mt-2 text-xl font-semibold text-slate-900">{Number(detail.performancePercent).toFixed(2)}%</p>
+          <p className="mt-2 text-xl font-semibold text-slate-900">{adjustedPerformancePercent.toFixed(2)}%</p>
         </div>
       </div>
 
@@ -221,6 +244,22 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
             <p className="text-sm text-slate-500">Ringkasan performa final yang menjadi basis bonus kinerja atau KPI.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Performa Awal</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">{rawPerformancePercent.toFixed(2)}%</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Penalty SP</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">
+                {spPerformancePenaltyPercent > 0
+                  ? `${spPerformancePenaltyType} -${spPerformancePenaltyPercent}%`
+                  : "-"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Performa Payroll</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">{adjustedPerformancePercent.toFixed(2)}%</p>
+            </div>
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Total Approved Point</p>
               <p className="mt-1 text-sm font-medium text-slate-900">{Number(detail.totalApprovedPoints).toLocaleString("id-ID")}</p>
@@ -333,7 +372,7 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
                   </div>
                   <p className="mt-2 text-sm text-slate-700">{incident.description}</p>
                   <p className="mt-1 text-xs text-slate-400">
-                    Impact: {incident.impact} · Potongan: {incident.payrollDeduction ? formatCurrency(Number(incident.payrollDeduction)) : "-"}
+                    Impact: {incident.impact} · {formatIncidentPayrollImpact(incident.incidentType, incident.payrollDeduction)}
                   </p>
                 </div>
               ))}

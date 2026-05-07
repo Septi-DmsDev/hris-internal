@@ -201,6 +201,7 @@ Sudah ada:
 - quarter leave quota logic
 - review create / validate
 - incident log
+- incident delete memakai soft-delete `isActive=false` dan tetap role/division scoped
 - reviewer auto-fill jika reviewer linked ke employee
 
 ### Payroll / Finance
@@ -209,6 +210,8 @@ Sudah ada:
 - employee salary config
 - managerial KPI summaries
 - payroll auto-preview generation when `/payroll` opens editable periods
+- bonus kinerja payroll memakai nominal tier 80/90/100 langsung dari performa setelah SP penalty absolut; SP1 mengurangi 10 poin dan SP2 mengurangi 20 poin performa
+- bonus disiplin payroll sementara tidak dipicu oleh input persentase manual/KPI sampai rule absensi final tersedia
 - payroll finalize
 - mark paid
 - lock period
@@ -417,4 +420,3 @@ Jika melanjutkan dari nol di PC/sesi lain:
 6. jalankan `pnpm vitest run`
 7. jalankan `pnpm build`
 8. mulai QA dari route `/login` -> `/dashboard` -> `/me` -> modul-modul utama
-

@@ -1,6 +1,6 @@
 "use server";
 
-import { GAJI_POKOK_REGULER_DEFAULT, GAJI_TRAINING_DEFAULT, SP_MULTIPLIER } from "@/config/constants";
+import { GAJI_POKOK_REGULER_DEFAULT, GAJI_TRAINING_DEFAULT } from "@/config/constants";
 import { getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
@@ -41,8 +41,10 @@ import {
 } from "@/lib/validations/payroll";
 import { calculateManagerialPayroll } from "@/server/payroll-engine/calculate-managerial-payroll";
 import { calculateTeamworkPayroll } from "@/server/payroll-engine/calculate-teamwork-payroll";
+import { resolveDisciplineBonus } from "@/server/payroll-engine/resolve-discipline-bonus";
 import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
 import { resolvePayrollStatusTransition } from "@/server/payroll-engine/resolve-payroll-status-transition";
+import { resolveSpPerformancePenalty } from "@/server/payroll-engine/resolve-sp-performance-penalty";
 import { resolveTenureAllowanceAmount } from "@/server/payroll-engine/resolve-tenure-allowance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or } from "drizzle-orm";
@@ -59,6 +61,7 @@ const PAYROLL_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWE
 const PAYROLL_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE"];
 const APPROVED_TICKET_STATUSES = ["AUTO_APPROVED", "APPROVED_SPV", "APPROVED_HRD"] as const;
 const LOCKABLE_ACTIVITY_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD"] as const;
+const DISCIPLINE_BONUS_RULE_ENABLED = false;
 
 type PayrollReadAccess =
   | { error: string }
@@ -83,6 +86,7 @@ function resolveTieredBonusAmount(
   bonus90: number,
   bonus100: number
 ) {
+  // Returns the nominal payout for the achieved tier, not a multiplier base.
   if (performancePercent >= 100) return bonus100;
   if (performancePercent >= 90) return bonus90;
   if (performancePercent >= 80) return bonus80;
@@ -116,10 +120,8 @@ function resolveActiveEmploymentDays(startDate: Date, periodStartDate: Date, per
   return countCalendarDaysInclusive(effectiveStart, periodEndDate);
 }
 
-function resolveSpPenaltyMultiplier(incidentTypes: string[]) {
-  if (incidentTypes.includes("SP2")) return SP_MULTIPLIER.SP2;
-  if (incidentTypes.includes("SP1")) return SP_MULTIPLIER.SP1;
-  return SP_MULTIPLIER.NONE;
+function isSpIncidentType(incidentType: string) {
+  return incidentType === "SP1" || incidentType === "SP2";
 }
 
 async function assertPayrollReadAccess(): Promise<PayrollReadAccess> {
@@ -1576,10 +1578,13 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       );
 
     const employeeIncidents = incidentsByEmployee.get(employee.id) ?? [];
+    const incidentTypes = employeeIncidents.map((incident) => incident.incidentType);
     const incidentDeductionAmount = roundCurrency(
-      employeeIncidents.reduce((sum, incident) => sum + toNumber(incident.payrollDeduction), 0)
+      employeeIncidents
+        .filter((incident) => !isSpIncidentType(incident.incidentType))
+        .reduce((sum, incident) => sum + toNumber(incident.payrollDeduction), 0)
     );
-    const spPenaltyMultiplier = resolveSpPenaltyMultiplier(employeeIncidents.map((incident) => incident.incidentType));
+    const spPenaltyMultiplier = 1;
     const hasLateIncident = employeeIncidents.some((incident) => incident.incidentType === "TELAT");
 
     const employeeAdjustments = adjustmentsByEmployee.get(employee.id) ?? [];
@@ -1602,10 +1607,12 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     const managerialPerformancePercent = managerialKpi
       ? toNumber(managerialKpi.performancePercent)
       : toNumber(performance?.performancePercent);
-    const performancePercent =
+    const rawPerformancePercent =
       employee.employeeGroup === "MANAGERIAL"
         ? managerialPerformancePercent
         : teamworkPerformancePercent;
+    const spPerformancePenalty = resolveSpPerformancePenalty(rawPerformancePercent, incidentTypes);
+    const performancePercent = spPerformancePenalty.adjustedPerformancePercent;
     const performanceBonusByGrade = resolveTieredBonusAmount(
       performancePercent,
       toNumber(gradeCompensation?.bonusKinerja80),
@@ -1630,13 +1637,20 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       || toNumber(gradeCompensation?.bonusPrestasi165);
     const performanceBonusBaseAmount = toNumber(salaryConfig?.performanceBonusBaseAmount)
       || performanceBonusByGrade;
-    const disciplineBonusAmount = toNumber(salaryConfig?.disciplineBonusAmount)
+    const configuredDisciplineBonusAmount = toNumber(salaryConfig?.disciplineBonusAmount)
       || disciplineBonusByGrade;
     const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount)
       || teamBonusByGrade;
     const fulltimeEligible = !hasApprovedAbsence;
-    // Bonus Disiplin berbasis kehadiran/absensi saja — tidak bergantung pada performancePercent
-    const disciplineEligible = fulltimeEligible && !hasLateIncident;
+    const {
+      disciplineBonusAmount,
+      disciplineEligible,
+    } = resolveDisciplineBonus({
+      ruleEnabled: DISCIPLINE_BONUS_RULE_ENABLED,
+      configuredAmount: configuredDisciplineBonusAmount,
+      fulltimeEligible,
+      hasLateIncident,
+    });
 
     if (employee.employeeGroup === "MANAGERIAL" && !managerialKpi) {
       missingManagerialKpi.push(employee.fullName);
@@ -1772,6 +1786,10 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           manualAdjustmentAmount,
           scheduledWorkDays,
           activeEmploymentDays,
+          rawPerformancePercent,
+          adjustedPerformancePercent: performancePercent,
+          spPerformancePenaltyType: spPerformancePenalty.penaltyType,
+          spPerformancePenaltyPercent: spPerformancePenalty.penaltyPercent,
           performanceSource:
             employee.employeeGroup === "MANAGERIAL" ? "MANAGERIAL_KPI" : "MONTHLY_POINT_PERFORMANCE",
         },

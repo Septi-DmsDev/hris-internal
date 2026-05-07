@@ -225,8 +225,8 @@ ticket dibuat
 
 ```text
 incident dicatat
-→ jika type SP1/SP2, multiplier bonus berubah
-→ jika payrollDeduction terisi, nominal deduction bertambah
+→ jika type SP1/SP2, performa payroll dikurangi absolut 10/20 poin sebelum tier bonus dipilih
+→ jika payrollDeduction terisi pada incident non-SP, nominal deduction bertambah
 → payroll preview membaca incident aktif dalam periode
 ```
 

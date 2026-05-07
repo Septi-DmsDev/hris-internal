@@ -5,11 +5,12 @@ import { employees } from "@/lib/db/schema/employee";
 import { divisions } from "@/lib/db/schema/master";
 import { employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
-import { createReviewSchema, createIncidentSchema } from "@/lib/validations/hr";
-import { desc, eq, inArray } from "drizzle-orm";
+import { createReviewSchema, createIncidentSchema, deleteIncidentSchema } from "@/lib/validations/hr";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 import { resolveReviewerEmployeeId } from "@/server/review-engine/resolve-reviewer-employee-id";
+import { canDeleteIncident } from "@/server/review-engine/resolve-incident-delete-access";
 
 const REVIEW_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 const SELF_SERVICE_REVIEW_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
@@ -86,11 +87,12 @@ export async function getReviews() {
   }
 
   function incidentWhereClause() {
-    if (isSelfService) return eq(incidentLogs.employeeId, roleRow.employeeId!);
+    const activeOnly = eq(incidentLogs.isActive, true);
+    if (isSelfService) return and(activeOnly, eq(incidentLogs.employeeId, roleRow.employeeId!));
     if (DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0) {
-      return inArray(employees.divisionId, roleRow.divisionIds);
+      return and(activeOnly, inArray(employees.divisionId, roleRow.divisionIds));
     }
-    return undefined;
+    return activeOnly;
   }
 
   const rows = await db
@@ -214,6 +216,51 @@ export async function validateReview(reviewId: string) {
     .where(eq(employeeReviews.id, reviewId));
 
   revalidatePath("/reviews");
+  return { success: true };
+}
+
+export async function deleteIncident(input: unknown) {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
+  if (authError) return authError;
+
+  const parsed = deleteIncidentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input hapus incident tidak valid." };
+  }
+
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  const [incident] = await db
+    .select({
+      id: incidentLogs.id,
+      isActive: incidentLogs.isActive,
+      divisionId: employees.divisionId,
+    })
+    .from(incidentLogs)
+    .leftJoin(employees, eq(incidentLogs.employeeId, employees.id))
+    .where(eq(incidentLogs.id, parsed.data.incidentId))
+    .limit(1);
+
+  if (!incident?.isActive) {
+    return { error: "Incident tidak ditemukan." };
+  }
+
+  const canDelete = canDeleteIncident({
+    role,
+    divisionIds: roleRow.divisionIds,
+    incidentDivisionId: incident.divisionId ?? null,
+  });
+  if (!canDelete) {
+    return { error: "Akses ditolak untuk incident di luar scope divisi Anda." };
+  }
+
+  await db
+    .update(incidentLogs)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(eq(incidentLogs.id, parsed.data.incidentId));
+
+  revalidatePath("/reviews");
+  revalidatePath("/payroll");
   return { success: true };
 }
 

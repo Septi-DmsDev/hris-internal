@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/tables/DataTable";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createReview, validateReview, createIncident } from "@/server/actions/reviews";
+import { createReview, validateReview, createIncident, deleteIncident } from "@/server/actions/reviews";
 import type { UserRole } from "@/types";
 
 type ReviewRow = {
@@ -157,7 +157,7 @@ export default function ReviewsClient({ role, reviews, incidents, employeeOption
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const canManage = ["SUPER_ADMIN", "HRD", "SPV"].includes(role);
+  const canManage = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"].includes(role);
   const canValidate = ["SUPER_ADMIN", "HRD"].includes(role);
 
   function updateReview(field: keyof ReviewDraft, value: string) {
@@ -205,6 +205,18 @@ export default function ReviewsClient({ role, reviews, incidents, employeeOption
       setIncidentOpen(false); setIncidentDraft(createIncidentDraft()); router.refresh();
     } finally { setPending(false); }
   }
+
+  const handleDeleteIncident = useCallback(async (incidentId: string) => {
+    const confirmed = window.confirm("Hapus incident ini?");
+    if (!confirmed) return;
+
+    setPending(true); setError(null);
+    try {
+      const result = await deleteIncident({ incidentId });
+      if (result && "error" in result) { setError(result.error); return; }
+      setSuccess("Incident berhasil dihapus."); router.refresh();
+    } finally { setPending(false); }
+  }, [router]);
 
   const reviewColumns: ColumnDef<ReviewRow>[] = useMemo(() => [
     {
@@ -289,7 +301,21 @@ export default function ReviewsClient({ role, reviews, incidents, employeeOption
         </div>
       ),
     },
-  ], []);
+    {
+      header: "Aksi",
+      id: "actions",
+      cell: ({ row }) => canManage ? (
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={() => void handleDeleteIncident(row.original.id)}
+          disabled={pending}
+        >
+          Hapus
+        </Button>
+      ) : null,
+    },
+  ], [canManage, handleDeleteIncident, pending]);
 
   return (
     <div className="space-y-4">

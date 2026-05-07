@@ -495,6 +495,7 @@ Aturan:
 ```text
 Jika mencapai 165%, hanya dapat bonus prestasi 165%, bukan 140% + 165%.
 Persentase tidak dibulatkan untuk menentukan level bonus.
+Nominal bonus kinerja tier 80/90/100 dibayar langsung sesuai rentang, tidak dikalikan lagi dengan persen tier.
 ```
 
 Contoh:
@@ -1005,6 +1006,13 @@ Level bonus disiplin:
 | 90% - 99,99% | Tidak telat | Bonus disiplin 90% |
 | >= 100% | Tidak telat | Bonus disiplin 100% |
 
+Catatan implementasi sementara:
+
+```text
+Payroll preview belum membayar bonus disiplin otomatis dari input persentase manual/KPI.
+Bonus disiplin baru diaktifkan setelah sumber absensi, telat, dan alpa final tersedia.
+```
+
 ---
 
 ## 33. Bonus Kinerja dan Bonus Prestasi
@@ -1020,11 +1028,13 @@ Monthly Point Performance
 Aturan bonus mengikuti tabel Phase 2:
 
 - < 80%: tidak dapat bonus kinerja,
-- 80% - 89,99%: bonus kinerja 80%,
-- 90% - 99,99%: bonus kinerja 90%,
-- >= 100%: bonus kinerja 100%,
+- 80% - 89,99%: nominal bonus kinerja tier 80%,
+- 90% - 99,99%: nominal bonus kinerja tier 90%,
+- >= 100%: nominal bonus kinerja tier 100%,
 - 140% - 164,99%: bonus prestasi 140%,
 - >= 165%: bonus prestasi 165% saja.
+
+Nominal bonus kinerja tier 80/90/100 dibayar langsung sesuai rentang performa; tidak ada perkalian ulang dengan 80%, 90%, atau 100%.
 
 ### MANAGERIAL
 
@@ -1069,24 +1079,20 @@ Paid/unpaid leave tetap mengikuti ticketing quota.
 Aturan:
 
 ```text
-SP penalty diterapkan ke bonus saja, bukan gaji pokok.
+SP penalty mengurangi persentase performa payroll secara absolut sebelum tier bonus dipilih.
+SP1: performa -10 poin persentase.
+SP2: performa -20 poin persentase.
+Jika SP1 dan SP2 sama-sama aktif, pakai penalty tertinggi yaitu SP2.
+Contoh: performa 70% + SP1 menjadi 60%, bukan 63%.
 ```
 
-Rekomendasi multiplier:
-
-| Status SP | Multiplier Bonus |
-|---|---:|
-| Tidak ada SP aktif | 100% |
-| SP1 aktif | 90% |
-| SP2 aktif | 80% |
-
-Yang terkena multiplier:
+Yang terkena dampak:
 
 - bonus kinerja,
 - bonus prestasi,
 - bonus team/KPI jika relevan.
 
-Yang tidak terkena:
+Yang tidak terkena sebagai potongan nominal langsung:
 
 - gaji pokok,
 - tunjangan grade,
@@ -1401,7 +1407,7 @@ Payroll harus menampilkan exception sebelum finalisasi:
 29. Bonus fulltime hanya jika benar-benar hadir penuh tanpa izin/sakit/cuti.
 30. Bonus disiplin butuh tidak telat, tidak alpa, dan performa minimal 80%.
 31. Overtime logic dipertahankan sesuai code finance.
-32. SP penalty diterapkan ke bonus saja, bukan gaji pokok.
+32. SP penalty mengurangi performa payroll secara absolut: SP1 -10 poin, SP2 -20 poin; bukan multiplier nominal bonus.
 33. Jika payroll sudah dibayar, adjustment masuk periode berikutnya.
 
 ---
@@ -1446,7 +1452,7 @@ Konteks utama:
 - Ticketing izin/sakit/cuti harus memengaruhi target poin dan payroll impact.
 - Secara default izin/sakit/cuti harian tidak dibayar dan menggugurkan bonus fulltime.
 - Karyawan yang sudah >1 tahun dan punya tunjangan tahunan mendapat kuota cuti bulanan 1 kali dan cuti tahunan sampai 3 kali. Izin/sakit pertama otomatis mengambil kuota cuti bulanan jika eligible. Izin berikutnya dapat memilih cuti tahunan atau izin biasa/unpaid.
-- Payroll memakai gaji pokok reguler default Rp1.200.000, bonus fulltime hanya jika benar-benar hadir penuh, bonus disiplin butuh tidak telat/tidak alpa/performa minimal 80%, overtime logic dipertahankan, dan SP penalty hanya mengurangi bonus, bukan gaji pokok.
+- Payroll memakai gaji pokok reguler default Rp1.200.000, bonus fulltime hanya jika benar-benar hadir penuh, bonus disiplin butuh tidak telat/tidak alpa/performa minimal 80%, overtime logic dipertahankan, dan SP penalty mengurangi performa payroll secara absolut sebelum tier bonus dipilih.
 
 Tolong lanjutkan analisis ini menjadi salah satu output berikut sesuai kebutuhan:
 1. ERD konseptual dan tabel database,

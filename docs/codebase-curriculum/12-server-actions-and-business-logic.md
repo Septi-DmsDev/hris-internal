@@ -132,6 +132,7 @@ Helper terkait:
 | `createReview` | hitung 5 aspek review |
 | `validateReview` | HRD/admin validate |
 | `createIncident` | incident aktif, bisa membawa payroll deduction |
+| `deleteIncident` | soft-delete incident aktif dengan scope role/divisi |
 | `getTrainingEvaluations` | trainee evaluation scoped |
 | `graduateTrainee` | saat ini mengubah status langsung; gap dengan rule efektif periode berikutnya |
 | `failTrainee` | update status gagal training |
@@ -185,6 +186,9 @@ Business rule:
 - payroll tidak dihitung di browser;
 - TEAMWORK memakai monthly point performance;
 - MANAGERIAL memakai KPI;
+- bonus kinerja memilih nominal tier 80/90/100 dari grade/salary source sesuai rentang performa, lalu engine membayar nominal itu langsung;
+- SP1/SP2 mengurangi performa payroll secara absolut sebelum tier bonus dipilih, bukan mengalikan nominal bonus;
+- bonus disiplin digate oleh `resolveDisciplineBonus()` dan saat ini tidak dipicu oleh persentase manual sampai rule absensi final tersedia;
 - ticket, incident, adjustment, status training/reguler, dan salary config masuk kalkulasi;
 - snapshot dipakai agar histori tidak berubah.
 

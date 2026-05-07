@@ -44,15 +44,17 @@ export function calculateManagerialPayroll(
   const bonusLevel = resolveBonusLevel(input.performancePercent);
 
   const performanceBonusAmount = roundCurrency(
-    input.performanceBonusBaseAmount * (bonusLevel.bonusKinerjaPercent / 100) * input.spPenaltyMultiplier
+    bonusLevel.bonusKinerjaPercent > 0
+      ? input.performanceBonusBaseAmount
+      : 0
   );
   const fulltimeBonusPaid = roundCurrency(
-    input.fulltimeEligible ? input.fulltimeBonusAmount * input.spPenaltyMultiplier : 0
+    input.fulltimeEligible ? input.fulltimeBonusAmount : 0
   );
   const disciplineBonusPaid = roundCurrency(
-    input.disciplineEligible ? input.disciplineBonusAmount * input.spPenaltyMultiplier : 0
+    input.disciplineEligible ? input.disciplineBonusAmount : 0
   );
-  const teamBonusPaid = roundCurrency(input.teamBonusAmount * input.spPenaltyMultiplier);
+  const teamBonusPaid = roundCurrency(input.teamBonusAmount);
   const unpaidLeaveDeductionAmount = roundCurrency(
     input.scheduledWorkDays > 0
       ? (baseSalaryPaid / input.scheduledWorkDays) * input.unpaidLeaveDays

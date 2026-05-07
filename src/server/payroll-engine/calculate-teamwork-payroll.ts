@@ -51,8 +51,6 @@ export function calculateTeamworkPayroll(
     ? { bonusKinerjaPercent: 0, bonusPrestasiLevel: 0 }
     : resolveBonusLevel(input.performancePercent);
 
-  const performanceBonusBeforePenalty =
-    input.performanceBonusBaseAmount * (bonusLevel.bonusKinerjaPercent / 100);
   const achievementBonusBase =
     bonusLevel.bonusPrestasiLevel >= 165
       ? input.achievementBonus165Amount
@@ -61,19 +59,21 @@ export function calculateTeamworkPayroll(
         : 0;
 
   const performanceBonusAmount = roundCurrency(
-    performanceBonusBeforePenalty * input.spPenaltyMultiplier
+    bonusLevel.bonusKinerjaPercent > 0
+      ? input.performanceBonusBaseAmount
+      : 0
   );
   const achievementBonusAmount = roundCurrency(
-    achievementBonusBase * input.spPenaltyMultiplier
+    achievementBonusBase
   );
   const fulltimeBonusPaid = roundCurrency(
-    isTraining || !input.fulltimeEligible ? 0 : input.fulltimeBonusAmount * input.spPenaltyMultiplier
+    isTraining || !input.fulltimeEligible ? 0 : input.fulltimeBonusAmount
   );
   const disciplineBonusPaid = roundCurrency(
-    isTraining || !input.disciplineEligible ? 0 : input.disciplineBonusAmount * input.spPenaltyMultiplier
+    isTraining || !input.disciplineEligible ? 0 : input.disciplineBonusAmount
   );
   const teamBonusPaid = roundCurrency(
-    isTraining ? 0 : input.teamBonusAmount * input.spPenaltyMultiplier
+    isTraining ? 0 : input.teamBonusAmount
   );
 
   const unpaidLeaveDeductionAmount = roundCurrency(

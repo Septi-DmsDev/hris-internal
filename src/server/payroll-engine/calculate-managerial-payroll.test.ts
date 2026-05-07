@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calculateManagerialPayroll } from "./calculate-managerial-payroll";
 
 describe("calculateManagerialPayroll", () => {
-  it("menghitung payroll managerial dari KPI bulanan tanpa bonus prestasi", () => {
+  it("menghitung payroll managerial dari KPI bulanan tanpa mengalikan bonus dengan multiplier SP", () => {
     const result = calculateManagerialPayroll({
       baseSalaryAmount: 2_500_000,
       periodDayCount: 30,
@@ -22,12 +22,35 @@ describe("calculateManagerialPayroll", () => {
     });
 
     expect(result.baseSalaryPaid).toBe(2_500_000);
-    expect(result.performanceBonusAmount).toBe(405_000);
+    expect(result.performanceBonusAmount).toBe(500_000);
     expect(result.fulltimeBonusPaid).toBe(0);
-    expect(result.disciplineBonusPaid).toBe(90_000);
-    expect(result.teamBonusPaid).toBe(225_000);
+    expect(result.disciplineBonusPaid).toBe(100_000);
+    expect(result.teamBonusPaid).toBe(250_000);
     expect(result.unpaidLeaveDeductionAmount).toBe(113_636.36);
-    expect(result.takeHomePay).toBe(3_081_363.64);
+    expect(result.takeHomePay).toBe(3_211_363.64);
+  });
+
+  it("membayar nominal tier bonus kinerja secara penuh untuk rentang 80 sampai 89 persen", () => {
+    const result = calculateManagerialPayroll({
+      baseSalaryAmount: 1_200_000,
+      periodDayCount: 30,
+      activeEmploymentDays: 30,
+      scheduledWorkDays: 25,
+      unpaidLeaveDays: 0,
+      performancePercent: 85,
+      performanceBonusBaseAmount: 300_000,
+      fulltimeBonusAmount: 0,
+      disciplineBonusAmount: 0,
+      teamBonusAmount: 0,
+      fulltimeEligible: false,
+      disciplineEligible: false,
+      spPenaltyMultiplier: 1,
+      incidentDeductionAmount: 0,
+      manualAdjustmentAmount: 0,
+    });
+
+    expect(result.performanceBonusAmount).toBe(300_000);
+    expect(result.takeHomePay).toBe(1_500_000);
   });
 
   it("tetap memprorata gaji pokok jika karyawan managerial aktif di tengah periode", () => {

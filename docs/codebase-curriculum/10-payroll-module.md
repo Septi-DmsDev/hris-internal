@@ -49,6 +49,8 @@ Modul payroll mengubah data final dari modul lain menjadi hasil gaji yang bisa d
 | `src/server/payroll-engine/resolve-bonus-level.ts` | tabel level bonus | calculator payroll | pure |
 | `src/server/payroll-engine/calculate-teamwork-payroll.ts` | payroll TEAMWORK | preview payroll | pure |
 | `src/server/payroll-engine/calculate-managerial-payroll.ts` | payroll MANAGERIAL | preview payroll | pure |
+| `src/server/payroll-engine/resolve-discipline-bonus.ts` | gate sementara bonus disiplin | preview payroll | pure |
+| `src/server/payroll-engine/resolve-sp-performance-penalty.ts` | pengurang performa absolut SP1/SP2 | preview payroll | pure |
 | `src/server/payroll-engine/resolve-payroll-status-transition.ts` | aturan paid/lock | mark paid, lock | pure |
 | `src/server/payroll-engine/build-payroll-export-rows.ts` | baris export Excel | route export | pure |
 | `src/server/payroll-engine/build-payslip-breakdown.ts` | grouping addition/deduction | detail page, PDF | pure |
@@ -152,11 +154,17 @@ Logika penting:
   - gaji pokok default:
     - training `1.000.000`
     - lainnya `1.200.000`
+  - memilih nominal bonus kinerja dari master grade sesuai rentang performa:
+    - `80-89.99` memakai nominal tier 80,
+    - `90-99.99` memakai nominal tier 90,
+    - `>=100` memakai nominal tier 100,
+  - nominal tier bonus kinerja dibayar langsung oleh engine; engine tidak mengalikan lagi dengan 80/90/100,
   - mengambil `monthlyPointPerformances` untuk TEAMWORK,
   - mengambil `managerialKpiSummaries` untuk MANAGERIAL,
   - membaca ticket approved hanya dari status `AUTO_APPROVED`, `APPROVED_SPV`, `APPROVED_HRD`,
   - membaca incident aktif dalam periode,
-  - menghitung SP penalty dari incident type `SP1` dan `SP2`,
+  - menghitung SP penalty dari incident type `SP1` dan `SP2` sebagai pengurang performa absolut sebelum tier bonus dipilih,
+  - tidak membayar bonus disiplin otomatis dari input persentase/manual KPI sampai rule absensi/telat/alpa diaktifkan,
   - menyatukan adjustment periode dan recurring adjustment aktif.
 - `BPJS` dan `TRANSPORT` disimpan di `recurring_payroll_adjustments`; adjustment lain tetap period-specific di `payroll_adjustments`.
 - page `/payroll` memanggil auto-preview untuk periode yang belum `FINALIZED/PAID/LOCKED`, sehingga tabel payroll langsung terisi tanpa tombol manual `Generate Preview`.
@@ -185,8 +193,9 @@ Logika penting:
 
 - training tidak mendapat bonus performa/fulltime/disiplin/team,
 - gaji pokok diprorata menurut `activeEmploymentDays / periodDayCount`,
+- `performanceBonusBaseAmount` berisi nominal tier bonus kinerja yang sudah dipilih dari performa setelah SP penalty,
 - unpaid leave memotong gaji berdasar `scheduledWorkDays`,
-- penalty SP hanya mengurangi bonus melalui multiplier.
+- penalty SP tidak lagi dipakai sebagai multiplier nominal bonus di calculator.
 
 ### `src/server/payroll-engine/calculate-managerial-payroll.ts`
 
@@ -197,7 +206,8 @@ Logika penting:
 
 - memakai KPI sebagai `performancePercent`,
 - tidak punya bonus prestasi,
-- penalty SP juga hanya mengurangi bonus.
+- `performanceBonusBaseAmount` berisi nominal tier bonus kinerja yang sudah dipilih dari performa setelah SP penalty,
+- penalty SP tidak lagi dipakai sebagai multiplier nominal bonus di calculator.
 
 ### `src/server/payroll-engine/resolve-payroll-status-transition.ts`
 
@@ -253,8 +263,10 @@ Catatan:
   - training `Rp1.000.000`
   - reguler `Rp1.200.000`
 - bonus level memakai persentase raw, bukan persentase yang dibulatkan di UI.
+- bonus kinerja membayar nominal tier 80/90/100 secara langsung sesuai rentang performa; nominal tersebut tidak dikali lagi dengan persentase tier.
+- bonus disiplin sementara tidak otomatis dibayar dari persentase performa/manual KPI sampai rule absensi siap.
 - unpaid leave memotong gaji pokok dibayar.
-- SP penalty diterapkan ke bonus melalui multiplier.
+- SP penalty mengurangi performa payroll secara absolut: SP1 -10 poin, SP2 -20 poin; nominal bonus tidak dikalikan multiplier SP.
 - finalisasi mengunci monthly performance dan activity yang relevan.
 - period status transisi:
   `DRAFT/FINALIZED` → `PAID` → `LOCKED`

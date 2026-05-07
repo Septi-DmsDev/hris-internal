@@ -59,7 +59,7 @@ Status hari:
 
 ## Bonus Kinerja TEAMWORK
 
-Tidak ada pembulatan level bonus.
+Tidak ada pembulatan level bonus. Nominal bonus kinerja pada master grade dibayar langsung sesuai tier yang tercapai; nominal tier 80/90/100 tidak dikalikan lagi dengan 80%, 90%, atau 100%.
 
 | Persentase | Bonus kinerja | Bonus prestasi |
 |---:|---|---|
@@ -71,6 +71,8 @@ Tidak ada pembulatan level bonus.
 | >= 165% | bonus 100% | prestasi 165% saja |
 
 Jika mencapai 165%, bonus prestasi yang didapat hanya 165%, bukan 140% + 165%.
+
+Untuk MANAGERIAL/KPI, rentang bonus kinerja memakai aturan nominal yang sama: 80% = performa 80-89.99%, 90% = 90-99.99%, dan 100% = minimal 100%.
 
 ## Input dan Approval Aktivitas
 
@@ -140,6 +142,10 @@ Aspek review:
 - Inisiatif, Teamwork & 5R
 - Miss Proses & Tanggung Jawab
 
+Incident log:
+- incident yang salah input dapat dihapus oleh role pengelola sesuai scope divisi;
+- hapus incident berarti menonaktifkan row (`isActive=false`), sehingga tidak tampil di Incident Log dan tidak memengaruhi payroll preview berikutnya.
+
 ## Ticketing Izin/Sakit/Cuti
 
 Semua izin/sakit/cuti harus berbasis tiket.
@@ -201,8 +207,16 @@ Bonus disiplin:
 - performa minimal 80%;
 - di bawah 80% tidak dapat bonus disiplin.
 
+Catatan implementasi sementara:
+- payroll preview belum membayar bonus disiplin otomatis dari input persentase manual atau tier grade;
+- bonus disiplin baru boleh diaktifkan setelah logika absensi/telat/alpa final tersedia sebagai sumber eligibility.
+
 SP penalty:
-- diterapkan ke bonus saja;
+- SP1 mengurangi performa payroll sebesar 10 poin persentase absolut;
+- SP2 mengurangi performa payroll sebesar 20 poin persentase absolut;
+- jika SP1 dan SP2 sama-sama aktif, pakai penalty tertinggi yaitu SP2;
+- pengurangan dilakukan langsung dari persentase performa sebelum tier bonus dipilih, contoh 70% + SP1 menjadi 60%, bukan 63%;
+- incident SP1/SP2 tidak menjadi potongan nominal payroll langsung;
 - tidak memotong gaji pokok.
 
 Overtime:

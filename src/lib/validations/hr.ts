@@ -53,7 +53,12 @@ export const createIncidentSchema = z.object({
   notes: z.string().trim().optional().transform((v) => v || undefined),
 });
 
+export const deleteIncidentSchema = z.object({
+  incidentId: z.string().uuid("Incident tidak valid."),
+});
+
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 export type TicketDecisionInput = z.infer<typeof ticketDecisionSchema>;
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
 export type CreateIncidentInput = z.infer<typeof createIncidentSchema>;
+export type DeleteIncidentInput = z.infer<typeof deleteIncidentSchema>;

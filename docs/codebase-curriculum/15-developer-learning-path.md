@@ -266,7 +266,7 @@ Hal yang harus dipahami:
 - bonus kinerja/prestasi,
 - prorate gaji,
 - unpaid leave deduction,
-- SP multiplier.
+- SP performance penalty absolut.
 
 Latihan kecil:
 

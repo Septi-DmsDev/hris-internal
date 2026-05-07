@@ -25,13 +25,13 @@ describe("calculateTeamworkPayroll", () => {
     });
 
     expect(result.baseSalaryPaid).toBe(1_200_000);
-    expect(result.performanceBonusAmount).toBe(180_000);
+    expect(result.performanceBonusAmount).toBe(200_000);
     expect(result.achievementBonusAmount).toBe(0);
     expect(result.fulltimeBonusPaid).toBe(100_000);
     expect(result.disciplineBonusPaid).toBe(75_000);
     expect(result.teamBonusPaid).toBe(50_000);
     expect(result.unpaidLeaveDeductionAmount).toBe(0);
-    expect(result.takeHomePay).toBe(1_605_000);
+    expect(result.takeHomePay).toBe(1_625_000);
   });
 
   it("mematikan bonus training dan memprorata gaji pokok berdasarkan hari aktif", () => {
@@ -65,7 +65,7 @@ describe("calculateTeamworkPayroll", () => {
     expect(result.takeHomePay).toBe(322_580.65);
   });
 
-  it("menerapkan penalty SP pada bonus saja dan mengurangkan unpaid leave, incident, dan adjustment", () => {
+  it("tidak mengalikan bonus dengan multiplier SP dan tetap mengurangkan unpaid leave, incident, dan adjustment", () => {
     const result = calculateTeamworkPayroll({
       payrollStatus: "REGULER",
       baseSalaryAmount: 1_200_000,
@@ -87,11 +87,37 @@ describe("calculateTeamworkPayroll", () => {
       manualAdjustmentAmount: -25_000,
     });
 
-    expect(result.performanceBonusAmount).toBe(180_000);
-    expect(result.achievementBonusAmount).toBe(315_000);
+    expect(result.performanceBonusAmount).toBe(200_000);
+    expect(result.achievementBonusAmount).toBe(350_000);
     expect(result.unpaidLeaveDeductionAmount).toBe(120_000);
     expect(result.incidentDeductionAmount).toBe(50_000);
     expect(result.manualAdjustmentAmount).toBe(-25_000);
-    expect(result.takeHomePay).toBe(1_500_000);
+    expect(result.takeHomePay).toBe(1_555_000);
+  });
+
+  it("tidak membayar bonus kinerja jika performa di bawah 80 persen meski nominal tier tersedia", () => {
+    const result = calculateTeamworkPayroll({
+      payrollStatus: "REGULER",
+      baseSalaryAmount: 1_200_000,
+      periodDayCount: 30,
+      activeEmploymentDays: 30,
+      scheduledWorkDays: 25,
+      unpaidLeaveDays: 0,
+      performancePercent: 79.99,
+      performanceBonusBaseAmount: 300_000,
+      achievementBonus140Amount: 350_000,
+      achievementBonus165Amount: 500_000,
+      fulltimeBonusAmount: 0,
+      disciplineBonusAmount: 0,
+      teamBonusAmount: 0,
+      fulltimeEligible: false,
+      disciplineEligible: false,
+      spPenaltyMultiplier: 1,
+      incidentDeductionAmount: 0,
+      manualAdjustmentAmount: 0,
+    });
+
+    expect(result.performanceBonusAmount).toBe(0);
+    expect(result.takeHomePay).toBe(1_200_000);
   });
 });

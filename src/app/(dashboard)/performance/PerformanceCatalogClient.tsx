@@ -24,6 +24,7 @@ import {
 import {
   approveDailyActivityEntry,
   deleteActivityEntry,
+  deleteMonthlyPerformance,
   generateMonthlyPerformance,
   inputEmployeeMonthlyPerformance,
   rejectDailyActivityEntry,
@@ -389,6 +390,7 @@ export default function PerformanceCatalogClient({
   const [entryOpen, setEntryOpen] = useState(false);
   const [entryDraft, setEntryDraft] = useState<EntryDraft>(createEntryDraft());
   const [deleteCatalogId, setDeleteCatalogId] = useState<string | null>(null);
+  const [deleteMonthlyId, setDeleteMonthlyId] = useState<string | null>(null);
 
   // Xlsx import state
   const [xlsxOpen, setXlsxOpen] = useState(false);
@@ -621,6 +623,19 @@ export default function PerformanceCatalogClient({
       if (result && "error" in result) { setFormError(result.error); return; }
       setDeleteCatalogId(null);
       setLastResult("Entry berhasil dihapus.");
+      router.refresh();
+    } finally { setPending(false); }
+  }
+
+  async function handleDeleteMonthlyPerformance() {
+    if (!deleteMonthlyId) return;
+    setPending(true);
+    resetMessages();
+    try {
+      const result = await deleteMonthlyPerformance({ id: deleteMonthlyId });
+      if (result && "error" in result) { setFormError(result.error); return; }
+      setDeleteMonthlyId(null);
+      setLastResult("Performa bulanan berhasil dihapus.");
       router.refresh();
     } finally { setPending(false); }
   }
@@ -960,8 +975,27 @@ export default function PerformanceCatalogClient({
           </Badge>
         ),
       },
+      ...(canGenerateMonthly
+        ? [
+            {
+              id: "actions",
+              header: "",
+              cell: ({ row }: { row: { original: PerformanceMonthlyRow } }) =>
+                row.original.status !== "LOCKED" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setDeleteMonthlyId(row.original.id)}
+                  >
+                    Hapus
+                  </Button>
+                ) : null,
+            } satisfies ColumnDef<PerformanceMonthlyRow>,
+          ]
+        : []),
     ],
-    []
+    [canGenerateMonthly]
   );
 
   return (
@@ -1518,6 +1552,23 @@ export default function PerformanceCatalogClient({
               disabled={pending}
             >
               {pending ? "Menghitung..." : "Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Monthly Performance Confirm */}
+      <Dialog open={deleteMonthlyId !== null} onOpenChange={(open) => !open && setDeleteMonthlyId(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Hapus Performa Bulanan</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-600">
+            Data performa bulanan ini akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+            Lanjutkan?
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteMonthlyId(null)} disabled={pending}>Batal</Button>
+            <Button type="button" variant="destructive" onClick={() => void handleDeleteMonthlyPerformance()} disabled={pending}>
+              {pending ? "Menghapus..." : "Hapus Permanen"}
             </Button>
           </DialogFooter>
         </DialogContent>

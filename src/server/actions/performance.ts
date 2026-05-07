@@ -56,6 +56,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { date, numeric, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import type { UserRole } from "@/types";
 
@@ -1019,6 +1020,30 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
     payrollPeriodReady: Boolean(period),
     managerialKpiSynced,
   };
+}
+
+export async function deleteMonthlyPerformance(input: unknown) {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD"]);
+  if (authError) return authError;
+
+  const parsed = z.object({ id: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return { error: "Input tidak valid." };
+
+  const [row] = await db
+    .select({ id: monthlyPointPerformances.id, status: monthlyPointPerformances.status })
+    .from(monthlyPointPerformances)
+    .where(eq(monthlyPointPerformances.id, parsed.data.id))
+    .limit(1);
+
+  if (!row) return { error: "Data performa bulanan tidak ditemukan." };
+  if (row.status === "LOCKED") return { error: "Data yang sudah LOCKED tidak dapat dihapus." };
+
+  await db.delete(monthlyPointPerformances).where(eq(monthlyPointPerformances.id, parsed.data.id));
+
+  revalidatePath("/performance");
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
+  return { success: true };
 }
 
 export type TwActivityItem = {

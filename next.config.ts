@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   experimental: {
     staleTimes: {
-      dynamic: 120, // cache RSC payload 2 menit di client saat navigasi antar halaman
+      dynamic: 120,
       static: 300,
     },
   },

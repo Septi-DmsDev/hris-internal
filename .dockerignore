@@ -1,0 +1,12 @@
+.git
+.gitignore
+.next
+node_modules
+npm-debug.log*
+pnpm-lock.yaml
+*.md
+*.xlsx
+*.zip
+docs
+references
+supabase

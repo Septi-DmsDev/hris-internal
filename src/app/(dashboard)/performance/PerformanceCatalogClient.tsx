@@ -15,7 +15,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "cmdk";
 import {
   clearAllCatalogData,
   upsertCatalogEntry,
@@ -266,6 +265,90 @@ type PerformanceCatalogClientProps = {
   activityEntries: PerformanceActivityRow[];
   monthlyPerformances: PerformanceMonthlyRow[];
 };
+
+function EmployeeSearchPicker({
+  options,
+  selectedId,
+  onSelect,
+}: {
+  options: MonthlyEmployeePickerOption[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const selected = options.find((e) => e.id === selectedId) ?? null;
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return options;
+    return options.filter(
+      (e) =>
+        e.fullName.toLowerCase().includes(q) ||
+        e.employeeCode.toLowerCase().includes(q) ||
+        e.divisionName.toLowerCase().includes(q)
+    );
+  }, [options, search]);
+
+  if (selected) {
+    return (
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-slate-700">Pilih Karyawan</label>
+        <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
+          <div>
+            <span className="font-semibold text-teal-800">{selected.fullName}</span>
+            <span className="ml-2 text-xs text-teal-600">
+              {selected.employeeCode} · {selected.divisionName} · {selected.employeeGroup}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { onSelect(""); setSearch(""); }}
+            className="ml-3 text-teal-400 hover:text-teal-700 text-base leading-none"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium text-slate-700">Pilih Karyawan</label>
+      <div className="rounded-md border border-input bg-white overflow-hidden">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Ketik nama, kode, atau divisi..."
+          className="w-full border-0 border-b border-slate-200 px-3 py-2 text-sm outline-none placeholder:text-slate-400"
+          autoFocus
+        />
+        <div className="max-h-56 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-400">Karyawan tidak ditemukan.</p>
+          ) : (
+            filtered.map((emp) => (
+              <button
+                key={emp.id}
+                type="button"
+                onClick={() => { onSelect(emp.id); setSearch(""); }}
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 text-left"
+              >
+                <span className="font-medium text-slate-900 shrink-0">{emp.fullName}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-xs text-slate-500 shrink-0">{emp.employeeCode}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-xs text-slate-500 truncate">{emp.divisionName}</span>
+                <span className="ml-auto text-xs text-slate-400 shrink-0">{emp.employeeGroup}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PerformanceCatalogClient({
   role,
@@ -1446,56 +1529,11 @@ export default function PerformanceCatalogClient({
           <DialogHeader>
             <DialogTitle>Input Performa Bulanan Karyawan</DialogTitle>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Pilih Karyawan</label>
-            {managerialMonthlyDraft.employeeId ? (
-              <div className="flex items-center justify-between rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm">
-                <span className="font-medium text-teal-800">
-                  {(() => {
-                    const emp = monthlyEmployeeOptions.find(
-                      (e) => e.id === managerialMonthlyDraft.employeeId
-                    );
-                    return emp
-                      ? `${emp.fullName} · ${emp.employeeCode} · ${emp.divisionName}`
-                      : "";
-                  })()}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => updateManagerialMonthlyDraft("employeeId", "")}
-                  className="ml-2 text-teal-500 hover:text-teal-700 text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : null}
-            <Command className="rounded-md border border-input bg-white overflow-hidden">
-              <CommandInput
-                placeholder="Ketik nama, kode, atau divisi..."
-                className="w-full border-0 border-b border-slate-200 px-3 py-2 text-sm outline-none placeholder:text-slate-400"
-              />
-              <CommandList className="max-h-52 overflow-y-auto">
-                <CommandEmpty className="py-6 text-center text-sm text-slate-400">
-                  Karyawan tidak ditemukan.
-                </CommandEmpty>
-                {monthlyEmployeeOptions.map((employee) => (
-                  <CommandItem
-                    key={employee.id}
-                    value={`${employee.fullName} ${employee.employeeCode} ${employee.divisionName} ${employee.employeeGroup}`}
-                    onSelect={() => updateManagerialMonthlyDraft("employeeId", employee.id)}
-                    className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 data-[selected=true]:bg-slate-100"
-                  >
-                    <span className="font-medium text-slate-900">{employee.fullName}</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="text-slate-500 text-xs">{employee.employeeCode}</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="text-slate-500 text-xs">{employee.divisionName}</span>
-                    <span className="ml-auto text-xs text-slate-400">{employee.employeeGroup}</span>
-                  </CommandItem>
-                ))}
-              </CommandList>
-            </Command>
-          </div>
+          <EmployeeSearchPicker
+            options={monthlyEmployeeOptions}
+            selectedId={managerialMonthlyDraft.employeeId}
+            onSelect={(id) => updateManagerialMonthlyDraft("employeeId", id)}
+          />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Periode (YYYY-MM)</label>

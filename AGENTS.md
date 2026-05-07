@@ -99,8 +99,9 @@ Primary boundaries:
 7. Build or update UI.
 8. Add audit log when the action changes approval, override, payroll, adjustment, or important master data.
 9. Add or update focused tests for rule engines/helpers.
-10. Run validation commands that fit the change.
-11. Summarize changes and any business-rule gap.
+10. Update project documentation whenever the code change modifies product flow, business flow, module boundaries, schema, or operational behavior.
+11. Run validation commands that fit the change.
+12. Summarize changes and any business-rule gap.
 
 ## Validation Commands
 

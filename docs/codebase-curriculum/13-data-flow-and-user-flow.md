@@ -60,7 +60,7 @@ Login
 ```text
 Login
 → buka payroll
-→ buat periode / generate preview / finalize / mark paid / lock
+→ buat periode / buka payroll untuk auto-preview / finalize / mark paid / lock
 → buka finance dashboard
 → export Excel payroll
 → lihat detail payroll per karyawan
@@ -164,12 +164,13 @@ Siapkan salary config / KPI / adjustment
 → employee_salary_configs
 → managerial_kpi_summaries
 → payroll_adjustments
+→ recurring_payroll_adjustments
 
-Generate preview
+Auto-preview saat `/payroll` dibuka
 → baca employees aktif
 → resolve snapshot divisi/jabatan/grade
 → baca monthly performance atau KPI
-→ baca approved ticket dan incident
+→ baca approved ticket, incident, adjustment periode, dan recurring adjustment aktif
 → hitung payroll via engine
 → tulis payroll_employee_snapshots
 → tulis payroll_results
@@ -233,7 +234,7 @@ incident dicatat
 
 ```text
 Finance buat periode
-→ preview
+→ buka payroll; sistem auto-preview server-side
 → review hasil
 → finalisasi
 → paid

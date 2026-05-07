@@ -219,6 +219,7 @@ Payroll finalization:
 | Kategori | Berlaku untuk | Aturan |
 |---|---|---|
 | Penambahan Manual | Semua karyawan | Bebas, keterangan wajib diisi |
+| Uang Transport | Semua karyawan aktif | Recurring setiap bulan selama masih aktif bekerja |
 
 ## Variable Pengurang Gaji
 
@@ -232,5 +233,6 @@ Payroll finalization:
 
 Catatan implementasi:
 - Business rules di-enforce server-side di `addPayrollAdjustment` (`src/server/actions/payroll.ts`)
-- Kategori disimpan sebagai prefix di field `reason` (tidak ada migrasi skema baru — `adjustment_type` tetap `ADDITION`/`DEDUCTION`)
-- Format: `KASBON`, `BPJS::catatan`, `GANTI_RUGI_PERSONAL::deskripsi`, `GANTI_RUGI_TEAM::deskripsi`, `CICILAN::12::deskripsi`, `MANUAL_ADDITION::alasan`
+- Kategori period-specific disimpan sebagai prefix di field `reason`; BPJS dan Uang Transport disimpan sebagai recurring adjustment aktif dengan `adjustment_type` tetap `ADDITION`/`DEDUCTION`
+- Format: `KASBON`, `BPJS::catatan`, `TRANSPORT::catatan`, `GANTI_RUGI_PERSONAL::deskripsi`, `GANTI_RUGI_TEAM::deskripsi`, `CICILAN::12::deskripsi`, `MANUAL_ADDITION::alasan`
+

@@ -16,7 +16,6 @@ File ditemukan:
 Gap yang perlu dibangun:
 
 - overtime dan uang harian masih ada di schema/UI tetapi belum dihitung di preview,
-- belum ada additions/deductions terpisah selain `payroll_adjustments`,
 - rule “koreksi setelah paid masuk periode berikutnya” belum dibantu alur UI khusus,
 - belum ada scope payroll per divisi,
 - belum terlihat snapshot khusus review/attendance selain ticket/incident/performance.
@@ -28,7 +27,7 @@ Modul payroll mengubah data final dari modul lain menjadi hasil gaji yang bisa d
 - pembuatan periode payroll,
 - salary config per karyawan,
 - KPI managerial,
-- preview payroll,
+- auto-preview payroll saat periode dibuka,
 - snapshot data employee,
 - finalisasi,
 - status paid,
@@ -83,13 +82,14 @@ Siapkan data payroll
 ```
 
 ```text
-Generate preview
-→ generatePayrollPreview(periodId)
+Auto-preview payroll
+→ buka `/payroll` dan pilih periode yang masih OPEN/DRAFT/DATA_REVIEW
+→ page server memanggil generatePayrollPreview(periodId)
 → ambil employee aktif dengan payrollStatus terkait
 → ambil snapshot divisi/jabatan/grade per awal periode
 → hitung scheduledWorkDays
 → ambil monthly performance atau managerial KPI
-→ ambil ticket approved, incident aktif, adjustment
+→ ambil ticket approved, incident aktif, adjustment periode, dan recurring adjustment aktif
 → hitung payroll per employee dengan engine
 → replace payroll_employee_snapshots
 → replace payroll_results
@@ -135,6 +135,7 @@ Export utama:
 - `upsertManagerialKpiSummary()`
 - `createPayrollPeriod()`
 - `addPayrollAdjustment()`
+- `deletePayrollAdjustment()`
 - `generatePayrollPreview()`
 - `finalizePayroll()`
 - `markPayrollPaid()`
@@ -156,7 +157,9 @@ Logika penting:
   - membaca ticket approved hanya dari status `AUTO_APPROVED`, `APPROVED_SPV`, `APPROVED_HRD`,
   - membaca incident aktif dalam periode,
   - menghitung SP penalty dari incident type `SP1` dan `SP2`,
-  - menyatukan adjustment manual positif/negatif.
+  - menyatukan adjustment periode dan recurring adjustment aktif.
+- `BPJS` dan `TRANSPORT` disimpan di `recurring_payroll_adjustments`; adjustment lain tetap period-specific di `payroll_adjustments`.
+- page `/payroll` memanggil auto-preview untuk periode yang belum `FINALIZED/PAID/LOCKED`, sehingga tabel payroll langsung terisi tanpa tombol manual `Generate Preview`.
 - `finalizePayroll()`:
   - mengunci result dan monthly performance,
   - mengubah activity approved menjadi `DIKUNCI_PAYROLL`.
@@ -213,7 +216,7 @@ Logika penting:
 
 - period picker di sisi kiri,
 - action utama:
-  `Buat Periode`, `Generate Preview`, `Finalisasi Payroll`, `Tandai PAID`, `Kunci Periode`, `Export Excel`,
+  `Buat Periode`, `Finalisasi Payroll`, `Tandai PAID`, `Kunci Periode`, `Export Excel`,
 - tabel:
   hasil payroll, summary divisi, adjustment, KPI managerial, salary config,
 - dialog:
@@ -266,6 +269,7 @@ Catatan:
 | `payroll_employee_snapshots` | ya | ya | snapshot data payroll |
 | `payroll_results` | ya | ya | hasil payroll per employee |
 | `payroll_adjustments` | ya | ya | koreksi manual |
+| `recurring_payroll_adjustments` | ya | ya | BPJS dan Uang Transport berulang |
 | `payroll_audit_logs` | ya | ya | audit payroll |
 | `employees` | ya | tidak langsung | sumber profil aktif |
 | `employee_division_histories` | ya | tidak | snapshot divisi |
@@ -282,15 +286,16 @@ Catatan:
 ## 7. Edge Case
 
 - employee yang baru mulai setelah akhir periode tidak ikut preview.
-- MANAGERIAL tanpa KPI validated akan menggagalkan generate preview.
+- MANAGERIAL tanpa KPI validated akan menggagalkan auto-preview/generate preview.
 - preview periode `PAID` atau `LOCKED` tidak bisa digenerate ulang.
+- auto-preview tidak berjalan untuk periode `FINALIZED`, `PAID`, atau `LOCKED`.
 - finalize tanpa preview akan ditolak.
 - lock hanya boleh setelah status `PAID`.
 
 ## 8. Hal yang Perlu Diperhatikan Developer
 
 - `dailyAllowanceAmount` dan `overtimeRateAmount` sudah ada di salary config, tetapi preview saat ini tetap menyimpan `dailyAllowancePaid = 0` dan `overtimeAmount = 0`.
-- adjustment masih satu-satunya penambah/pengurang manual.
+- adjustment period-specific dan recurring adjustment adalah sumber penambah/pengurang manual.
 - payroll saat ini belum menerapkan scope divisi; aksesnya global sesuai role payroll.
 - rule “jangan hitung payroll di browser” dipatuhi: semua kalkulasi ada di server action/engine.
 
@@ -300,7 +305,7 @@ Catatan:
 Finance membuat periode 2026-04
 → resolvePayrollPeriod() menghasilkan 2026-03-26 s.d. 2026-04-25
 → HRD mengisi salary config dan KPI managerial
-→ Finance generate preview
+→ Finance membuka `/payroll`; sistem auto-preview server-side
 → sistem membuat snapshot employee dan payroll result
 → HRD review hasil, bila perlu tambah adjustment
 → Finance finalisasi payroll

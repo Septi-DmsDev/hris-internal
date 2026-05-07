@@ -110,7 +110,7 @@ export default async function EmployeeDashboard() {
     );
   }
 
-  const { employee, latestPerformance, latestPayroll, incidentSummary, teamworkActivitySummary } = data;
+  const { employee, latestPerformance, latestPayroll, incidentSummary, teamworkActivitySummary, role } = data;
 
   // Fetch leave quota
   const currentYear = new Date().getFullYear();
@@ -129,13 +129,25 @@ export default async function EmployeeDashboard() {
     leaveQuota = quotaRows[0] ?? null;
   }
 
+  const isTeamwork = role === "TEAMWORK";
+
   const performancePercent = latestPerformance
     ? formatPercent(latestPerformance.performancePercent)
     : "—";
 
+  const performanceSub = latestPerformance
+    ? isTeamwork
+      ? `MINGGUAN: ${latestPerformance.weeklyPercent}%  |  HARIAN: ${latestPerformance.dailyPercent}%`
+      : `PERIODE: ${latestPerformance.periodStartDate.toISOString().slice(0, 7)}`
+    : "Belum ada data";
+
   const approvedPoints = latestPerformance
-    ? `${parseFloat(latestPerformance.totalApprovedPoints ?? "0").toFixed(0)} / ${latestPerformance.totalTargetPoints}`
+    ? `${Math.round(parseFloat(latestPerformance.totalApprovedPoints ?? "0")).toLocaleString("id-ID")} / ${latestPerformance.totalTargetPoints.toLocaleString("id-ID")}`
     : "—";
+
+  const approvedPointsSub = latestPerformance
+    ? `PROGRESS: ${latestPerformance.progressPercent}%`
+    : "Belum ada data";
 
   const takeHomePay = latestPayroll
     ? formatCurrency(latestPayroll.takeHomePay)
@@ -154,14 +166,14 @@ export default async function EmployeeDashboard() {
           <StatCard
             label="Performa"
             value={performancePercent}
-            sub={latestPerformance ? `Periode ${latestPerformance.status}` : "Belum ada data"}
+            sub={performanceSub}
             accent
             icon={TrendingUp}
           />
           <StatCard
             label="Poin Disetujui"
             value={approvedPoints}
-            sub="dari target"
+            sub={approvedPointsSub}
             icon={BarChart3}
           />
           <StatCard

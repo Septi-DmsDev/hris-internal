@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check, ChevronDown, Search, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/tables/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -11,14 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   addPayrollAdjustment,
+  deletePayrollAdjustment,
   upsertEmployeeSalaryConfig,
   upsertGradeCompensationConfig,
 } from "@/server/actions/payroll";
 import {
-  ADJUSTMENT_CATEGORIES,
   ADJUSTMENT_CATEGORY_LABELS,
   type AdjustmentCategory,
 } from "@/lib/validations/payroll";
+import {
+  filterAdjustmentEmployeeOptions,
+  getEligibleAdjustmentEmployeeOptions,
+} from "./employee-search";
 import type {
   PayrollAdjustmentRow,
   PayrollGradeCompensationRow,
@@ -124,6 +129,8 @@ export default function FinanceDashboardClient({
   const [gradeDraft, setGradeDraft] = useState<GradeDraft>(emptyGradeDraft());
 
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [adjustmentEmployeeSearch, setAdjustmentEmployeeSearch] = useState("");
+  const [adjustmentEmployeePickerOpen, setAdjustmentEmployeePickerOpen] = useState(false);
   const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>({
     employeeId: salaryConfigs[0]?.employeeId ?? "",
     category: "BPJS",
@@ -132,7 +139,7 @@ export default function FinanceDashboardClient({
     tenorMonthsRemaining: "",
   });
 
-  async function runAction(action: () => Promise<{ error?: string; success?: boolean }>) {
+  const runAction = useCallback(async (action: () => Promise<{ error?: string; success?: boolean }>) => {
     setPending(true);
     setError(null);
     setSuccess(null);
@@ -148,7 +155,7 @@ export default function FinanceDashboardClient({
     } finally {
       setPending(false);
     }
-  }
+  }, [router]);
 
   const salaryColumns: ColumnDef<PayrollSalaryConfigRow>[] = useMemo(
     () => [
@@ -270,6 +277,47 @@ export default function FinanceDashboardClient({
     return adjustmentType === "ADDITION" ? "Penambahan" : "Potongan";
   };
 
+  const adjustmentEmployeeOptions = useMemo(
+    () =>
+      filterAdjustmentEmployeeOptions(
+        salaryConfigs,
+        adjustmentDraft.category,
+        adjustmentEmployeeSearch
+      ),
+    [adjustmentDraft.category, adjustmentEmployeeSearch, salaryConfigs]
+  );
+
+  const selectedAdjustmentEmployee = useMemo(
+    () => salaryConfigs.find((row) => row.employeeId === adjustmentDraft.employeeId) ?? null,
+    [adjustmentDraft.employeeId, salaryConfigs]
+  );
+
+  function resolveEmployeeForCategory(category: AdjustmentCategory, currentEmployeeId: string) {
+    const eligibleRows = getEligibleAdjustmentEmployeeOptions(salaryConfigs, category);
+    if (eligibleRows.some((row) => row.employeeId === currentEmployeeId)) {
+      return currentEmployeeId;
+    }
+    return eligibleRows[0]?.employeeId ?? "";
+  }
+
+  const handleDeleteAdjustment = useCallback(async (row: PayrollAdjustmentRow) => {
+    if (!activePeriodId) return;
+    const ok = window.confirm(
+      row.source === "RECURRING"
+        ? "Hapus adjustment berulang ini? Baris ini tidak akan ikut payroll bulan berikutnya."
+        : "Hapus adjustment periode ini?"
+    );
+    if (!ok) return;
+
+    await runAction(() =>
+      deletePayrollAdjustment({
+        periodId: activePeriodId,
+        adjustmentId: row.id,
+        source: row.source,
+      })
+    );
+  }, [activePeriodId, runAction]);
+
   const adjustmentColumns: ColumnDef<PayrollAdjustmentRow>[] = useMemo(
     () => [
       {
@@ -281,9 +329,14 @@ export default function FinanceDashboardClient({
         header: "Kategori",
         accessorKey: "category",
         cell: ({ row }) => (
-          <Badge variant={categoryBadgeVariant(row.original.category, row.original.adjustmentType)}>
-            {categoryLabel(row.original.category, row.original.adjustmentType)}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant={categoryBadgeVariant(row.original.category, row.original.adjustmentType)}>
+              {categoryLabel(row.original.category, row.original.adjustmentType)}
+            </Badge>
+            {row.original.source === "RECURRING" ? (
+              <span className="text-xs text-slate-400">Berulang</span>
+            ) : null}
+          </div>
         ),
       },
       {
@@ -305,9 +358,27 @@ export default function FinanceDashboardClient({
         accessorKey: "createdAt",
         cell: ({ row }) => <span className="text-xs text-slate-500">{row.original.createdAt}</span>,
       },
+      {
+        header: "",
+        id: "action",
+        cell: ({ row }) =>
+          canManage ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 px-0 text-rose-600 hover:text-rose-700"
+              disabled={pending || !activePeriodId}
+              title="Hapus adjustment"
+              aria-label="Hapus adjustment"
+              onClick={() => void handleDeleteAdjustment(row.original)}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ) : null,
+      },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [activePeriodId, canManage, handleDeleteAdjustment, pending]
   );
 
   const activePeriod = periods.find((p) => p.id === activePeriodId);
@@ -393,6 +464,8 @@ export default function FinanceDashboardClient({
                       description: "",
                       tenorMonthsRemaining: "",
                     });
+                    setAdjustmentEmployeeSearch("");
+                    setAdjustmentEmployeePickerOpen(false);
                     setError(null);
                     setSuccess(null);
                     setAdjustmentOpen(true);
@@ -585,18 +658,19 @@ export default function FinanceDashboardClient({
                 className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                 value={adjustmentDraft.category}
                 onChange={(e) =>
-                  setAdjustmentDraft((v) => ({
-                    ...v,
-                    category: e.target.value as AdjustmentCategory,
-                    employeeId:
-                      e.target.value === "GANTI_RUGI_TEAM"
-                        ? (salaryConfigs.find((s) => s.employeeGroup === "MANAGERIAL")?.employeeId ?? v.employeeId)
-                        : v.employeeId,
-                  }))
+                  setAdjustmentDraft((v) => {
+                    const nextCategory = e.target.value as AdjustmentCategory;
+                    return {
+                      ...v,
+                      category: nextCategory,
+                      employeeId: resolveEmployeeForCategory(nextCategory, v.employeeId),
+                    };
+                  })
                 }
               >
                 <optgroup label="Penambah Gaji">
                   <option value="MANUAL_ADDITION">Penambahan Manual</option>
+                  <option value="TRANSPORT">Uang Transport (berulang)</option>
                 </optgroup>
                 <optgroup label="Pengurang Gaji">
                   <option value="BPJS">BPJS</option>
@@ -614,6 +688,16 @@ export default function FinanceDashboardClient({
                 Kasbon dibatasi maksimum Rp 300.000 per karyawan per periode.
               </p>
             )}
+            {adjustmentDraft.category === "TRANSPORT" && (
+              <p className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">
+                Uang Transport dibayarkan otomatis setiap payroll selama karyawan masih aktif bekerja.
+              </p>
+            )}
+            {adjustmentDraft.category === "BPJS" && (
+              <p className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                BPJS menjadi potongan berulang setiap payroll sampai adjustment ini dihapus.
+              </p>
+            )}
             {adjustmentDraft.category === "GANTI_RUGI_TEAM" && (
               <p className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
                 Hanya karyawan Managerial yang dapat dikenakan Ganti Rugi Team.
@@ -628,8 +712,86 @@ export default function FinanceDashboardClient({
             {/* Employee select */}
             <div className="space-y-1">
               <label className="text-xs text-slate-500">Karyawan</label>
+              <div
+                className="relative"
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setAdjustmentEmployeePickerOpen(false);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  className="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-left text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  onClick={() => {
+                    setAdjustmentEmployeePickerOpen((open) => !open);
+                    setAdjustmentEmployeeSearch("");
+                  }}
+                  aria-expanded={adjustmentEmployeePickerOpen}
+                >
+                  <span className="min-w-0 truncate">
+                    {selectedAdjustmentEmployee
+                      ? `${selectedAdjustmentEmployee.employeeName} - ${selectedAdjustmentEmployee.employeeCode}`
+                      : "Pilih karyawan"}
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                </button>
+
+                {adjustmentEmployeePickerOpen ? (
+                  <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+                    <div className="relative border-b border-slate-100">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                      <Input
+                        autoFocus
+                        className="h-10 border-0 pl-9 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                        placeholder="Cari nama, kode, divisi..."
+                        value={adjustmentEmployeeSearch}
+                        onChange={(e) => setAdjustmentEmployeeSearch(e.target.value)}
+                      />
+                    </div>
+                    <div className="max-h-56 overflow-y-auto p-1">
+                      {adjustmentEmployeeOptions.length > 0 ? (
+                        adjustmentEmployeeOptions.map((row) => (
+                          <button
+                            key={row.employeeId}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                            onClick={() => {
+                              setAdjustmentDraft((v) => ({ ...v, employeeId: row.employeeId }));
+                              setAdjustmentEmployeeSearch("");
+                              setAdjustmentEmployeePickerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={`h-4 w-4 shrink-0 ${
+                                row.employeeId === adjustmentDraft.employeeId
+                                  ? "text-teal-600"
+                                  : "text-transparent"
+                              }`}
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium text-slate-900">
+                                {row.employeeName}
+                              </span>
+                              <span className="block truncate text-xs text-slate-500">
+                                {row.employeeCode} - {row.divisionName} - {row.positionName}
+                                {row.employeeGroup === "MANAGERIAL" ? " [M]" : ""}
+                              </span>
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-4 text-center text-sm text-slate-500">
+                          Karyawan tidak ditemukan.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                className="hidden"
                 value={adjustmentDraft.employeeId}
                 onChange={(e) => setAdjustmentDraft((v) => ({ ...v, employeeId: e.target.value }))}
               >
@@ -679,8 +841,8 @@ export default function FinanceDashboardClient({
               </div>
             )}
 
-            {/* Description — not required for BPJS */}
-            {adjustmentDraft.category !== "BPJS" && (
+            {/* Description - not required for recurring BPJS/transport */}
+            {adjustmentDraft.category !== "BPJS" && adjustmentDraft.category !== "TRANSPORT" && (
               <div className="space-y-1">
                 <label className="text-xs text-slate-500">
                   Keterangan{adjustmentDraft.category === "MANUAL_ADDITION" ? " (wajib)" : " (opsional)"}

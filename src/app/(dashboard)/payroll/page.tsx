@@ -1,11 +1,11 @@
 import { format } from "date-fns";
 import PayrollClient, {
   type PayrollDivisionSummaryRow,
-  type PayrollFinanceSummary,
   type PayrollPeriodRow,
   type PayrollResultRow,
 } from "./PayrollClient";
-import { getPayrollWorkspace } from "@/server/actions/payroll";
+import { generatePayrollPreview, getPayrollWorkspace } from "@/server/actions/payroll";
+import { shouldAutoGeneratePayrollPreview } from "@/server/actions/payroll.helpers";
 import { summarizePayrollResults } from "@/server/payroll-engine/summarize-payroll-results";
 
 type PageProps = {
@@ -15,7 +15,9 @@ type PageProps = {
 export default async function PayrollPage({ searchParams }: PageProps) {
   const params = (await searchParams) ?? {};
   const selectedPeriodId = typeof params.periodId === "string" ? params.periodId : undefined;
-  const workspace = await getPayrollWorkspace(selectedPeriodId);
+  let workspace = await getPayrollWorkspace(selectedPeriodId);
+  let autoPreviewError: string | null = null;
+  let autoPreviewWarning: string | null = null;
 
   if ("error" in workspace) {
     return (
@@ -26,6 +28,35 @@ export default async function PayrollPage({ searchParams }: PageProps) {
         </div>
       </div>
     );
+  }
+
+  if (
+    workspace.activePeriodId &&
+    shouldAutoGeneratePayrollPreview(workspace.canManage, workspace.selectedPeriod?.status ?? null)
+  ) {
+    const previewResult = await generatePayrollPreview(
+      { periodId: workspace.activePeriodId },
+      { revalidate: false }
+    );
+
+    if ("error" in previewResult) {
+      autoPreviewError = previewResult.error ?? "Preview payroll otomatis gagal dibuat.";
+    } else {
+      if ("warning" in previewResult && previewResult.warning) {
+        autoPreviewWarning = previewResult.warning;
+      }
+      workspace = await getPayrollWorkspace(selectedPeriodId);
+      if ("error" in workspace) {
+        return (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">Akses payroll ditolak.</p>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {workspace.error}
+            </div>
+          </div>
+        );
+      }
+    }
   }
 
   const periods: PayrollPeriodRow[] = workspace.periods.map((period) => ({
@@ -77,26 +108,19 @@ export default async function PayrollPage({ searchParams }: PageProps) {
     }))
   );
 
-  const financeSummary: PayrollFinanceSummary = {
-    employeeCount: summary.employeeCount,
-    totalTakeHomePay: summary.totalTakeHomePay,
-    totalAdditions: summary.totalAdditions,
-    totalDeductions: summary.totalDeductions,
-    averagePerformancePercent: summary.averagePerformancePercent,
-  };
-
   const divisionSummaries: PayrollDivisionSummaryRow[] = summary.divisionSummaries;
 
   return (
     <div className="space-y-6">
       <PayrollClient
-        role={workspace.role}
         canManage={workspace.canManage}
+        canDelete={workspace.role === "SUPER_ADMIN"}
         activePeriodId={workspace.activePeriodId}
         periods={periods}
         results={results}
-        financeSummary={financeSummary}
         divisionSummaries={divisionSummaries}
+        initialError={autoPreviewError}
+        initialWarning={autoPreviewWarning}
       />
     </div>
   );

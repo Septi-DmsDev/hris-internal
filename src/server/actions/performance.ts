@@ -181,12 +181,10 @@ async function getManagerialEmployeeOptions(role: UserRole) {
     })
     .from(employees)
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .innerJoin(userRoles, eq(userRoles.employeeId, employees.id))
     .where(
       and(
         eq(employees.employeeGroup, "MANAGERIAL"),
-        eq(employees.isActive, true),
-        inArray(userRoles.role, MANAGERIAL_TARGET_ROLES)
+        eq(employees.isActive, true)
       )
     )
     .orderBy(asc(employees.fullName));
@@ -916,22 +914,6 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
     return { error: "Karyawan tidak ditemukan atau sudah tidak aktif." };
   }
 
-  if (employee.employeeGroup === "MANAGERIAL") {
-    const [managerialRole] = await db
-      .select({ role: userRoles.role })
-      .from(userRoles)
-      .where(
-        and(
-          eq(userRoles.employeeId, employee.id),
-          inArray(userRoles.role, MANAGERIAL_TARGET_ROLES)
-        )
-      )
-      .limit(1);
-
-    if (!managerialRole) {
-      return { error: "Karyawan managerial belum memiliki role managerial yang valid (KABAG/SPV/MANAGERIAL)." };
-    }
-  }
 
   let managerialKpiSynced = false;
 
@@ -1026,10 +1008,8 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
   });
 
   revalidatePath("/performance");
-  if (managerialKpiSynced) {
-    revalidatePath("/payroll");
-    revalidatePath("/finance");
-  }
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
   return {
     success: true,
     periodCode: resolvedPeriod.periodCode,

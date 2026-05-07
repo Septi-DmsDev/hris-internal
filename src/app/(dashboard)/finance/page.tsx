@@ -99,6 +99,7 @@ export default async function FinancePage({ searchParams }: PageProps) {
       amount: Number(row.amount),
       description,
       reason: row.reason,
+      source: row.source ?? "PERIOD",
       createdAt: format(row.createdAt, "yyyy-MM-dd HH:mm"),
     };
   });

@@ -7,17 +7,26 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/tables/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createPayrollPeriod,
+  deletePayrollPeriod,
   finalizePayroll,
-  generatePayrollPreview,
   lockPayrollPeriod,
   markPayrollPaid,
 } from "@/server/actions/payroll";
-import type { UserRole } from "@/types";
 
 export type PayrollPeriodRow = {
   id: string;
@@ -66,6 +75,7 @@ export type PayrollAdjustmentRow = {
   amount: number;
   description: string;
   reason: string;
+  source: "PERIOD" | "RECURRING";
   createdAt: string;
 };
 
@@ -110,14 +120,6 @@ export type PayrollGradeCompensationRow = {
   isActive: boolean;
 };
 
-export type PayrollFinanceSummary = {
-  employeeCount: number;
-  totalTakeHomePay: number;
-  totalAdditions: number;
-  totalDeductions: number;
-  averagePerformancePercent: number;
-};
-
 export type PayrollDivisionSummaryRow = {
   divisionName: string;
   employeeCount: number;
@@ -128,13 +130,14 @@ export type PayrollDivisionSummaryRow = {
 };
 
 type Props = {
-  role: UserRole;
   canManage: boolean;
+  canDelete: boolean;
   activePeriodId: string | null;
   periods: PayrollPeriodRow[];
   results: PayrollResultRow[];
-  financeSummary: PayrollFinanceSummary;
   divisionSummaries: PayrollDivisionSummaryRow[];
+  initialError?: string | null;
+  initialWarning?: string | null;
 };
 
 type PeriodDraft = {
@@ -165,21 +168,25 @@ function createPeriodDraft(): PeriodDraft {
 }
 
 export default function PayrollClient({
-  role,
   canManage,
+  canDelete,
   activePeriodId,
   periods,
   results,
-  financeSummary,
   divisionSummaries,
+  initialError = null,
+  initialWarning = null,
 }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
+  const [warning, setWarning] = useState<string | null>(initialWarning);
   const [success, setSuccess] = useState<string | null>(null);
   const [periodOpen, setPeriodOpen] = useState(false);
   const [periodDraft, setPeriodDraft] = useState<PeriodDraft>(createPeriodDraft());
   const [activeTab, setActiveTab] = useState<"payroll" | "history">("payroll");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmCode, setDeleteConfirmCode] = useState<string>("");
 
   const selectedPeriod = periods.find((p) => p.id === activePeriodId) ?? null;
 
@@ -349,11 +356,25 @@ export default function PayrollClient({
                 Slip .pdf
               </a>
             </Button>
+            {canDelete && ["FINALIZED", "PAID"].includes(row.original.status) && (
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  setDeleteConfirmId(row.original.id);
+                  setDeleteConfirmCode(row.original.periodCode);
+                  setError(null);
+                  setSuccess(null);
+                }}
+              >
+                Hapus
+              </Button>
+            )}
           </div>
         ),
       },
     ],
-    [router]
+    [router, canDelete]
   );
 
   async function handleCreatePeriod() {
@@ -375,24 +396,6 @@ export default function PayrollClient({
     }
   }
 
-  async function handleGeneratePreview() {
-    if (!activePeriodId) return;
-    setPending(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const result = await generatePayrollPreview({ periodId: activePeriodId });
-      if (result && "error" in result) {
-        setError(result.error ?? "Gagal generate preview payroll.");
-        return;
-      }
-      setSuccess(`Preview payroll berhasil digenerate untuk ${result.generatedEmployees} karyawan.`);
-      router.refresh();
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function handleFinalize() {
     if (!activePeriodId) return;
     setPending(true);
@@ -405,6 +408,7 @@ export default function PayrollClient({
         return;
       }
       setSuccess("Payroll berhasil difinalisasi dan aktivitas terkait dikunci.");
+      setActiveTab("history");
       router.refresh();
     } finally {
       setPending(false);
@@ -447,6 +451,26 @@ export default function PayrollClient({
     }
   }
 
+  async function handleDeletePeriod() {
+    if (!deleteConfirmId) return;
+    setPending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await deletePayrollPeriod({ periodId: deleteConfirmId });
+      if (result && "error" in result) {
+        setError(result.error ?? "Gagal menghapus periode payroll.");
+        return;
+      }
+      setSuccess("Periode payroll berhasil dihapus.");
+      setDeleteConfirmId(null);
+      setDeleteConfirmCode("");
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
   return (
     <Tabs
       value={activeTab}
@@ -479,6 +503,11 @@ export default function PayrollClient({
       {success && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {success}
+        </div>
+      )}
+      {warning && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {warning}
         </div>
       )}
       {error && (
@@ -518,16 +547,6 @@ export default function PayrollClient({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canManage && activePeriodId && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleGeneratePreview()}
-                disabled={pending}
-              >
-                Generate Preview
-              </Button>
-            )}
             {canFinalize && (
               <Button
                 size="sm"
@@ -566,34 +585,6 @@ export default function PayrollClient({
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Finance summary strip */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs text-slate-500">Karyawan</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">
-                  {financeSummary.employeeCount}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs text-slate-500">Total THP</p>
-                <p className="mt-1 text-base font-bold text-slate-900 tabular-nums">
-                  {formatCurrency(financeSummary.totalTakeHomePay)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs text-slate-500">Total Bonus</p>
-                <p className="mt-1 text-base font-bold text-emerald-700 tabular-nums">
-                  {formatCurrency(financeSummary.totalAdditions)}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <p className="text-xs text-slate-500">Total Potongan</p>
-                <p className="mt-1 text-base font-bold text-red-600 tabular-nums">
-                  {formatCurrency(financeSummary.totalDeductions)}
-                </p>
-              </div>
-            </div>
-
             {/* Results table */}
             <DataTable
               data={results}
@@ -668,6 +659,38 @@ export default function PayrollClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Period Confirmation */}
+      <AlertDialog
+        open={!!deleteConfirmId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteConfirmId(null);
+            setDeleteConfirmCode("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Periode {deleteConfirmCode}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Semua data payroll (snapshot, hasil, adjustment)
+              untuk periode <strong>{deleteConfirmCode}</strong> akan dihapus permanen. Aktivitas
+              harian yang terkunci akan dibuka kembali ke status disetujui.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleDeletePeriod()}
+              disabled={pending}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              Hapus Permanen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Tabs>
   );
 }

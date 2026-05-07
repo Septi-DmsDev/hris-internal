@@ -15,7 +15,7 @@ import {
 import { attendanceTickets, employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import { payrollPeriods, payrollResults } from "@/lib/db/schema/payroll";
-import { dailyActivityEntries } from "@/lib/db/schema/point";
+import { dailyActivityEntries, monthlyPointPerformances } from "@/lib/db/schema/point";
 import { aliasedTable, and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { resolvePointTargetForDivision } from "@/config/constants";
 import type { UserRole } from "@/types";
@@ -81,9 +81,12 @@ type MyIncidentSummary = {
 type MyPerformanceSummary = {
   periodStartDate: Date;
   periodEndDate: Date;
-  performancePercent: string;
+  performancePercent: string;  // avg daily approved % in period
+  weeklyPercent: string;       // avg last 6 non-Sunday days
+  dailyPercent: string;        // last working day's %
   totalApprovedPoints: string;
   totalTargetPoints: number;
+  progressPercent: string;     // cumulative approved / target * 100
   status: string;
 } | null;
 
@@ -259,19 +262,55 @@ async function getIncidentSummary(employeeId: string): Promise<MyIncidentSummary
   };
 }
 
-export async function getLatestPerformance(employeeId: string): Promise<MyPerformanceSummary> {
-  // Periode berjalan: tgl 26 bulan lalu s/d tgl 25 bulan ini (atau 26 bulan ini s/d 25 bulan depan)
-  const today = new Date();
-  const day = today.getDate();
-  const periodStart = day >= 26
-    ? new Date(today.getFullYear(), today.getMonth(), 26)
-    : new Date(today.getFullYear(), today.getMonth() - 1, 26);
-  const periodEnd = day >= 26
-    ? new Date(today.getFullYear(), today.getMonth() + 1, 25)
-    : new Date(today.getFullYear(), today.getMonth(), 25);
+// Waktu saat ini dalam zona Jakarta (UTC+7)
+function getJakartaNow() {
+  const JAKARTA_OFFSET_MS = 7 * 60 * 60 * 1000;
+  const jakartaMs = Date.now() + JAKARTA_OFFSET_MS;
+  const d = new Date(jakartaMs);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth(), day: d.getUTCDate() };
+}
 
-  const SUBMITTED_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG", "DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
-  const APPROVED_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"];
+// Tanggal UTC midnight — format yang sama dengan resolvePayrollPeriod
+function utcDate(year: number, monthIndex: number, day: number) {
+  return new Date(Date.UTC(year, monthIndex, day));
+}
+
+// Periode payroll berjalan (UTC dates, untuk perbandingan dengan DB)
+function getCurrentPayrollPeriodUTC() {
+  const { year, month, day } = getJakartaNow();
+  if (day >= 26) {
+    return {
+      periodStart: utcDate(year, month, 26),
+      periodEnd: utcDate(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1, 25),
+    };
+  }
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevYear = month === 0 ? year - 1 : year;
+  return {
+    periodStart: utcDate(prevYear, prevMonth, 26),
+    periodEnd: utcDate(year, month, 25),
+  };
+}
+
+function dKey(d: Date): string {
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dy = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${m}-${dy}`;
+}
+
+export async function getLatestPerformance(employeeId: string): Promise<MyPerformanceSummary> {
+  // Periode berjalan: tgl 26 bulan lalu s/d tgl 25 bulan ini (Jakarta time)
+  const { periodStart, periodEnd } = getCurrentPayrollPeriodUTC();
+
+  // Extended start: cover last 14 days for weekly/daily stats
+  const extendedStart = utcDate(
+    periodStart.getUTCFullYear(),
+    periodStart.getUTCMonth(),
+    periodStart.getUTCDate() - 14
+  );
+  const queryStart = extendedStart < periodStart ? extendedStart : periodStart;
+
+  const APPROVED_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
 
   const [entries, empRows, leaveRows] = await Promise.all([
     db
@@ -284,9 +323,9 @@ export async function getLatestPerformance(employeeId: string): Promise<MyPerfor
       .where(
         and(
           eq(dailyActivityEntries.employeeId, employeeId),
-          gte(dailyActivityEntries.workDate, periodStart),
+          gte(dailyActivityEntries.workDate, queryStart),
           lte(dailyActivityEntries.workDate, periodEnd),
-          inArray(dailyActivityEntries.status, [...SUBMITTED_STATUSES])
+          inArray(dailyActivityEntries.status, [...APPROVED_STATUSES])
         )
       ),
     db
@@ -308,49 +347,133 @@ export async function getLatestPerformance(employeeId: string): Promise<MyPerfor
       ),
   ]);
 
-  if (entries.length === 0) return null;
-
   const targetDailyPoints = resolvePointTargetForDivision(empRows[0]?.divisionName);
 
-  // Group submitted entries by workDate (gunakan local time, konsisten dengan countTargetDaysForPeriod)
-  const dailyPointsMap = new Map<string, number>();
-  let totalApprovedPoints = 0;
+  // Map: dateKey -> total approved points that day
+  const approvedByDate = new Map<string, number>();
   for (const entry of entries) {
-    const d = entry.workDate;
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    dailyPointsMap.set(key, (dailyPointsMap.get(key) ?? 0) + Number(entry.totalPoints));
-    if (APPROVED_STATUSES.includes(entry.status)) {
-      totalApprovedPoints += Number(entry.totalPoints);
-    }
+    const k = dKey(entry.workDate);
+    approvedByDate.set(k, (approvedByDate.get(k) ?? 0) + Number(entry.totalPoints));
   }
 
-  // Performa = rata-rata persentase harian dari hari yang sudah submit
-  const dailyPercents = Array.from(dailyPointsMap.values()).map(
-    (pts) => (targetDailyPoints > 0 ? (pts / targetDailyPoints) * 100 : 0)
-  );
-  const performancePercent =
-    dailyPercents.length > 0
-      ? (dailyPercents.reduce((a, b) => a + b, 0) / dailyPercents.length).toFixed(2)
-      : "0.00";
+  const pStartKey = dKey(periodStart);
+  const pEndKey = dKey(periodEnd);
 
-  // Target days efektif = hari kerja Senin–Sabtu dalam periode dikurangi hari izin yang disetujui
+  // Total approved in period + average daily % (only days that have entries)
+  let totalApprovedPoints = 0;
+  let dayPercentSum = 0;
+  let dayCount = 0;
+  for (const [k, pts] of approvedByDate) {
+    if (k >= pStartKey && k <= pEndKey) {
+      totalApprovedPoints += pts;
+      dayPercentSum += targetDailyPoints > 0 ? (pts / targetDailyPoints) * 100 : 0;
+      dayCount++;
+    }
+  }
+  const performancePercent = dayCount > 0 ? (dayPercentSum / dayCount).toFixed(2) : "0.00";
+
+  // Target poin bulanan (efektif = hari kerja Senin–Sabtu dikurangi izin approved)
   let workingDays = 0;
-  const cursor = new Date(periodStart);
-  while (cursor <= periodEnd) {
-    if (cursor.getDay() !== 0) workingDays++; // 0 = Minggu
-    cursor.setDate(cursor.getDate() + 1);
+  const cur = new Date(periodStart);
+  while (cur <= periodEnd) {
+    if (cur.getUTCDay() !== 0) workingDays++;
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
   const leaveDays = leaveRows.reduce((sum, r) => sum + r.daysCount, 0);
   const effectiveTargetDays = Math.max(0, workingDays - leaveDays);
   const totalTargetPoints = targetDailyPoints * effectiveTargetDays;
 
+  const progressPercent = totalTargetPoints > 0
+    ? ((totalApprovedPoints / totalTargetPoints) * 100).toFixed(2)
+    : "0.00";
+
+  // Kinerja mingguan: rata-rata 6 hari kerja terakhir (Senin–Sabtu, lewati Minggu)
+  // Gunakan UTC untuk konsistensi dengan dKey
+  const { year: jYear, month: jMonth, day: jDay } = getJakartaNow();
+  const todayUtc = utcDate(jYear, jMonth, jDay);
+  const last6WorkDays: Date[] = [];
+  const walker = utcDate(jYear, jMonth, jDay - 1);
+  while (last6WorkDays.length < 6) {
+    if (walker.getUTCDay() !== 0) last6WorkDays.push(new Date(walker));
+    walker.setUTCDate(walker.getUTCDate() - 1);
+  }
+  const weeklySum = last6WorkDays.reduce((sum, d) => {
+    const pts = approvedByDate.get(dKey(d)) ?? 0;
+    return sum + (targetDailyPoints > 0 ? (pts / targetDailyPoints) * 100 : 0);
+  }, 0);
+  const weeklyPercent = (weeklySum / 6).toFixed(1);
+
+  // Kinerja harian: hari kerja terakhir
+  const dow = todayUtc.getUTCDay();
+  let lastWorkDay: Date;
+  if (dow === 0) {
+    lastWorkDay = utcDate(jYear, jMonth, jDay - 1); // Sabtu
+  } else if (dow === 1) {
+    const sunday = utcDate(jYear, jMonth, jDay - 1);
+    lastWorkDay = approvedByDate.has(dKey(sunday))
+      ? sunday
+      : utcDate(jYear, jMonth, jDay - 2); // Sabtu
+  } else {
+    lastWorkDay = utcDate(jYear, jMonth, jDay - 1);
+  }
+  const dailyPts = approvedByDate.get(dKey(lastWorkDay)) ?? 0;
+  const dailyPercent = targetDailyPoints > 0
+    ? ((dailyPts / targetDailyPoints) * 100).toFixed(1)
+    : "0.0";
+
   return {
     periodStartDate: periodStart,
     periodEndDate: periodEnd,
     performancePercent,
+    weeklyPercent,
+    dailyPercent,
     totalApprovedPoints: totalApprovedPoints.toFixed(2),
     totalTargetPoints,
+    progressPercent,
     status: "BERJALAN",
+  };
+}
+
+async function getLatestMonthlyPerformance(employeeId: string): Promise<MyPerformanceSummary> {
+  // Periode berjalan: UTC dates (sama format dengan resolvePayrollPeriod), Jakarta timezone
+  const { periodStart, periodEnd } = getCurrentPayrollPeriodUTC();
+
+  const rows = await db
+    .select({
+      periodStartDate: monthlyPointPerformances.periodStartDate,
+      periodEndDate: monthlyPointPerformances.periodEndDate,
+      performancePercent: monthlyPointPerformances.performancePercent,
+      totalApprovedPoints: monthlyPointPerformances.totalApprovedPoints,
+      totalTargetPoints: monthlyPointPerformances.totalTargetPoints,
+      status: monthlyPointPerformances.status,
+    })
+    .from(monthlyPointPerformances)
+    .where(
+      and(
+        eq(monthlyPointPerformances.employeeId, employeeId),
+        eq(monthlyPointPerformances.periodStartDate, periodStart),
+        eq(monthlyPointPerformances.periodEndDate, periodEnd)
+      )
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+
+  const pct = String(row.performancePercent ?? "0");
+  const approvedPoints = String(row.totalApprovedPoints ?? "0");
+  const targetPoints = Number(row.totalTargetPoints ?? 0);
+
+  return {
+    periodStartDate: row.periodStartDate,
+    periodEndDate: row.periodEndDate,
+    performancePercent: Number(pct).toFixed(2),
+    weeklyPercent: Number(pct).toFixed(1),
+    dailyPercent: Number(pct).toFixed(1),
+    totalApprovedPoints: Number(approvedPoints).toFixed(2),
+    totalTargetPoints: targetPoints,
+    progressPercent: Number(pct).toFixed(2),
+    status: row.status,
   };
 }
 
@@ -552,8 +675,12 @@ export async function getMyDashboard(): Promise<MyDashboardResult> {
       getLatestTicket(employee.id),
       getLatestReview(employee.id),
       getIncidentSummary(employee.id),
-      employee.employeeGroup === "TEAMWORK" ? getLatestPerformance(employee.id) : Promise.resolve(null),
-      employee.employeeGroup === "TEAMWORK" ? getTeamworkActivitySummary(employee.id) : Promise.resolve(null),
+      role === "TEAMWORK"
+        ? getLatestPerformance(employee.id)
+        : ["MANAGERIAL", "SPV", "KABAG"].includes(role)
+          ? getLatestMonthlyPerformance(employee.id)
+          : Promise.resolve(null),
+      role === "TEAMWORK" ? getTeamworkActivitySummary(employee.id) : Promise.resolve(null),
       PAYROLL_SUMMARY_ROLES.includes(role) ? getLatestPayroll(employee.id) : Promise.resolve(null),
     ]);
 

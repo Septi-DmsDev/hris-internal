@@ -151,7 +151,8 @@ Helper terkait:
 | `upsertManagerialKpiSummary` | KPI managerial validated |
 | `createPayrollPeriod` | audit `CREATE_PERIOD` |
 | `addPayrollAdjustment` | audit `ADD_ADJUSTMENT` |
-| `generatePayrollPreview` | membuat snapshot dan draft result |
+| `deletePayrollAdjustment` | hapus period adjustment atau nonaktifkan recurring adjustment |
+| `generatePayrollPreview` | membuat snapshot dan draft result; dipanggil otomatis oleh `/payroll/page.tsx` untuk periode editable |
 | `finalizePayroll` | lock result, monthly performance, dan activity terkait |
 | `markPayrollPaid` | transisi paid |
 | `lockPayrollPeriod` | transisi locked |
@@ -177,6 +178,7 @@ Kenapa kritis:
 - membaca input dari banyak modul;
 - membuat payroll snapshot;
 - menghitung result yang akan masuk payslip/export/finance.
+- dipanggil otomatis ketika Finance/Super Admin membuka `/payroll` untuk periode yang belum `FINALIZED/PAID/LOCKED`.
 
 Business rule:
 

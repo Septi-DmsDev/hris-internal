@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { managerialKpiSummarySchema, salaryConfigSchema } from "./payroll";
+import * as payrollValidation from "./payroll";
+import {
+  ADJUSTMENT_CATEGORY_LABELS,
+  managerialKpiSummarySchema,
+  payrollAdjustmentSchema,
+  salaryConfigSchema,
+} from "./payroll";
 
 describe("salaryConfigSchema", () => {
   it("menerima nominal payroll valid dan mengubah string angka menjadi number", () => {
@@ -55,5 +61,30 @@ describe("managerialKpiSummarySchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe("payrollAdjustmentSchema", () => {
+  it("menerima uang transport sebagai penambah gaji recurring", () => {
+    const result = payrollAdjustmentSchema.safeParse({
+      periodId: "123e4567-e89b-12d3-a456-426614174001",
+      employeeId: "123e4567-e89b-12d3-a456-426614174000",
+      category: "TRANSPORT",
+      amount: "150000",
+    });
+
+    expect(result.success).toBe(true);
+    expect(ADJUSTMENT_CATEGORY_LABELS.TRANSPORT).toBe("Uang Transport");
+  });
+
+  it("menerima payload hapus adjustment berdasarkan sumber data", () => {
+    const schema = payrollValidation.deletePayrollAdjustmentSchema;
+    const result = schema.safeParse({
+      periodId: "123e4567-e89b-12d3-a456-426614174001",
+      adjustmentId: "123e4567-e89b-12d3-a456-426614174002",
+      source: "RECURRING",
+    });
+
+    expect(result.success).toBe(true);
   });
 });

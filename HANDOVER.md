@@ -208,7 +208,7 @@ Sudah ada:
 - payroll periods
 - employee salary config
 - managerial KPI summaries
-- payroll preview generation
+- payroll auto-preview generation when `/payroll` opens editable periods
 - payroll finalize
 - mark paid
 - lock period
@@ -222,6 +222,7 @@ Server-side payroll entry points penting:
 - `getPayrollWorkspace()`
 - `getPayrollEmployeeDetail()`
 - `createPayrollPeriod()`
+- `/payroll/page.tsx` auto-calls `generatePayrollPreview()` for periods before `FINALIZED`
 - `generatePayrollPreview()`
 - `finalizePayroll()`
 - `markPayrollPaid()`
@@ -416,5 +417,4 @@ Jika melanjutkan dari nol di PC/sesi lain:
 6. jalankan `pnpm vitest run`
 7. jalankan `pnpm build`
 8. mulai QA dari route `/login` -> `/dashboard` -> `/me` -> modul-modul utama
-
 

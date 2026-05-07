@@ -182,8 +182,8 @@ Contoh:
 
 - Performance bulanan:
   `PerformanceCatalogClient.tsx -> generateMonthlyPerformance() -> countTargetDaysForPeriod() + calculateMonthlyPointPerformance() -> monthlyPointPerformances`
-- Payroll preview:
-  `PayrollClient.tsx -> generatePayrollPreview() -> calculateTeamworkPayroll()/calculateManagerialPayroll() -> payrollEmployeeSnapshots + payrollResults`
+- Payroll auto-preview:
+  `/payroll/page.tsx -> generatePayrollPreview() -> calculateTeamworkPayroll()/calculateManagerialPayroll() -> payrollEmployeeSnapshots + payrollResults`
 - Self-service:
   `/me -> getMyDashboard() -> user_roles.employee_id -> employee/payroll/performance/ticket/review summaries`
 

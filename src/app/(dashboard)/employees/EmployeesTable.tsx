@@ -187,6 +187,7 @@ function EmployeePersonalForm({ draft, onChange, options }: { draft: EmployeeDra
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Field label="CABANG"><select value={draft.branchId} onChange={(e) => onChange("branchId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" required><option value="">Pilih cabang</option>{options.branches.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field>
+      <Field label="SUPERVISOR"><select value={draft.supervisorEmployeeId} onChange={(e) => onChange("supervisorEmployeeId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Pilih supervisor</option>{options.supervisors.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}</select></Field>
       <Field label="NAMA"><Input value={draft.fullName} onChange={(e) => onChange("fullName", e.target.value)} required /></Field>
       <Field label="Username"><Input value={draft.username} onChange={(e) => onChange("username", e.target.value)} /></Field>
       <Field label="Email"><Input type="email" value={draft.email} onChange={(e) => onChange("email", e.target.value)} /></Field>

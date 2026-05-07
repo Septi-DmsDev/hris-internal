@@ -20,6 +20,14 @@ type DraftItem = {
   qty: number;
 };
 
+type CurrentJobLine = {
+  key: string;
+  catalogEntryId: string;
+  workName: string;
+  pointValue: number;
+  qty: number;
+};
+
 type DateGroup = {
   workDate: string;
   entries: TwActivityItem[];
@@ -78,8 +86,12 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
   const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
   const [editingDate, setEditingDate] = useState<string | null>(null);
 
+  // Stage 1: current Job ID group being built
+  const [currentJobId, setCurrentJobId] = useState("");
+  const [currentJobLines, setCurrentJobLines] = useState<CurrentJobLine[]>([]);
+
+  // Line input for current job group
   const [inputCatalogId, setInputCatalogId] = useState("");
-  const [inputJobId, setInputJobId] = useState("");
   const [inputQty, setInputQty] = useState("1");
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -112,36 +124,68 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [catalogOpen]);
 
-  function addItem() {
+  // Add one work type line to the current Job ID group
+  function addLineToCurrentJob() {
     if (!inputCatalogId) { setError("Pilih jenis pekerjaan terlebih dahulu."); return; }
     const cat = catalogEntries.find((c) => c.id === inputCatalogId);
     if (!cat) return;
     const qty = Math.max(0.01, Number(inputQty) || 1);
     setError(null);
-    setDraftItems((prev) => [
+    setCurrentJobLines((prev) => [
       ...prev,
       {
         key: `${inputCatalogId}-${Date.now()}`,
         catalogEntryId: cat.id,
-        jobId: inputJobId.trim() || cat.externalCode || "-",
         workName: cat.workName,
         pointValue: Number(cat.pointValue),
         qty,
       },
     ]);
     setInputCatalogId("");
-    setInputJobId("");
     setInputQty("1");
     setCatalogSearch("");
     setCatalogOpen(false);
   }
 
-  function removeItem(key: string) {
+  function removeCurrentLine(key: string) {
+    setCurrentJobLines((prev) => prev.filter((l) => l.key !== key));
+  }
+
+  // Commit current Job ID + its lines into the draft list
+  function commitJobIdGroup() {
+    if (!currentJobId.trim()) { setError("Isi Job ID terlebih dahulu."); return; }
+    if (currentJobLines.length === 0) { setError("Tambahkan minimal 1 jenis pekerjaan untuk Job ID ini."); return; }
+    setError(null);
+    const jobId = currentJobId.trim();
+    setDraftItems((prev) => [
+      ...prev,
+      ...currentJobLines.map((line) => ({
+        key: `${jobId}-${line.key}`,
+        catalogEntryId: line.catalogEntryId,
+        jobId,
+        workName: line.workName,
+        pointValue: line.pointValue,
+        qty: line.qty,
+      })),
+    ]);
+    setCurrentJobId("");
+    setCurrentJobLines([]);
+  }
+
+  function removeDraftItem(key: string) {
     setDraftItems((prev) => prev.filter((i) => i.key !== key));
+  }
+
+  function removeDraftGroup(jobId: string) {
+    setDraftItems((prev) => prev.filter((i) => i.jobId !== jobId));
   }
 
   async function handleSubmit() {
     if (draftItems.length === 0) { setError("Tambahkan minimal 1 aktivitas."); return; }
+    if (currentJobLines.length > 0) {
+      setError("Ada jenis pekerjaan di Job ID saat ini yang belum dimasukkan ke draft. Tekan [+ Job ID] terlebih dahulu.");
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -149,7 +193,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
         workDate: selectedDate,
         items: draftItems.map((i) => ({
           pointCatalogEntryId: i.catalogEntryId,
-          jobId: i.jobId === "-" ? undefined : i.jobId,
+          jobId: i.jobId,
           quantity: i.qty,
         })),
       });
@@ -158,6 +202,8 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
         return;
       }
       setDraftItems([]);
+      setCurrentJobId("");
+      setCurrentJobLines([]);
       setEditingDate(null);
       setSuccess("Draft berhasil dikirim ke SPV untuk review.");
       setActiveTab("history");
@@ -173,16 +219,18 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
       .map((e) => {
         const cat = catalogEntries.find((c) => c.id === e.pointCatalogEntryId);
         return {
-        key: `${e.id}-edit`,
-        catalogEntryId: e.pointCatalogEntryId,
-        jobId: resolveActivityJobIdLabel(e.jobIdSnapshot, cat?.externalCode ?? null, e.notes),
-        workName: e.workNameSnapshot,
-        pointValue: Number(e.pointValueSnapshot),
-        qty: Number(e.quantity),
+          key: `${e.id}-edit`,
+          catalogEntryId: e.pointCatalogEntryId,
+          jobId: resolveActivityJobIdLabel(e.jobIdSnapshot, cat?.externalCode ?? null, e.notes),
+          workName: e.workNameSnapshot,
+          pointValue: Number(e.pointValueSnapshot),
+          qty: Number(e.quantity),
         };
       });
     setSelectedDate(group.workDate);
     setDraftItems(items);
+    setCurrentJobId("");
+    setCurrentJobLines([]);
     setEditingDate(group.workDate);
     setError(null);
     setSuccess(null);
@@ -222,7 +270,22 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
       });
   }, [activities]);
 
+  // Group committed draft items by Job ID (preserve insertion order)
+  const groupedDraft = useMemo(() => {
+    const seen = new Map<string, DraftItem[]>();
+    const order: string[] = [];
+    for (const item of draftItems) {
+      if (!seen.has(item.jobId)) {
+        seen.set(item.jobId, []);
+        order.push(item.jobId);
+      }
+      seen.get(item.jobId)!.push(item);
+    }
+    return order.map((jobId) => ({ jobId, items: seen.get(jobId)! }));
+  }, [draftItems]);
+
   const draftTotal = draftItems.reduce((s, i) => s + i.pointValue * i.qty, 0);
+  const currentJobLineTotal = currentJobLines.reduce((s, l) => s + l.pointValue * l.qty, 0);
 
   return (
     <div className="space-y-4">
@@ -268,8 +331,9 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
             </div>
           ) : (
             <>
-              {/* Input row */}
+              {/* ── Stage 1: Build current Job ID group ── */}
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                {/* Header row */}
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Tambah Aktivitas
@@ -284,26 +348,16 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-[120px_1fr_100px_auto] gap-2 items-end">
+
+                {/* Row 1: Job ID + Pekerjaan + Qty + [+] */}
+                <div className="grid grid-cols-[140px_1fr_90px_auto] gap-2 items-end">
                   {/* JOB ID */}
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-600">Job ID</label>
                     <Input
-                      value={inputJobId}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setInputJobId(v);
-                        if (v.trim() === "") {
-                          setInputCatalogId("");
-                        } else {
-                          const match = catalogEntries.find(
-                            (c) => c.externalCode?.toUpperCase() === v.trim().toUpperCase()
-                          );
-                          if (match) setInputCatalogId(match.id);
-                        }
-                        setError(null);
-                      }}
-                      placeholder="Ketik Job ID…"
+                      value={currentJobId}
+                      onChange={(e) => { setCurrentJobId(e.target.value); setError(null); }}
+                      placeholder="Job ID…"
                       className="bg-white"
                     />
                   </div>
@@ -332,7 +386,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                               autoFocus
                               value={catalogSearch}
                               onChange={(e) => setCatalogSearch(e.target.value)}
-                              placeholder="Cari pekerjaan atau job ID…"
+                              placeholder="Cari pekerjaan atau kode…"
                               className="h-8 text-sm"
                             />
                           </div>
@@ -349,7 +403,6 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                                   }`}
                                   onClick={() => {
                                     setInputCatalogId(c.id);
-                                    if (c.externalCode) setInputJobId(c.externalCode);
                                     setCatalogOpen(false);
                                     setCatalogSearch("");
                                     setError(null);
@@ -386,51 +439,135 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                     />
                   </div>
 
-                  <Button variant="outline" onClick={addItem}>
-                    + Tambah
+                  <Button variant="outline" onClick={addLineToCurrentJob} className="shrink-0 px-3">
+                    +
                   </Button>
                 </div>
+
+                {/* Row 2: Tambah Job ID (right-aligned) */}
+                <div className="flex justify-end">
+                  <Button
+                    variant="secondary"
+                    onClick={commitJobIdGroup}
+                    disabled={currentJobLines.length === 0 || !currentJobId.trim()}
+                    size="sm"
+                  >
+                    Tambah Job ID
+                  </Button>
+                </div>
+
+                {/* Current job lines mini-table — lines added to current Job ID */}
+                {currentJobLines.length > 0 && (
+                  <div className="rounded-md border border-slate-200 overflow-hidden mt-1">
+                    <table className="w-full text-sm">
+                      <thead className="bg-white border-b border-slate-100">
+                        <tr>
+                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500">Jenis Pekerjaan</th>
+                          <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-500">Qty</th>
+                          <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-500">Poin</th>
+                          <th className="px-3 py-1.5" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {currentJobLines.map((line) => (
+                          <tr key={line.key} className="bg-slate-50/50">
+                            <td className="px-3 py-1.5 text-slate-800">{line.workName}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{line.qty}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                              {(line.pointValue * line.qty).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-1.5 text-right">
+                              <button
+                                onClick={() => removeCurrentLine(line.key)}
+                                className="text-slate-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="border-t border-slate-200 bg-white">
+                        <tr>
+                          <td colSpan={2} className="px-3 py-1.5 text-xs font-medium text-slate-500 text-right">
+                            Subtotal
+                          </td>
+                          <td className="px-3 py-1.5 text-right text-xs font-semibold text-teal-600 tabular-nums">
+                            {currentJobLineTotal.toFixed(2)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+
               </div>
 
-              {/* Draft list */}
-              {draftItems.length > 0 && (
+              {/* ── Stage 2: Committed draft list grouped by Job ID ── */}
+              {groupedDraft.length > 0 && (
                 <div className="rounded-lg border border-slate-200 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Job ID</th>
-                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis Pekerjaan</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Job ID / Jenis Pekerjaan</th>
                         <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Qty</th>
                         <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Poin</th>
                         <th className="px-4 py-2" />
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {draftItems.map((item) => (
-                        <tr key={item.key} className="bg-white hover:bg-slate-50/50">
-                          <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{item.jobId}</td>
-                          <td className="px-4 py-2.5 text-slate-900">{item.workName}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums">{item.qty}</td>
-                          <td className="px-4 py-2.5 text-right tabular-nums font-medium">
-                            {(item.pointValue * item.qty).toFixed(2)}
-                          </td>
-                          <td className="px-4 py-2.5 text-right">
-                            <button
-                              onClick={() => removeItem(item.key)}
-                              className="text-slate-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody>
+                      {groupedDraft.map(({ jobId, items }) => {
+                        const groupTotal = items.reduce((s, i) => s + i.pointValue * i.qty, 0);
+                        return (
+                          <>
+                            {/* Job ID header row */}
+                            <tr key={`hdr-${jobId}`} className="bg-slate-100 border-t border-slate-200">
+                              <td className="px-4 py-2 font-semibold text-slate-700 font-mono text-xs" colSpan={2}>
+                                Job ID: {jobId}
+                              </td>
+                              <td className="px-4 py-2 text-right tabular-nums text-xs font-medium text-slate-600">
+                                {groupTotal.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <button
+                                  onClick={() => removeDraftGroup(jobId)}
+                                  className="text-slate-400 hover:text-red-500 transition-colors"
+                                  title="Hapus seluruh Job ID ini"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                            {/* Work type rows */}
+                            {items.map((item) => (
+                              <tr key={item.key} className="bg-white hover:bg-slate-50/50 border-t border-slate-100">
+                                <td className="px-4 py-2 pl-8 text-slate-700">{item.workName}</td>
+                                <td className="px-4 py-2 text-right tabular-nums text-slate-600">{item.qty}</td>
+                                <td className="px-4 py-2 text-right tabular-nums font-medium text-slate-800">
+                                  {(item.pointValue * item.qty).toFixed(2)}
+                                </td>
+                                <td className="px-4 py-2 text-right">
+                                  <button
+                                    onClick={() => removeDraftItem(item.key)}
+                                    className="text-slate-300 hover:text-red-400 transition-colors"
+                                    title="Hapus baris ini"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </>
+                        );
+                      })}
                     </tbody>
-                    <tfoot className="border-t border-slate-200 bg-slate-50">
+                    <tfoot className="border-t-2 border-slate-200 bg-slate-50">
                       <tr>
-                        <td colSpan={3} className="px-4 py-2 text-sm font-semibold text-slate-700 text-right">
+                        <td colSpan={2} className="px-4 py-2.5 text-sm font-semibold text-slate-700 text-right">
                           Total Poin
                         </td>
-                        <td className="px-4 py-2 text-right font-bold text-teal-600 tabular-nums">
+                        <td className="px-4 py-2.5 text-right font-bold text-teal-600 tabular-nums">
                           {draftTotal.toFixed(2)}
                         </td>
                         <td />

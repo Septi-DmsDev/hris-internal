@@ -226,6 +226,22 @@ export const payrollAdjustments = pgTable("payroll_adjustments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const recurringPayrollAdjustments = pgTable("recurring_payroll_adjustments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id")
+    .notNull()
+    .references(() => employees.id, { onDelete: "cascade" }),
+  adjustmentType: payrollAdjustmentTypeEnum("adjustment_type").notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  reason: text("reason").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  appliedByUserId: uuid("applied_by_user_id").notNull(),
+  appliedByRole: userRoleEnum("applied_by_role").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
 export const payrollAuditLogs = pgTable("payroll_audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   periodId: uuid("period_id")
@@ -254,5 +270,7 @@ export type PayrollResult = typeof payrollResults.$inferSelect;
 export type NewPayrollResult = typeof payrollResults.$inferInsert;
 export type PayrollAdjustment = typeof payrollAdjustments.$inferSelect;
 export type NewPayrollAdjustment = typeof payrollAdjustments.$inferInsert;
+export type RecurringPayrollAdjustment = typeof recurringPayrollAdjustments.$inferSelect;
+export type NewRecurringPayrollAdjustment = typeof recurringPayrollAdjustments.$inferInsert;
 export type PayrollAuditLog = typeof payrollAuditLogs.$inferSelect;
 export type NewPayrollAuditLog = typeof payrollAuditLogs.$inferInsert;

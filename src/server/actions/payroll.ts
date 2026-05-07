@@ -22,6 +22,7 @@ import {
   payrollEmployeeSnapshots,
   payrollPeriods,
   payrollResults,
+  recurringPayrollAdjustments,
 } from "@/lib/db/schema/payroll";
 import {
   dailyActivityApprovalLogs,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/db/schema/point";
 import {
   createPayrollPeriodSchema,
+  deletePayrollAdjustmentSchema,
   managerialKpiSummarySchema,
   payrollAdjustmentSchema,
   gradeCompensationConfigSchema,
@@ -45,8 +47,13 @@ import { resolveTenureAllowanceAmount } from "@/server/payroll-engine/resolve-te
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import type { PayrollAdjustmentType, PayrollPeriodStatus, UserRole } from "@/types";
-import { canReadPayrollEmployeeDetail } from "./payroll.helpers";
+import type { PayrollPeriodStatus, UserRole } from "@/types";
+import {
+  canReadPayrollEmployeeDetail,
+  isRecurringAdjustmentCategory,
+  isRecurringAdjustmentReason,
+  resolveAdjustmentTypeForCategory,
+} from "./payroll.helpers";
 
 const PAYROLL_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWER"];
 const PAYROLL_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE"];
@@ -329,7 +336,7 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
         .orderBy(asc(payrollEmployeeSnapshots.employeeNameSnapshot))
     : [];
 
-  const adjustments = activePeriodId
+  const periodAdjustmentRows = activePeriodId
     ? await db
         .select({
           id: payrollAdjustments.id,
@@ -345,6 +352,35 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
         .where(eq(payrollAdjustments.periodId, activePeriodId))
         .orderBy(desc(payrollAdjustments.createdAt))
     : [];
+
+  const recurringAdjustmentRows = activePeriodId
+    ? await db
+        .select({
+          id: recurringPayrollAdjustments.id,
+          employeeId: recurringPayrollAdjustments.employeeId,
+          employeeName: employees.fullName,
+          adjustmentType: recurringPayrollAdjustments.adjustmentType,
+          amount: recurringPayrollAdjustments.amount,
+          reason: recurringPayrollAdjustments.reason,
+          createdAt: recurringPayrollAdjustments.createdAt,
+        })
+        .from(recurringPayrollAdjustments)
+        .leftJoin(employees, eq(recurringPayrollAdjustments.employeeId, employees.id))
+        .where(
+          and(
+            eq(recurringPayrollAdjustments.isActive, true),
+            eq(employees.isActive, true)
+          )
+        )
+        .orderBy(desc(recurringPayrollAdjustments.createdAt))
+    : [];
+
+  const adjustments = [
+    ...recurringAdjustmentRows.map((row) => ({ ...row, source: "RECURRING" as const })),
+    ...periodAdjustmentRows
+      .filter((row) => !isRecurringAdjustmentReason(row.reason))
+      .map((row) => ({ ...row, source: "PERIOD" as const })),
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   const salaryConfigs = await db
     .select({
@@ -915,7 +951,7 @@ export async function addPayrollAdjustment(input: unknown) {
   }
 
   const [employee] = await db
-    .select({ id: employees.id, employeeGroup: employees.employeeGroup })
+    .select({ id: employees.id, employeeGroup: employees.employeeGroup, isActive: employees.isActive })
     .from(employees)
     .where(eq(employees.id, employeeId))
     .limit(1);
@@ -971,19 +1007,62 @@ export async function addPayrollAdjustment(input: unknown) {
     return { error: "Sisa tenor cicilan wajib diisi." };
   }
 
-  const adjustmentType: PayrollAdjustmentType = category === "MANUAL_ADDITION" ? "ADDITION" : "DEDUCTION";
+  if (isRecurringAdjustmentCategory(category) && !employee.isActive) {
+    return { error: "Adjustment recurring hanya berlaku untuk karyawan aktif." };
+  }
+
+  const adjustmentType = resolveAdjustmentTypeForCategory(category);
   const reason = encodeAdjustmentReason(category, description, tenorMonthsRemaining);
+  const isRecurring = isRecurringAdjustmentCategory(category);
 
   await db.transaction(async (tx) => {
-    await tx.insert(payrollAdjustments).values({
-      periodId,
-      employeeId,
-      adjustmentType,
-      amount: amount.toFixed(2),
-      reason,
-      appliedByUserId: user.id,
-      appliedByRole: access.role,
-    });
+    if (isRecurring) {
+      const [existingRecurring] = await tx
+        .select({ id: recurringPayrollAdjustments.id })
+        .from(recurringPayrollAdjustments)
+        .where(
+          and(
+            eq(recurringPayrollAdjustments.employeeId, employeeId),
+            eq(recurringPayrollAdjustments.category, category),
+            eq(recurringPayrollAdjustments.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (existingRecurring) {
+        await tx
+          .update(recurringPayrollAdjustments)
+          .set({
+            adjustmentType,
+            amount: amount.toFixed(2),
+            reason,
+            appliedByUserId: user.id,
+            appliedByRole: access.role,
+            updatedAt: new Date(),
+          })
+          .where(eq(recurringPayrollAdjustments.id, existingRecurring.id));
+      } else {
+        await tx.insert(recurringPayrollAdjustments).values({
+          employeeId,
+          adjustmentType,
+          category,
+          amount: amount.toFixed(2),
+          reason,
+          appliedByUserId: user.id,
+          appliedByRole: access.role,
+        });
+      }
+    } else {
+      await tx.insert(payrollAdjustments).values({
+        periodId,
+        employeeId,
+        adjustmentType,
+        amount: amount.toFixed(2),
+        reason,
+        appliedByUserId: user.id,
+        appliedByRole: access.role,
+      });
+    }
 
     await tx.insert(payrollAuditLogs).values({
       periodId,
@@ -992,7 +1071,7 @@ export async function addPayrollAdjustment(input: unknown) {
       actorUserId: user.id,
       actorRole: access.role,
       notes: reason,
-      payload: { category, adjustmentType, amount },
+      payload: { category, adjustmentType, amount, recurring: isRecurring },
     });
   });
 
@@ -1001,7 +1080,123 @@ export async function addPayrollAdjustment(input: unknown) {
   return { success: true };
 }
 
-export async function generatePayrollPreview(input: unknown) {
+export async function deletePayrollAdjustment(input: unknown) {
+  const access = await assertPayrollWriteAccess();
+  if ("error" in access) return access;
+
+  const parsed = deletePayrollAdjustmentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Adjustment payroll tidak valid." };
+  }
+
+  const user = await getUser();
+  if (!user) return { error: "Sesi tidak valid." };
+
+  const { periodId, adjustmentId, source } = parsed.data;
+
+  const [period] = await db
+    .select({ id: payrollPeriods.id, status: payrollPeriods.status })
+    .from(payrollPeriods)
+    .where(eq(payrollPeriods.id, periodId))
+    .limit(1);
+
+  if (!period) return { error: "Periode payroll tidak ditemukan." };
+  if (source === "PERIOD" && (period.status === "PAID" || period.status === "LOCKED")) {
+    return { error: "Adjustment periode yang sudah paid/locked tidak bisa dihapus." };
+  }
+
+  if (source === "RECURRING") {
+    const [adjustment] = await db
+      .select({
+        id: recurringPayrollAdjustments.id,
+        employeeId: recurringPayrollAdjustments.employeeId,
+        adjustmentType: recurringPayrollAdjustments.adjustmentType,
+        amount: recurringPayrollAdjustments.amount,
+        reason: recurringPayrollAdjustments.reason,
+        category: recurringPayrollAdjustments.category,
+      })
+      .from(recurringPayrollAdjustments)
+      .where(
+        and(
+          eq(recurringPayrollAdjustments.id, adjustmentId),
+          eq(recurringPayrollAdjustments.isActive, true)
+        )
+      )
+      .limit(1);
+
+    if (!adjustment) return { error: "Adjustment recurring tidak ditemukan." };
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(recurringPayrollAdjustments)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(recurringPayrollAdjustments.id, adjustment.id));
+
+      await tx.insert(payrollAuditLogs).values({
+        periodId,
+        employeeId: adjustment.employeeId,
+        action: "ADD_ADJUSTMENT",
+        actorUserId: user.id,
+        actorRole: access.role,
+        notes: adjustment.reason,
+        payload: {
+          event: "DELETE_ADJUSTMENT",
+          source,
+          adjustmentId,
+          category: adjustment.category,
+          adjustmentType: adjustment.adjustmentType,
+          amount: Number(adjustment.amount),
+          recurring: true,
+        },
+      });
+    });
+  } else {
+    const [adjustment] = await db
+      .select({
+        id: payrollAdjustments.id,
+        employeeId: payrollAdjustments.employeeId,
+        adjustmentType: payrollAdjustments.adjustmentType,
+        amount: payrollAdjustments.amount,
+        reason: payrollAdjustments.reason,
+      })
+      .from(payrollAdjustments)
+      .where(and(eq(payrollAdjustments.id, adjustmentId), eq(payrollAdjustments.periodId, periodId)))
+      .limit(1);
+
+    if (!adjustment) return { error: "Adjustment periode tidak ditemukan." };
+
+    await db.transaction(async (tx) => {
+      await tx.delete(payrollAdjustments).where(eq(payrollAdjustments.id, adjustment.id));
+
+      await tx.insert(payrollAuditLogs).values({
+        periodId,
+        employeeId: adjustment.employeeId,
+        action: "ADD_ADJUSTMENT",
+        actorUserId: user.id,
+        actorRole: access.role,
+        notes: adjustment.reason,
+        payload: {
+          event: "DELETE_ADJUSTMENT",
+          source,
+          adjustmentId,
+          adjustmentType: adjustment.adjustmentType,
+          amount: Number(adjustment.amount),
+          recurring: false,
+        },
+      });
+    });
+  }
+
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
+  return { success: true };
+}
+
+type GeneratePayrollPreviewOptions = {
+  revalidate?: boolean;
+};
+
+export async function generatePayrollPreview(input: unknown, options: GeneratePayrollPreviewOptions = {}) {
   const access = await assertPayrollWriteAccess();
   if ("error" in access) return access;
 
@@ -1148,10 +1343,35 @@ export async function generatePayrollPreview(input: unknown) {
     incidentsByEmployee.set(row.employeeId, current);
   }
 
-  const adjustmentRows = await db
-    .select()
+  const periodAdjustmentRows = await db
+    .select({
+      employeeId: payrollAdjustments.employeeId,
+      adjustmentType: payrollAdjustments.adjustmentType,
+      amount: payrollAdjustments.amount,
+      reason: payrollAdjustments.reason,
+    })
     .from(payrollAdjustments)
     .where(eq(payrollAdjustments.periodId, parsed.data.periodId));
+  const recurringAdjustmentRows = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: recurringPayrollAdjustments.employeeId,
+          adjustmentType: recurringPayrollAdjustments.adjustmentType,
+          amount: recurringPayrollAdjustments.amount,
+          reason: recurringPayrollAdjustments.reason,
+        })
+        .from(recurringPayrollAdjustments)
+        .where(
+          and(
+            inArray(recurringPayrollAdjustments.employeeId, employeeIds),
+            eq(recurringPayrollAdjustments.isActive, true)
+          )
+        )
+    : [];
+  const adjustmentRows = [
+    ...periodAdjustmentRows.filter((row) => !isRecurringAdjustmentReason(row.reason)),
+    ...recurringAdjustmentRows,
+  ];
   const adjustmentsByEmployee = new Map<string, typeof adjustmentRows>();
   for (const row of adjustmentRows) {
     const current = adjustmentsByEmployee.get(row.employeeId) ?? [];
@@ -1160,6 +1380,10 @@ export async function generatePayrollPreview(input: unknown) {
   }
 
   // ── Bulk-fetch history snapshots (replaces ~900 per-employee queries) ──────
+  // Gunakan tanggal hari ini (saat preview di-generate) agar mutasi yang baru
+  // masuk ke snapshot — bukan periodStartDate yang bisa melewatkan mutasi mid-period.
+  const snapshotAsOfDate = normalizeDate(new Date());
+
   const divHistoryRows = employeeIds.length > 0
     ? await db
         .select({
@@ -1172,7 +1396,7 @@ export async function generatePayrollPreview(input: unknown) {
         .leftJoin(divisions, eq(employeeDivisionHistories.newDivisionId, divisions.id))
         .where(and(
           inArray(employeeDivisionHistories.employeeId, employeeIds),
-          lte(employeeDivisionHistories.effectiveDate, periodStartDate)
+          lte(employeeDivisionHistories.effectiveDate, snapshotAsOfDate)
         ))
     : [];
   const latestDivByEmployee = new Map<string, { divisionId: string | null; divisionName: string | null; effectiveDate: Date }>();
@@ -1195,7 +1419,7 @@ export async function generatePayrollPreview(input: unknown) {
         .leftJoin(positions, eq(employeePositionHistories.newPositionId, positions.id))
         .where(and(
           inArray(employeePositionHistories.employeeId, employeeIds),
-          lte(employeePositionHistories.effectiveDate, periodStartDate)
+          lte(employeePositionHistories.effectiveDate, snapshotAsOfDate)
         ))
     : [];
   const latestPosByEmployee = new Map<string, { positionId: string | null; positionName: string | null; effectiveDate: Date }>();
@@ -1218,7 +1442,7 @@ export async function generatePayrollPreview(input: unknown) {
         .leftJoin(grades, eq(employeeGradeHistories.newGradeId, grades.id))
         .where(and(
           inArray(employeeGradeHistories.employeeId, employeeIds),
-          lte(employeeGradeHistories.effectiveDate, periodStartDate)
+          lte(employeeGradeHistories.effectiveDate, snapshotAsOfDate)
         ))
     : [];
   const latestGradeByEmployee = new Map<string, { gradeId: string | null; gradeName: string | null; effectiveDate: Date }>();
@@ -1368,13 +1592,19 @@ export async function generatePayrollPreview(input: unknown) {
     );
 
     const hasApprovedAbsence = approvedUnpaidLeaveDays + approvedPaidLeaveDays > 0;
-    const teamworkPerformancePercent =
-      performance && toNumber(performance.totalTargetPoints) > 0
-        ? (toNumber(performance.totalApprovedPoints) / toNumber(performance.totalTargetPoints)) * 100
-        : 0;
+    // Gunakan performancePercent tersimpan langsung — tidak dihitung ulang dari
+    // totalApprovedPoints/totalTargetPoints agar input HRD tetap valid meski targetDays = 0.
+    const teamworkPerformancePercent = performance
+      ? toNumber(performance.performancePercent)
+      : 0;
+    // MANAGERIAL: utamakan managerialKpiSummaries (validated finance), fallback ke
+    // monthly_point_performances (input HRD) agar tidak 0 ketika period dibuat setelah input.
+    const managerialPerformancePercent = managerialKpi
+      ? toNumber(managerialKpi.performancePercent)
+      : toNumber(performance?.performancePercent);
     const performancePercent =
       employee.employeeGroup === "MANAGERIAL"
-        ? toNumber(managerialKpi?.performancePercent)
+        ? managerialPerformancePercent
         : teamworkPerformancePercent;
     const performanceBonusByGrade = resolveTieredBonusAmount(
       performancePercent,
@@ -1405,11 +1635,12 @@ export async function generatePayrollPreview(input: unknown) {
     const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount)
       || teamBonusByGrade;
     const fulltimeEligible = !hasApprovedAbsence;
-    const disciplineEligible = fulltimeEligible && !hasLateIncident && performancePercent >= 80;
+    // Bonus Disiplin berbasis kehadiran/absensi saja — tidak bergantung pada performancePercent
+    const disciplineEligible = fulltimeEligible && !hasLateIncident;
 
     if (employee.employeeGroup === "MANAGERIAL" && !managerialKpi) {
       missingManagerialKpi.push(employee.fullName);
-      continue;
+      // Lanjutkan komputasi dengan performancePercent = 0 (bonus kinerja/disiplin/tim = 0)
     }
 
     const payrollCalc = employee.employeeGroup === "MANAGERIAL"
@@ -1549,12 +1780,6 @@ export async function generatePayrollPreview(input: unknown) {
     });
   }
 
-  if (missingManagerialKpi.length > 0) {
-    return {
-      error: `KPI managerial belum lengkap untuk: ${missingManagerialKpi.slice(0, 5).join(", ")}${missingManagerialKpi.length > 5 ? " dan lainnya" : ""}.`,
-    };
-  }
-
   await db.transaction(async (tx) => {
     await tx.delete(payrollResults).where(eq(payrollResults.periodId, parsed.data.periodId));
     await tx.delete(payrollEmployeeSnapshots).where(eq(payrollEmployeeSnapshots.periodId, parsed.data.periodId));
@@ -1597,9 +1822,17 @@ export async function generatePayrollPreview(input: unknown) {
     });
   });
 
-  revalidatePath("/payroll");
-  revalidatePath("/finance");
-  return { success: true, generatedEmployees: computedRows.length };
+  if (options.revalidate !== false) {
+    revalidatePath("/payroll");
+    revalidatePath("/finance");
+  }
+  return {
+    success: true,
+    generatedEmployees: computedRows.length,
+    warning: missingManagerialKpi.length > 0
+      ? `KPI belum diisi untuk: ${missingManagerialKpi.slice(0, 5).join(", ")}${missingManagerialKpi.length > 5 ? ` dan ${missingManagerialKpi.length - 5} lainnya` : ""}. Bonus kinerja/disiplin/tim bernilai 0 sampai KPI dilengkapi.`
+      : undefined,
+  };
 }
 
 export async function finalizePayroll(input: unknown) {
@@ -1848,6 +2081,73 @@ export async function lockPayrollPeriod(input: unknown) {
       notes: `Payroll ${period.periodCode} dikunci.`,
       payload: { nextStatus: transition.nextStatus },
     });
+  });
+
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
+  return { success: true };
+}
+
+export async function deletePayrollPeriod(input: unknown) {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  if (role !== "SUPER_ADMIN") {
+    return { error: "Hanya SUPER_ADMIN yang dapat menghapus periode payroll." };
+  }
+
+  const parsed = payrollPeriodActionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Periode payroll tidak valid." };
+  }
+
+  const [period] = await db
+    .select({
+      id: payrollPeriods.id,
+      periodCode: payrollPeriods.periodCode,
+      periodStartDate: payrollPeriods.periodStartDate,
+      periodEndDate: payrollPeriods.periodEndDate,
+      status: payrollPeriods.status,
+    })
+    .from(payrollPeriods)
+    .where(eq(payrollPeriods.id, parsed.data.periodId))
+    .limit(1);
+
+  if (!period) return { error: "Periode payroll tidak ditemukan." };
+  if (period.status === "LOCKED") {
+    return { error: "Periode yang sudah dikunci (LOCKED) tidak bisa dihapus." };
+  }
+  if (!["FINALIZED", "PAID"].includes(period.status)) {
+    return { error: "Hanya periode FINALIZED atau PAID yang bisa dihapus." };
+  }
+
+  await db.transaction(async (tx) => {
+    // Buka kunci aktivitas harian yang dikunci saat finalisasi
+    await tx
+      .update(dailyActivityEntries)
+      .set({ status: "DISETUJUI_SPV", lockedAt: null, updatedAt: new Date() })
+      .where(
+        and(
+          gte(dailyActivityEntries.workDate, period.periodStartDate),
+          lte(dailyActivityEntries.workDate, period.periodEndDate),
+          eq(dailyActivityEntries.status, "DIKUNCI_PAYROLL")
+        )
+      );
+
+    // Buka kunci performa bulanan (kembali ke FINALIZED, status sebelum payroll finalisasi)
+    await tx
+      .update(monthlyPointPerformances)
+      .set({ status: "FINALIZED", updatedAt: new Date() })
+      .where(
+        and(
+          eq(monthlyPointPerformances.periodStartDate, period.periodStartDate),
+          eq(monthlyPointPerformances.periodEndDate, period.periodEndDate),
+          eq(monthlyPointPerformances.status, "LOCKED")
+        )
+      );
+
+    // Hapus periode — cascade menghapus snapshots, results, adjustments, audit_logs
+    await tx.delete(payrollPeriods).where(eq(payrollPeriods.id, parsed.data.periodId));
   });
 
   revalidatePath("/payroll");

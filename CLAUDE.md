@@ -80,7 +80,62 @@ Aturan pemetaan:
 - `JABATAN` dan `GRADE` diambil dari fallback master data aktif (default TEAMWORK)
 - Email login dibuat: `username@hris.internal`
 
+**Upsert behavior (sejak 2026-05):**
+- Jika baris Excel cocok dengan karyawan existing berdasarkan `fullName + birthDate` → UPDATE data (tidak insert baru)
+- Cocok key: `fullName.toLowerCase().trim() + "|" + birthDate.toISOString().slice(0,10)`
+- Jika upsert dan tidak ada `PASSWORD` di row → auth account **tidak** direset (skip `upsertEmployeeLogin`)
+- Jika upsert dan ada `PASSWORD` → auth account/email diperbarui
+
+**Export ↔ Import roundtrip:**
+- Export (`/employees/export.xlsx`) menyertakan kolom `USERNAME` (dari email sebelum `@`) dan `PASSWORD` (kosong)
+- File hasil export bisa langsung dipakai sebagai template import ulang
+
 Catatan performa: import 300+ baris memerlukan waktu karena setiap baris membuat transaksi DB + Supabase Auth user secara berurutan.
+
+## Admin Actions (SUPER_ADMIN only)
+
+Dua server action khusus admin di `src/server/actions/employees.ts`:
+
+**`purgeAllEmployees()`**
+- Hapus seluruh data karyawan + payroll snapshot/results (yang punya RESTRICT FK)
+- Hapus Supabase Auth accounts untuk role: `TEAMWORK`, `MANAGERIAL`, `SPV`, `KABAG`, `PAYROLL_VIEWER`
+- Auth accounts untuk `SUPER_ADMIN`, `HRD`, `FINANCE` **tidak** dihapus
+- Tidak bisa di-undo — di-trigger lewat AlertDialog konfirmasi di halaman `/employees`
+
+**`createMissingEmployeeAccounts(defaultPassword)`**
+- Buat akun Supabase Auth untuk karyawan aktif yang tidak punya `user_roles` entry
+- Email format: `namalengkap.lowercase@hris.internal`
+- Role otomatis: `MANAGERIAL` jika `employeeGroup = MANAGERIAL`, `TEAMWORK` untuk sisanya
+- SPV/KABAG perlu di-assign manual setelah sync
+- Di-trigger lewat tombol **Sync Akun** di toolbar `/employees` (SUPER_ADMIN only)
+
+## Payroll Adjustments
+
+Adjustment payroll (`payroll_adjustments`) kini pakai sistem kategori bertipe, menggantikan generic `ADDITION/DEDUCTION`. Kategori disimpan di field `reason` dengan encoding `CATEGORY::description` atau `CICILAN::tenor::description`.
+
+**Kategori dan business rules:**
+
+| Kategori | Arah | Karyawan | Rule |
+|---|---|---|---|
+| `MANUAL_ADDITION` | Penambah | Semua | Bebas, perlu keterangan |
+| `BPJS` | Pengurang | Semua | Recurring bulanan, tidak ada batas |
+| `KASBON` | Pengurang | Semua | Maks **Rp 300.000** per karyawan per periode |
+| `GANTI_RUGI_PERSONAL` | Pengurang | Semua | **Sekali** per karyawan per periode |
+| `GANTI_RUGI_TEAM` | Pengurang | **MANAGERIAL only** | **Sekali** per karyawan per periode |
+| `CICILAN` | Pengurang | Tertentu | Perlu sisa tenor (bulan); recurring manual |
+
+Business rules di-enforce di `addPayrollAdjustment` (server action). Field `adjustmentType` di DB tetap `ADDITION`/`DEDUCTION`; kategori dibaca dari prefix `reason`.
+
+**Encoding reason:**
+```
+BPJS
+BPJS::catatan
+KASBON::catatan
+GANTI_RUGI_PERSONAL::deskripsi
+GANTI_RUGI_TEAM::deskripsi
+CICILAN::12::nama barang
+MANUAL_ADDITION::alasan
+```
 
 ## Database & Migrations
 
@@ -105,6 +160,20 @@ Body: { "query": "ALTER TABLE ..." }
 ```
 
 Jangan gunakan `drizzle-kit migrate` langsung dari localhost karena `postgres` bukan owner tabel.
+
+## Payroll Preview Performance
+
+`generatePayrollPreview` di `src/server/actions/payroll.ts` dioptimasi (sejak 2026-05) dari N+1 queries menjadi bulk fetch + batch insert:
+
+- **Sebelum:** ~1.800 queries untuk 303 karyawan (~1 menit)
+- **Sesudah:** ~14 queries total (~2–5 detik)
+
+Pola:
+1. Bulk fetch semua data (salary configs, performance, tickets, incidents, adjustments, division/position/grade histories, schedule assignments + work schedule days) dalam satu pass menggunakan `inArray(employeeId, allIds)`
+2. Build `Map<employeeId, data>` di JS untuk lookup O(1) per karyawan
+3. Batch insert snapshots → ambil `returning({ id, employeeId })` → build Map → batch insert results
+
+Jangan kembali ke pola per-karyawan `await` di dalam loop.
 
 ## Critical Rules
 

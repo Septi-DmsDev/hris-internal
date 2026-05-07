@@ -213,3 +213,24 @@ Payroll finalization:
 - harus idempotent;
 - tidak boleh mengurangi cicilan/tenor berkali-kali akibat finalisasi ulang;
 - setelah paid/locked, koreksi masuk adjustment periode berikutnya.
+
+## Variable Penambah Gaji
+
+| Kategori | Berlaku untuk | Aturan |
+|---|---|---|
+| Penambahan Manual | Semua karyawan | Bebas, keterangan wajib diisi |
+
+## Variable Pengurang Gaji
+
+| Kategori | Berlaku untuk | Aturan |
+|---|---|---|
+| BPJS | Semua karyawan | Recurring setiap bulan selama masih aktif bekerja |
+| Kasbon | Semua karyawan | Maksimum **Rp 300.000** per karyawan per periode payroll |
+| Ganti Rugi Personal | Semua karyawan (MANAGERIAL & TEAMWORK) | Satu kali per karyawan per periode; tidak bisa duplikat |
+| Ganti Rugi Team | **Karyawan MANAGERIAL only** | Satu kali per karyawan per periode; tidak bisa duplikat |
+| Cicilan | Karyawan tertentu yang punya pinjaman | Recurring setiap bulan; wajib isi sisa tenor (bulan); tenor dicatat bukan otomatis didekrementasi — finance input manual tiap periode sampai tenor habis |
+
+Catatan implementasi:
+- Business rules di-enforce server-side di `addPayrollAdjustment` (`src/server/actions/payroll.ts`)
+- Kategori disimpan sebagai prefix di field `reason` (tidak ada migrasi skema baru — `adjustment_type` tetap `ADDITION`/`DEDUCTION`)
+- Format: `KASBON`, `BPJS::catatan`, `GANTI_RUGI_PERSONAL::deskripsi`, `GANTI_RUGI_TEAM::deskripsi`, `CICILAN::12::deskripsi`, `MANUAL_ADDITION::alasan`

@@ -168,6 +168,22 @@ Untuk karyawan dengan masa kerja > 1 tahun dan punya tunjangan tahunan:
 - izin berikutnya user memilih cuti tahunan atau izin biasa;
 - cuti berkuota tidak memotong gaji pokok, tetapi tetap menggugurkan bonus fulltime.
 
+## Absensi Kehadiran dan Disiplin
+
+Absensi saat ini diinput manual oleh `SUPER_ADMIN` atau `HRD` lewat `/absensi`. Data ini adalah sumber sementara untuk menguji koneksi engine karyawan-HRD-finance sebelum integrasi mesin ceklok/fingerprint.
+
+Sumber data:
+- `MANUAL` untuk input HRD saat ini;
+- `FINGERPRINT_ADMS` disiapkan untuk integrasi ADMS webserver API di tahap berikutnya.
+
+Aturan payroll:
+- jika tidak ada data absensi pada periode payroll, bonus fulltime dan bonus disiplin dianggap tidak eligible sehingga dibayar `0`;
+- bonus fulltime hanya eligible jika seluruh hari kerja terjadwal pada periode memiliki record kerja dan semuanya `HADIR`;
+- `ALPA`, `IZIN`, `SAKIT`, atau `CUTI` menggugurkan bonus fulltime dan bonus disiplin;
+- `TELAT` tidak menggugurkan fulltime, tetapi menggugurkan bonus disiplin;
+- ticket izin/sakit/cuti yang approved tetap menggugurkan fulltime meskipun gaji pokoknya tidak selalu dipotong;
+- record `OFF` tidak dihitung sebagai hari kerja.
+
 ## Payroll
 
 Gaji pokok reguler default:
@@ -197,19 +213,16 @@ Gaji Pokok Dibayar
 ```
 
 Bonus fulltime:
-- hanya jika benar-benar hadir penuh;
-- izin/sakit/cuti/alpa membuat bonus fulltime gugur;
-- cuti berbayar tetap menggugurkan fulltime.
+- hanya jika data absensi periode lengkap dan seluruh hari kerja terjadwal berstatus `HADIR`;
+- jika data absensi belum ada, bonus fulltime dibayar `0`;
+- izin/sakit/cuti/alpa dan ticket cuti berbayar tetap menggugurkan fulltime.
 
 Bonus disiplin:
-- tidak telat;
-- tidak alpa;
-- performa minimal 80%;
-- di bawah 80% tidak dapat bonus disiplin.
-
-Catatan implementasi sementara:
-- payroll preview belum membayar bonus disiplin otomatis dari input persentase manual atau tier grade;
-- bonus disiplin baru boleh diaktifkan setelah logika absensi/telat/alpa final tersedia sebagai sumber eligibility.
+- mengikuti data absensi, bukan input persentase manual;
+- harus eligible fulltime dan tidak ada `TELAT`;
+- performa payroll minimal 80%;
+- incident `TELAT` aktif pada periode juga menggugurkan bonus disiplin;
+- jika data absensi belum ada, bonus disiplin dibayar `0`.
 
 SP penalty:
 - SP1 mengurangi performa payroll sebesar 10 poin persentase absolut;

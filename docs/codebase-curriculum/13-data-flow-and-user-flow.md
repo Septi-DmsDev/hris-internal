@@ -221,6 +221,17 @@ ticket dibuat
 → THP dan eligibility bonus terpengaruh
 ```
 
+### Alur Absensi ke Payroll
+
+```text
+HRD/Admin input absensi manual di /absensi
+→ record masuk employee_attendance_records source MANUAL
+→ payroll preview membaca record dalam periode 26-25
+→ tanpa data absensi, bonus fulltime dan disiplin bernilai 0
+→ jika semua hari kerja HADIR, fulltime eligible
+→ jika semua hari kerja HADIR, tidak TELAT, dan performa minimal 80%, discipline eligible
+```
+
 ### Alur Incident ke Payroll
 
 ```text

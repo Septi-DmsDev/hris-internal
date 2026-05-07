@@ -4,7 +4,7 @@ Use this file as the root instruction for Codex or any coding agent working in t
 
 ## Project Identity
 
-This is an internal HRIS/HRD Dashboard built with Next.js App Router, TypeScript, Drizzle ORM, Supabase Auth, and PostgreSQL. The codebase currently covers employee profiling, master data, role access, performance points, employee review, ticketing for leave/sick/permission, training evaluation, payroll lifecycle, finance summary, payslip export, and personal self-service pages.
+This is an internal HRIS/HRD Dashboard built with Next.js App Router, TypeScript, Drizzle ORM, Supabase Auth, and PostgreSQL. The codebase currently covers employee profiling, master data, role access, performance points, manual attendance, employee review, ticketing for leave/sick/permission, training evaluation, payroll lifecycle, finance summary, payslip export, and personal self-service pages.
 
 ## Required Reading
 
@@ -42,7 +42,7 @@ Primary boundaries:
 - permissions: `src/lib/permissions/index.ts`
 - validations: `src/lib/validations/*`
 - actions: `src/server/actions/*`
-- engines: `src/server/point-engine/*`, `src/server/payroll-engine/*`, `src/server/ticketing-engine/*`, `src/server/review-engine/*`
+- engines: `src/server/point-engine/*`, `src/server/attendance-engine/*`, `src/server/payroll-engine/*`, `src/server/ticketing-engine/*`, `src/server/review-engine/*`
 - database schema: `src/lib/db/schema/*`
 - migrations: `supabase/migrations/*`
 
@@ -84,6 +84,7 @@ Primary boundaries:
 - Performance: `/performance`, `/performance/training`
 - SPV/KABAG queue helpers and personal TW performance helpers in `src/server/actions/performance.ts`
 - Ticketing: `/tickets`
+- Manual attendance: `/absensi`
 - Review and incident: `/reviews`
 - Scheduling views: `/schedule`, `/scheduler`
 - Payroll and finance: `/payroll`, `/payroll/[periodId]/[employeeId]`, PDF payslip, XLSX export, `/finance`

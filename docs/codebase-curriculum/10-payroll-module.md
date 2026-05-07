@@ -9,6 +9,7 @@ File ditemukan:
 - `src/lib/db/schema/payroll.ts`
 - `src/lib/validations/payroll.ts`
 - `src/server/actions/payroll.ts`
+- `src/server/attendance-engine/resolve-attendance-payroll-eligibility.ts`
 - `src/server/payroll-engine/*`
 - `src/app/(dashboard)/payroll/*`
 - `src/app/(dashboard)/finance/*`
@@ -18,7 +19,7 @@ Gap yang perlu dibangun:
 - overtime dan uang harian masih ada di schema/UI tetapi belum dihitung di preview,
 - rule “koreksi setelah paid masuk periode berikutnya” belum dibantu alur UI khusus,
 - belum ada scope payroll per divisi,
-- belum terlihat snapshot khusus review/attendance selain ticket/incident/performance.
+- attendance manual sudah dibaca preview untuk eligibility fulltime/disiplin, tetapi integrasi fingerprint/ADMS belum ada.
 
 ## 1. Tujuan Modul
 
@@ -28,6 +29,7 @@ Modul payroll mengubah data final dari modul lain menjadi hasil gaji yang bisa d
 - salary config per karyawan,
 - KPI managerial,
 - auto-preview payroll saat periode dibuka,
+- eligibility bonus fulltime/disiplin dari rekap absensi manual,
 - snapshot data employee,
 - finalisasi,
 - status paid,
@@ -45,11 +47,12 @@ Modul payroll mengubah data final dari modul lain menjadi hasil gaji yang bisa d
 | `src/lib/db/schema/payroll.ts` | semua tabel payroll | payroll, finance | schema utama |
 | `src/lib/validations/payroll.ts` | validasi periode, adjustment, KPI, salary config | action payroll | pakai Zod |
 | `src/server/actions/payroll.ts` | workspace dan mutation payroll | UI payroll, route export, finance | action paling kompleks |
+| `src/server/attendance-engine/resolve-attendance-payroll-eligibility.ts` | rekap eligibility fulltime/disiplin dari absensi | preview payroll | pure |
 | `src/server/payroll-engine/resolve-payroll-period.ts` | resolver anchor `YYYY-MM` ke periode 26-25 | create period | pure |
 | `src/server/payroll-engine/resolve-bonus-level.ts` | tabel level bonus | calculator payroll | pure |
 | `src/server/payroll-engine/calculate-teamwork-payroll.ts` | payroll TEAMWORK | preview payroll | pure |
 | `src/server/payroll-engine/calculate-managerial-payroll.ts` | payroll MANAGERIAL | preview payroll | pure |
-| `src/server/payroll-engine/resolve-discipline-bonus.ts` | gate sementara bonus disiplin | preview payroll | pure |
+| `src/server/payroll-engine/resolve-discipline-bonus.ts` | gate payout bonus disiplin dari eligibility absensi | preview payroll | pure |
 | `src/server/payroll-engine/resolve-sp-performance-penalty.ts` | pengurang performa absolut SP1/SP2 | preview payroll | pure |
 | `src/server/payroll-engine/resolve-payroll-status-transition.ts` | aturan paid/lock | mark paid, lock | pure |
 | `src/server/payroll-engine/build-payroll-export-rows.ts` | baris export Excel | route export | pure |
@@ -90,6 +93,7 @@ Auto-preview payroll
 → ambil employee aktif dengan payrollStatus terkait
 → ambil snapshot divisi/jabatan/grade per awal periode
 → hitung scheduledWorkDays
+→ ambil employeeAttendanceRecords dalam periode
 → ambil monthly performance atau managerial KPI
 → ambil ticket approved, incident aktif, adjustment periode, dan recurring adjustment aktif
 → hitung payroll per employee dengan engine
@@ -164,7 +168,9 @@ Logika penting:
   - membaca ticket approved hanya dari status `AUTO_APPROVED`, `APPROVED_SPV`, `APPROVED_HRD`,
   - membaca incident aktif dalam periode,
   - menghitung SP penalty dari incident type `SP1` dan `SP2` sebagai pengurang performa absolut sebelum tier bonus dipilih,
-  - tidak membayar bonus disiplin otomatis dari input persentase/manual KPI sampai rule absensi/telat/alpa diaktifkan,
+  - membaca `employeeAttendanceRecords` periode untuk menentukan bonus fulltime dan bonus disiplin,
+  - tanpa data absensi periode, bonus fulltime dan bonus disiplin dibayar `0`,
+  - bonus disiplin tidak dipicu oleh input persentase/manual KPI; eligibility-nya mengikuti absensi dan incident telat,
   - menyatukan adjustment periode dan recurring adjustment aktif.
 - `BPJS` dan `TRANSPORT` disimpan di `recurring_payroll_adjustments`; adjustment lain tetap period-specific di `payroll_adjustments`.
 - page `/payroll` memanggil auto-preview untuk periode yang belum `FINALIZED/PAID/LOCKED`, sehingga tabel payroll langsung terisi tanpa tombol manual `Generate Preview`.
@@ -264,7 +270,9 @@ Catatan:
   - reguler `Rp1.200.000`
 - bonus level memakai persentase raw, bukan persentase yang dibulatkan di UI.
 - bonus kinerja membayar nominal tier 80/90/100 secara langsung sesuai rentang performa; nominal tersebut tidak dikali lagi dengan persentase tier.
-- bonus disiplin sementara tidak otomatis dibayar dari persentase performa/manual KPI sampai rule absensi siap.
+- bonus fulltime dan bonus disiplin default `0` jika data absensi periode belum ada.
+- bonus fulltime butuh semua hari kerja terjadwal tercatat `HADIR`; ticket approved tetap menggugurkan fulltime.
+- bonus disiplin butuh performa payroll minimal 80%, eligible fulltime, tidak ada `TELAT` di absensi, dan tidak ada incident `TELAT` aktif.
 - unpaid leave memotong gaji pokok dibayar.
 - SP penalty mengurangi performa payroll secara absolut: SP1 -10 poin, SP2 -20 poin; nominal bonus tidak dikalikan multiplier SP.
 - finalisasi mengunci monthly performance dan activity yang relevan.
@@ -291,6 +299,7 @@ Catatan:
 | `work_schedule_days` | ya | tidak | scheduled work days |
 | `monthly_point_performances` | ya | di-lock | sumber performa TEAMWORK |
 | `attendance_tickets` | ya | tidak | unpaid/paid leave days |
+| `employee_attendance_records` | ya | tidak | eligibility bonus fulltime dan disiplin |
 | `incident_logs` | ya | tidak | potongan dan SP penalty |
 | `daily_activity_entries` | ya | di-lock saat finalize | mengunci aktivitas yang sudah masuk payroll |
 | `daily_activity_approval_logs` | ya | ya | log `LOCK_PAYROLL` |
@@ -299,6 +308,7 @@ Catatan:
 
 - employee yang baru mulai setelah akhir periode tidak ikut preview.
 - MANAGERIAL tanpa KPI validated akan menggagalkan auto-preview/generate preview.
+- employee tanpa data absensi periode tetap muncul di preview, tetapi bonus fulltime dan disiplin bernilai `0`.
 - preview periode `PAID` atau `LOCKED` tidak bisa digenerate ulang.
 - auto-preview tidak berjalan untuk periode `FINALIZED`, `PAID`, atau `LOCKED`.
 - finalize tanpa preview akan ditolak.
@@ -308,6 +318,7 @@ Catatan:
 
 - `dailyAllowanceAmount` dan `overtimeRateAmount` sudah ada di salary config, tetapi preview saat ini tetap menyimpan `dailyAllowancePaid = 0` dan `overtimeAmount = 0`.
 - adjustment period-specific dan recurring adjustment adalah sumber penambah/pengurang manual.
+- absensi manual saat ini adalah sumber payroll untuk bonus fulltime/disiplin; integrasi fingerprint/ADMS akan menulis ke tabel yang sama dengan source berbeda.
 - payroll saat ini belum menerapkan scope divisi; aksesnya global sesuai role payroll.
 - rule “jangan hitung payroll di browser” dipatuhi: semua kalkulasi ada di server action/engine.
 
@@ -317,6 +328,7 @@ Catatan:
 Finance membuat periode 2026-04
 → resolvePayrollPeriod() menghasilkan 2026-03-26 s.d. 2026-04-25
 → HRD mengisi salary config dan KPI managerial
+→ HRD mengisi absensi manual periode terkait
 → Finance membuka `/payroll`; sistem auto-preview server-side
 → sistem membuat snapshot employee dan payroll result
 → HRD review hasil, bila perlu tambah adjustment

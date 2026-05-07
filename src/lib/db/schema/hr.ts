@@ -1,13 +1,16 @@
 import {
   boolean,
   date,
+  index,
   integer,
   jsonb,
   numeric,
   pgEnum,
   pgTable,
   text,
+  time,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -88,6 +91,50 @@ export const attendanceTicketAuditLogs = pgTable("attendance_ticket_audit_logs",
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Attendance Records
+
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "HADIR",
+  "ALPA",
+  "IZIN",
+  "SAKIT",
+  "CUTI",
+  "OFF",
+]);
+
+export const attendancePunctualityStatusEnum = pgEnum("attendance_punctuality_status", [
+  "TEPAT_WAKTU",
+  "TELAT",
+]);
+
+export const attendanceSourceEnum = pgEnum("attendance_source", [
+  "MANUAL",
+  "FINGERPRINT_ADMS",
+]);
+
+export const employeeAttendanceRecords = pgTable("employee_attendance_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  attendanceDate: date("attendance_date", { mode: "date" }).notNull(),
+  attendanceStatus: attendanceStatusEnum("attendance_status").notNull(),
+  checkInTime: time("check_in_time"),
+  checkOutTime: time("check_out_time"),
+  punctualityStatus: attendancePunctualityStatusEnum("punctuality_status"),
+  source: attendanceSourceEnum("source").notNull().default("MANUAL"),
+  externalDeviceId: varchar("external_device_id", { length: 120 }),
+  externalUserCode: varchar("external_user_code", { length: 120 }),
+  rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>(),
+  syncedAt: timestamp("synced_at", { withTimezone: true }),
+  recordedByUserId: uuid("recorded_by_user_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("idx_employee_attendance_records_date").on(table.attendanceDate),
+  index("idx_employee_attendance_records_source").on(table.source),
+  uniqueIndex("employee_attendance_employee_date_uidx").on(table.employeeId, table.attendanceDate),
+]);
 
 // ─── Leave Quota ──────────────────────────────────────────────────────────────
 
@@ -177,6 +224,8 @@ export type AttendanceTicket = typeof attendanceTickets.$inferSelect;
 export type NewAttendanceTicket = typeof attendanceTickets.$inferInsert;
 export type AttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferSelect;
 export type NewAttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferInsert;
+export type EmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferSelect;
+export type NewEmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferInsert;
 export type LeaveQuota = typeof leaveQuotas.$inferSelect;
 export type NewLeaveQuota = typeof leaveQuotas.$inferInsert;
 export type EmployeeReview = typeof employeeReviews.$inferSelect;

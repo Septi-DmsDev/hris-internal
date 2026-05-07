@@ -39,6 +39,7 @@ Fungsi bisnis yang sudah muncul di code:
 - generate performa bulanan;
 - input massal persentase performa managerial per periode oleh HRD/SUPER_ADMIN;
 - ticketing izin/sakit/cuti dan leave quota;
+- input manual absensi untuk bonus fulltime/disiplin payroll;
 - review karyawan dan incident log;
 - evaluasi training;
 - payroll period, salary config, grade compensation, KPI managerial, preview, finalisasi, paid, lock;
@@ -87,7 +88,7 @@ Master Data
 Employee Profiling
   -> Performance Point / Ticketing / Review / Incident / Training
 
-Performance + Ticketing + Review + KPI + Adjustment
+Performance + Attendance + Ticketing + Review + KPI + Adjustment
   -> Payroll Snapshot
   -> Payroll Result
   -> Payslip + Export + Finance Dashboard
@@ -106,6 +107,7 @@ Employee Link
 | Employee profiling | ada | create, update, delete, histori, detail page |
 | Self-service | ada | `/me`, `/me/profile`, `/settings`, `/schedule` |
 | Performance point | ada, perlu hardening | self-service TEAMWORK ada; input massal managerial ada; deadline H+1/H+2 masih perlu enforcement lengkap |
+| Attendance | ada, manual | `/absensi`, dipakai payroll untuk fulltime/disiplin; integrasi fingerprint/ADMS belum ada |
 | Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
 | Review & incident | ada | review score 5 aspek, validate review, create incident |
 | Training evaluation | ada, gap bisnis | keputusan lulus/gagal ada; rule efektif periode payroll berikutnya belum penuh |

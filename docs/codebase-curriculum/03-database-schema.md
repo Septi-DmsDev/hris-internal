@@ -131,6 +131,9 @@ Menjelaskan semua schema Drizzle yang benar-benar ada di repo:
 | `ticket_type` | `CUTI`, `SAKIT`, `IZIN`, `EMERGENCY`, `SETENGAH_HARI` |
 | `ticket_status` | `DRAFT`, `SUBMITTED`, `AUTO_APPROVED`, `AUTO_REJECTED`, `NEED_REVIEW`, `APPROVED_SPV`, `APPROVED_HRD`, `REJECTED`, `CANCELLED`, `LOCKED` |
 | `ticket_payroll_impact` | `UNPAID`, `PAID_QUOTA_MONTHLY`, `PAID_QUOTA_ANNUAL` |
+| `attendance_status` | `HADIR`, `ALPA`, `IZIN`, `SAKIT`, `CUTI`, `OFF` |
+| `attendance_punctuality_status` | `TEPAT_WAKTU`, `TELAT` |
+| `attendance_source` | `MANUAL`, `FINGERPRINT_ADMS` |
 | `review_status` | `DRAFT`, `SUBMITTED`, `VALIDATED`, `LOCKED` |
 | `incident_type` | `KOMPLAIN`, `MISS_PROSES`, `TELAT`, `AREA_KOTOR`, `PELANGGARAN`, `SP1`, `SP2`, `PENGHARGAAN` |
 | `incident_impact` | `REVIEW_ONLY`, `PAYROLL_POTENTIAL`, `NONE` |
@@ -140,6 +143,7 @@ Menjelaskan semua schema Drizzle yang benar-benar ada di repo:
 | Tabel | Kolom penting | Fungsi bisnis | Modul yang memakai |
 |---|---|---|---|
 | `attendance_tickets` | `employee_id`, `ticket_type`, `start_date`, `end_date`, `days_count`, `status`, `payroll_impact`, `approved_by_user_id`, `rejection_reason`, `created_by_user_id` | tiket izin/sakit/cuti | tickets, dashboard, payroll |
+| `employee_attendance_records` | `employee_id`, `attendance_date`, `attendance_status`, `check_in_time`, `check_out_time`, `punctuality_status`, `source` | rekap kehadiran manual/fingerprint | absensi, payroll |
 | `leave_quotas` | `employee_id`, `year`, `monthly_quota_total/used`, `annual_quota_total/used` | kuota paid leave | tickets, payroll effect |
 | `employee_reviews` | skor 5 aspek, `total_score`, `category`, `status`, `validated_by_user_id` | review kualitas kerja | reviews, dashboard |
 | `incident_logs` | `incident_type`, `impact`, `payroll_deduction`, `recorded_by_role`, `is_active` | kejadian yang bisa berdampak ke review/payroll | reviews, dashboard, payroll |
@@ -189,6 +193,7 @@ Menjelaskan semua schema Drizzle yang benar-benar ada di repo:
 | `employee_schedule_assignments` + `work_schedule_days` | menentukan hari target dan scheduled work day |
 | `monthly_point_performances` | sumber training, dashboard, payroll TEAMWORK |
 | `attendance_tickets` | memengaruhi target poin dan payroll impact |
+| `employee_attendance_records` | memengaruhi eligibility bonus fulltime dan disiplin |
 | `incident_logs` | memengaruhi review summary dan payroll deduction/SP penalty |
 | `payroll_results` | sumber finance dashboard, detail payroll, export, payslip |
 

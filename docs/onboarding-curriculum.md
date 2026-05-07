@@ -69,6 +69,7 @@ Rule penting:
 | `src/app/(dashboard)/master/*` | Master branch, division, position, grade, work schedule, shift. |
 | `src/app/(dashboard)/performance/*` | Performance point dan training evaluation. |
 | `src/app/(dashboard)/tickets/*` | Ticketing izin/sakit/cuti. |
+| `src/app/(dashboard)/absensi/*` | Input manual absensi kehadiran dan kedisiplinan. |
 | `src/app/(dashboard)/reviews/*` | Review dan incident. |
 | `src/app/(dashboard)/payroll/*` | Payroll workspace, detail, PDF payslip, export XLSX. |
 | `src/app/(dashboard)/finance/*` | Finance summary dari payroll result. |
@@ -97,6 +98,7 @@ Rule penting:
 |---|---|
 | `src/server/actions/*` | Boundary query/mutation yang dipanggil UI. |
 | `src/server/point-engine/*` | Parser workbook, target days, monthly performance. |
+| `src/server/attendance-engine/*` | Helper eligibility absensi untuk payroll. |
 | `src/server/payroll-engine/*` | Payroll period, bonus level, payroll calculators, payslip, export, summary. |
 | `src/server/ticketing-engine/*` | Helper eligibility leave quota. |
 | `src/server/review-engine/*` | Helper reviewer employee link. |
@@ -143,6 +145,7 @@ Catatan:
 | Area | File utama |
 |---|---|
 | Ticketing | `src/server/actions/tickets.ts`, `src/server/ticketing-engine/resolve-leave-quota-eligibility.ts` |
+| Absensi | `src/server/actions/attendance.ts`, `src/server/attendance-engine/resolve-attendance-payroll-eligibility.ts` |
 | Review/incident | `src/server/actions/reviews.ts`, `src/server/review-engine/resolve-reviewer-employee-id.ts` |
 | Training | `src/server/actions/training.ts` |
 
@@ -166,6 +169,7 @@ Catatan:
 | Personal access | `src/server/actions/me.test.ts`, `src/server/actions/payroll.helpers.test.ts` |
 | Point engine | `src/server/point-engine/*.test.ts` |
 | Ticket/review helper | `src/server/ticketing-engine/*.test.ts`, `src/server/review-engine/*.test.ts` |
+| Attendance helper | `src/server/attendance-engine/*.test.ts` |
 | Payroll engine | `src/server/payroll-engine/*.test.ts` |
 
 ## 7. Cara Trace Fitur
@@ -183,7 +187,7 @@ Contoh:
 - Performance bulanan:
   `PerformanceCatalogClient.tsx -> generateMonthlyPerformance() -> countTargetDaysForPeriod() + calculateMonthlyPointPerformance() -> monthlyPointPerformances`
 - Payroll auto-preview:
-  `/payroll/page.tsx -> generatePayrollPreview() -> calculateTeamworkPayroll()/calculateManagerialPayroll() -> payrollEmployeeSnapshots + payrollResults`
+  `/payroll/page.tsx -> generatePayrollPreview() -> resolveAttendancePayrollEligibility() -> calculateTeamworkPayroll()/calculateManagerialPayroll() -> payrollEmployeeSnapshots + payrollResults`
 - Self-service:
   `/me -> getMyDashboard() -> user_roles.employee_id -> employee/payroll/performance/ticket/review summaries`
 

@@ -81,6 +81,14 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
     manualAdjustmentAmount?: number;
     scheduledWorkDays?: number;
     activeEmploymentDays?: number;
+    attendanceHasData?: boolean;
+    attendanceRecordedWorkDays?: number;
+    attendancePresentDays?: number;
+    attendanceAbsenceDays?: number;
+    attendanceLateDays?: number;
+    attendanceFulltimeEligible?: boolean;
+    attendanceDisciplineEligible?: boolean;
+    disciplinePerformanceEligible?: boolean;
     rawPerformancePercent?: number;
     adjustedPerformancePercent?: number;
     spPerformancePenaltyType?: string;
@@ -277,12 +285,34 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
               <p className="mt-1 text-sm font-medium text-slate-900">{detail.approvedPaidLeaveDays}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Data Absensi</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">
+                {breakdownMeta.attendanceHasData ? "Ada" : "Belum Ada"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Absensi Hadir</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">
+                {breakdownMeta.attendancePresentDays ?? 0} / {breakdownMeta.attendanceRecordedWorkDays ?? 0}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Telat / Absen</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">
+                {breakdownMeta.attendanceLateDays ?? 0} / {breakdownMeta.attendanceAbsenceDays ?? 0}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Fulltime Eligible</p>
               <p className="mt-1 text-sm font-medium text-slate-900">{breakdownMeta.fulltimeEligible ? "Ya" : "Tidak"}</p>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Discipline Eligible</p>
               <p className="mt-1 text-sm font-medium text-slate-900">{breakdownMeta.disciplineEligible ? "Ya" : "Tidak"}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Disiplin Min 80%</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">{breakdownMeta.disciplinePerformanceEligible ? "Ya" : "Tidak"}</p>
             </div>
           </div>
           {performance ? (

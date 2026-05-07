@@ -1,0 +1,55 @@
+import { format } from "date-fns";
+import { getAttendanceWorkspace } from "@/server/actions/attendance";
+import AttendanceClient from "./AttendanceClient";
+
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function AttendancePage({ searchParams }: PageProps) {
+  const params = (await searchParams) ?? {};
+  const selectedDate = typeof params.date === "string" ? params.date : undefined;
+  const workspace = await getAttendanceWorkspace(selectedDate);
+
+  if ("error" in workspace) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-slate-500">Akses absensi ditolak.</p>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {workspace.error}
+        </div>
+      </div>
+    );
+  }
+
+  const records = workspace.records.map((record) => ({
+    id: record.id,
+    employeeId: record.employeeId,
+    employeeName: record.employeeName ?? "-",
+    employeeCode: record.employeeCode ?? "-",
+    divisionName: record.divisionName ?? "-",
+    attendanceDate: format(record.attendanceDate, "yyyy-MM-dd"),
+    attendanceStatus: record.attendanceStatus,
+    checkInTime: record.checkInTime?.slice(0, 5) ?? "",
+    checkOutTime: record.checkOutTime?.slice(0, 5) ?? "",
+    punctualityStatus: record.punctualityStatus ?? "",
+    source: record.source,
+    notes: record.notes ?? "",
+    updatedAt: record.updatedAt ? format(record.updatedAt, "yyyy-MM-dd HH:mm") : "-",
+  }));
+
+  const employees = workspace.employees.map((employee) => ({
+    id: employee.id,
+    employeeCode: employee.employeeCode,
+    fullName: employee.fullName,
+    divisionName: employee.divisionName ?? "-",
+  }));
+
+  return (
+    <AttendanceClient
+      selectedDate={workspace.selectedDate}
+      employees={employees}
+      records={records}
+    />
+  );
+}

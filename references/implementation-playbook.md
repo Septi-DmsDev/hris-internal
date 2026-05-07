@@ -16,13 +16,13 @@ src/app/(dashboard) page/client
 -> PostgreSQL
 ```
 
-Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `performance`, `tickets`, `reviews`, `training`, `payroll`, dan route handler payroll PDF/XLSX. Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
+Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `performance`, `tickets`, `attendance`, `reviews`, `training`, `payroll`, dan route handler payroll PDF/XLSX. Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
 
 ## 1. Sebelum Coding
 
 Untuk setiap task, tentukan:
 
-1. Modul: profiling, performance, review, ticketing, payroll, atau finance.
+1. Modul: profiling, performance, attendance, review, ticketing, payroll, atau finance.
 2. Phase: 1, 2, atau 3.
 3. Role terkait: TW, SPV, HRD, Finance, Admin, Managerial.
 4. Data sumber dan data output.
@@ -63,6 +63,7 @@ Folder engine/helper aktual:
 
 ```text
 src/server/point-engine/
+src/server/attendance-engine/
 src/server/payroll-engine/
 src/server/ticketing-engine/
 src/server/review-engine/
@@ -83,6 +84,7 @@ Untuk modul poin kinerja:
 Untuk payroll:
 - level bonus memakai `resolveBonusLevel()`;
 - periode 26-25 memakai `resolvePayrollPeriod()`;
+- eligibility bonus fulltime/disiplin memakai `resolveAttendancePayrollEligibility()` dari data absensi periode;
 - kalkulasi TEAMWORK/MANAGERIAL memakai engine payroll;
 - PDF/XLSX memakai builder server-side.
 

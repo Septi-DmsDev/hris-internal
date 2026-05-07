@@ -1,6 +1,6 @@
 # HRD Dashboard - Handover Document
 
-**Tanggal update:** 2026-05-05  
+**Tanggal update:** 2026-05-07  
 **Branch aktif:** `main`  
 **Remote:** `https://github.com/Septi-DmsDev/hris-internal.git`  
 **Status saat ini:** repo sudah memiliki flow MVP lintas phase; dokumentasi utama disinkronkan ulang dengan alur code aktual pada 2026-05-04
@@ -12,6 +12,7 @@
 HRD Dashboard internal berbasis Next.js App Router untuk mengelola:
 - employee profiling dan master data
 - performance point TEAMWORK
+- manual attendance (`/absensi`)
 - training evaluation
 - ticketing izin/sakit/cuti
 - review dan incident
@@ -45,6 +46,7 @@ Catatan phase 3 saat ini:
 - payslip PDF dan export Excel sudah ada
 - personal self-service access ke slip gaji sudah ada
 - input massal persentase managerial bulanan dari `/performance` sudah ada
+- input manual absensi harian dari `/absensi` sudah ada untuk koneksi awal ke payroll
 - modul ini sudah usable, tetapi belum berarti semua hardening enterprise selesai
 
 ---
@@ -204,6 +206,15 @@ Sudah ada:
 - incident delete memakai soft-delete `isActive=false` dan tetap role/division scoped
 - reviewer auto-fill jika reviewer linked ke employee
 
+### Absensi
+Sudah ada:
+- route `/absensi` untuk `SUPER_ADMIN` dan `HRD`
+- input/update absensi manual per karyawan dan tanggal
+- status kehadiran `HADIR`, `ALPA`, `IZIN`, `SAKIT`, `CUTI`, `OFF`
+- status disiplin `TEPAT_WAKTU` / `TELAT`
+- tabel disiapkan untuk source `MANUAL` dan `FINGERPRINT_ADMS`
+- payroll preview membaca absensi periode untuk eligibility bonus fulltime/disiplin
+
 ### Payroll / Finance
 Sudah ada:
 - payroll periods
@@ -211,7 +222,8 @@ Sudah ada:
 - managerial KPI summaries
 - payroll auto-preview generation when `/payroll` opens editable periods
 - bonus kinerja payroll memakai nominal tier 80/90/100 langsung dari performa setelah SP penalty absolut; SP1 mengurangi 10 poin dan SP2 mengurangi 20 poin performa
-- bonus disiplin payroll sementara tidak dipicu oleh input persentase manual/KPI sampai rule absensi final tersedia
+- bonus fulltime dan bonus disiplin payroll default `0` bila data absensi periode belum ada
+- bonus disiplin payroll tidak dipicu oleh input persentase manual/KPI; eligibility mengikuti absensi dan incident telat
 - payroll finalize
 - mark paid
 - lock period
@@ -261,6 +273,7 @@ Fungsi utama:
 | `/performance` | Active | Activity, monthly performance, point catalog |
 | `/performance/training` | Active | Training evaluation |
 | `/tickets` | Active | Ticketing |
+| `/absensi` | Active | Input manual absensi HRD/Admin |
 | `/reviews` | Active | Review + incident |
 | `/payroll` | Active | Payroll workspace |
 | `/payroll/[periodId]/[employeeId]` | Active | Payroll detail / payslip structure |
@@ -290,6 +303,7 @@ Perubahan payroll/performance penting:
 - payroll memakai snapshot table, bukan baca live employee data saat hasil sudah dibentuk
 - performance memakai snapshot point catalog dan division target rules
 - activity approved bisa di-lock saat payroll finalized
+- `employee_attendance_records` menjadi sumber eligibility bonus fulltime/disiplin saat preview payroll
 
 ---
 
@@ -308,6 +322,13 @@ Perubahan payroll/performance penting:
 - semua izin/sakit/cuti berbasis tiket
 - approval ticket saat ini hanya oleh `HRD` dan `SUPER_ADMIN`
 - `SPV`/`KABAG` scoped read/submit, bukan approver final ticket
+
+### Absensi
+- absensi manual saat ini dipakai untuk test koneksi karyawan-HRD-finance
+- tanpa data absensi periode, bonus fulltime dan disiplin bernilai `0`
+- fulltime butuh semua hari kerja terjadwal `HADIR`
+- disiplin butuh performa minimal 80%, eligible fulltime, dan tidak ada `TELAT`
+- integrasi fingerprint/ADMS webserver API belum dibangun, tetapi schema sudah menyediakan source dan raw payload
 
 ### Review
 - review dan incident sudah scoped sesuai role
@@ -352,6 +373,8 @@ Perubahan payroll/performance penting:
 
 ### Ticketing / review
 - `src/server/actions/tickets.ts`
+- `src/server/actions/attendance.ts`
+- `src/server/attendance-engine/*`
 - `src/server/actions/reviews.ts`
 - `src/server/actions/training.ts`
 

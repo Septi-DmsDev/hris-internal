@@ -11,7 +11,7 @@ import {
   employees,
   workScheduleDays,
 } from "@/lib/db/schema/employee";
-import { attendanceTickets, incidentLogs } from "@/lib/db/schema/hr";
+import { attendanceTickets, employeeAttendanceRecords, incidentLogs } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import {
   employeeSalaryConfigs,
@@ -41,6 +41,7 @@ import {
 } from "@/lib/validations/payroll";
 import { calculateManagerialPayroll } from "@/server/payroll-engine/calculate-managerial-payroll";
 import { calculateTeamworkPayroll } from "@/server/payroll-engine/calculate-teamwork-payroll";
+import { resolveAttendancePayrollEligibility } from "@/server/attendance-engine/resolve-attendance-payroll-eligibility";
 import { resolveDisciplineBonus } from "@/server/payroll-engine/resolve-discipline-bonus";
 import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
 import { resolvePayrollStatusTransition } from "@/server/payroll-engine/resolve-payroll-status-transition";
@@ -61,7 +62,6 @@ const PAYROLL_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWE
 const PAYROLL_WRITE_ROLES: UserRole[] = ["SUPER_ADMIN", "FINANCE"];
 const APPROVED_TICKET_STATUSES = ["AUTO_APPROVED", "APPROVED_SPV", "APPROVED_HRD"] as const;
 const LOCKABLE_ACTIVITY_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD"] as const;
-const DISCIPLINE_BONUS_RULE_ENABLED = false;
 
 type PayrollReadAccess =
   | { error: string }
@@ -142,141 +142,6 @@ async function assertPayrollWriteAccess(): Promise<PayrollReadAccess> {
     return { error: "Akses payroll ditolak." };
   }
   return { roleRow, role };
-}
-
-async function resolveDivisionSnapshot(
-  employeeId: string,
-  periodStartDate: Date,
-  currentDivisionId: string | null,
-  currentDivisionName: string | null
-) {
-  const [historyRow] = await db
-    .select({
-      divisionId: employeeDivisionHistories.newDivisionId,
-      divisionName: divisions.name,
-    })
-    .from(employeeDivisionHistories)
-    .leftJoin(divisions, eq(employeeDivisionHistories.newDivisionId, divisions.id))
-    .where(
-      and(
-        eq(employeeDivisionHistories.employeeId, employeeId),
-        lte(employeeDivisionHistories.effectiveDate, periodStartDate)
-      )
-    )
-    .orderBy(desc(employeeDivisionHistories.effectiveDate))
-    .limit(1);
-
-  return {
-    divisionSnapshotId: historyRow?.divisionId ?? currentDivisionId,
-    divisionSnapshotName: historyRow?.divisionName ?? currentDivisionName ?? "UNKNOWN",
-  };
-}
-
-async function resolvePositionSnapshot(
-  employeeId: string,
-  periodStartDate: Date,
-  currentPositionId: string | null,
-  currentPositionName: string | null
-) {
-  const [historyRow] = await db
-    .select({
-      positionId: employeePositionHistories.newPositionId,
-      positionName: positions.name,
-    })
-    .from(employeePositionHistories)
-    .leftJoin(positions, eq(employeePositionHistories.newPositionId, positions.id))
-    .where(
-      and(
-        eq(employeePositionHistories.employeeId, employeeId),
-        lte(employeePositionHistories.effectiveDate, periodStartDate)
-      )
-    )
-    .orderBy(desc(employeePositionHistories.effectiveDate))
-    .limit(1);
-
-  return {
-    positionSnapshotId: historyRow?.positionId ?? currentPositionId,
-    positionSnapshotName: historyRow?.positionName ?? currentPositionName ?? "UNKNOWN",
-  };
-}
-
-async function resolveGradeSnapshot(
-  employeeId: string,
-  periodStartDate: Date,
-  currentGradeId: string | null,
-  currentGradeName: string | null
-) {
-  const [historyRow] = await db
-    .select({
-      gradeId: employeeGradeHistories.newGradeId,
-      gradeName: grades.name,
-    })
-    .from(employeeGradeHistories)
-    .leftJoin(grades, eq(employeeGradeHistories.newGradeId, grades.id))
-    .where(
-      and(
-        eq(employeeGradeHistories.employeeId, employeeId),
-        lte(employeeGradeHistories.effectiveDate, periodStartDate)
-      )
-    )
-    .orderBy(desc(employeeGradeHistories.effectiveDate))
-    .limit(1);
-
-  return {
-    gradeSnapshotId: historyRow?.gradeId ?? currentGradeId,
-    gradeSnapshotName: historyRow?.gradeName ?? currentGradeName ?? null,
-  };
-}
-
-async function resolveScheduledWorkDays(employeeId: string, periodStartDate: Date, periodEndDate: Date) {
-  const assignmentRows = await db
-    .select({
-      effectiveStartDate: employeeScheduleAssignments.effectiveStartDate,
-      effectiveEndDate: employeeScheduleAssignments.effectiveEndDate,
-      scheduleId: employeeScheduleAssignments.scheduleId,
-    })
-    .from(employeeScheduleAssignments)
-    .where(
-      and(
-        eq(employeeScheduleAssignments.employeeId, employeeId),
-        lte(employeeScheduleAssignments.effectiveStartDate, periodEndDate),
-        or(
-          gte(employeeScheduleAssignments.effectiveEndDate, periodStartDate),
-          isNull(employeeScheduleAssignments.effectiveEndDate)
-        )
-      )
-    )
-    .orderBy(asc(employeeScheduleAssignments.effectiveStartDate));
-
-  if (assignmentRows.length === 0) return 0;
-
-  const scheduleIds = [...new Set(assignmentRows.map((row) => row.scheduleId))];
-  const scheduleDayRows = await db
-    .select({
-      scheduleId: workScheduleDays.scheduleId,
-      dayOfWeek: workScheduleDays.dayOfWeek,
-      isWorkingDay: workScheduleDays.isWorkingDay,
-    })
-    .from(workScheduleDays)
-    .where(inArray(workScheduleDays.scheduleId, scheduleIds));
-
-  const workingDaysBySchedule = new Map<string, number[]>();
-  for (const row of scheduleDayRows) {
-    if (!row.isWorkingDay) continue;
-    const current = workingDaysBySchedule.get(row.scheduleId) ?? [];
-    current.push(row.dayOfWeek);
-    workingDaysBySchedule.set(row.scheduleId, current);
-  }
-
-  return countTargetDaysForPeriod({
-    periodStartDate,
-    periodEndDate,
-    assignments: assignmentRows.map((row) => ({
-      effectiveStartDate: row.effectiveStartDate,
-      effectiveEndDate: row.effectiveEndDate,
-      workingDays: workingDaysBySchedule.get(row.scheduleId) ?? [],
-    })),
-  });
 }
 
 export async function getPayrollWorkspace(selectedPeriodId?: string) {
@@ -1345,6 +1210,30 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     incidentsByEmployee.set(row.employeeId, current);
   }
 
+  const attendanceRows = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: employeeAttendanceRecords.employeeId,
+          attendanceDate: employeeAttendanceRecords.attendanceDate,
+          attendanceStatus: employeeAttendanceRecords.attendanceStatus,
+          punctualityStatus: employeeAttendanceRecords.punctualityStatus,
+        })
+        .from(employeeAttendanceRecords)
+        .where(
+          and(
+            inArray(employeeAttendanceRecords.employeeId, employeeIds),
+            gte(employeeAttendanceRecords.attendanceDate, period.periodStartDate),
+            lte(employeeAttendanceRecords.attendanceDate, period.periodEndDate)
+          )
+        )
+    : [];
+  const attendanceByEmployee = new Map<string, typeof attendanceRows>();
+  for (const row of attendanceRows) {
+    const current = attendanceByEmployee.get(row.employeeId) ?? [];
+    current.push(row);
+    attendanceByEmployee.set(row.employeeId, current);
+  }
+
   const periodAdjustmentRows = await db
     .select({
       employeeId: payrollAdjustments.employeeId,
@@ -1597,6 +1486,10 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     );
 
     const hasApprovedAbsence = approvedUnpaidLeaveDays + approvedPaidLeaveDays > 0;
+    const attendanceSummary = resolveAttendancePayrollEligibility({
+      scheduledWorkDays,
+      records: attendanceByEmployee.get(employee.id) ?? [],
+    });
     // Gunakan performancePercent tersimpan langsung — tidak dihitung ulang dari
     // totalApprovedPoints/totalTargetPoints agar input HRD tetap valid meski targetDays = 0.
     const teamworkPerformancePercent = performance
@@ -1641,14 +1534,15 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       || disciplineBonusByGrade;
     const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount)
       || teamBonusByGrade;
-    const fulltimeEligible = !hasApprovedAbsence;
+    const fulltimeEligible = attendanceSummary.fulltimeEligible && !hasApprovedAbsence;
+    const disciplinePerformanceEligible = performancePercent >= 80;
     const {
       disciplineBonusAmount,
       disciplineEligible,
     } = resolveDisciplineBonus({
-      ruleEnabled: DISCIPLINE_BONUS_RULE_ENABLED,
+      ruleEnabled: attendanceSummary.hasAttendanceData,
       configuredAmount: configuredDisciplineBonusAmount,
-      fulltimeEligible,
+      fulltimeEligible: attendanceSummary.disciplineEligible && !hasApprovedAbsence && disciplinePerformanceEligible,
       hasLateIncident,
     });
 
@@ -1778,6 +1672,14 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         breakdown: {
           fulltimeEligible,
           disciplineEligible,
+          attendanceHasData: attendanceSummary.hasAttendanceData,
+          attendanceRecordedWorkDays: attendanceSummary.recordedWorkDays,
+          attendancePresentDays: attendanceSummary.presentDays,
+          attendanceAbsenceDays: attendanceSummary.absenceDays,
+          attendanceLateDays: attendanceSummary.lateDays,
+          attendanceFulltimeEligible: attendanceSummary.fulltimeEligible,
+          attendanceDisciplineEligible: attendanceSummary.disciplineEligible,
+          disciplinePerformanceEligible,
           hasLateIncident,
           approvedUnpaidLeaveDays,
           approvedPaidLeaveDays,

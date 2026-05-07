@@ -44,6 +44,7 @@ Catatan:
 | `src/server/point-engine/calculate-monthly-point-performance.test.ts` | hitung performa bulanan |
 | `src/server/ticketing-engine/resolve-leave-quota-eligibility.test.ts` | eligibility leave quota berbasis quarter |
 | `src/server/review-engine/resolve-reviewer-employee-id.test.ts` | reviewer employee id helper |
+| `src/server/attendance-engine/resolve-attendance-payroll-eligibility.test.ts` | eligibility bonus fulltime/disiplin dari absensi |
 | `src/server/payroll-engine/resolve-payroll-period.test.ts` | periode payroll 26-25 |
 | `src/server/payroll-engine/resolve-bonus-level.test.ts` | level bonus kinerja/prestasi |
 | `src/server/payroll-engine/calculate-teamwork-payroll.test.ts` | payroll TEAMWORK |
@@ -83,6 +84,7 @@ Catatan:
 - personal dashboard access state;
 - reviewer employee id helper;
 - leave quota quarter eligibility;
+- attendance eligibility untuk bonus fulltime/disiplin;
 - employee/work schedule validation;
 - nominal payroll tidak boleh negatif;
 - KPI managerial dibatasi 0-200.

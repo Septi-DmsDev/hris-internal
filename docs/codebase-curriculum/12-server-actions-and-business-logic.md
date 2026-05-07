@@ -23,6 +23,7 @@ Dokumen ini merangkum file di `src/server/actions`, karena folder inilah boundar
 | `point-catalog.ts` | katalog poin overview, import workbook, entry CRUD | performance |
 | `performance.ts` | activity workflow, self-service TW, SPV/KABAG queue, monthly performance | performance |
 | `tickets.ts` | ticket workflow + leave quota | ticketing |
+| `attendance.ts` | workspace dan input manual absensi | absensi |
 | `reviews.ts` | review + incident | review |
 | `training.ts` | training evaluation decision | training |
 | `payroll.ts`, `payroll.helpers.ts` | payroll workspace, detail, lifecycle, helper personal access | payroll |
@@ -124,6 +125,17 @@ Helper terkait:
 
 - `resolveLeaveQuotaEligibility()` di `src/server/ticketing-engine`.
 
+### Absensi
+
+| Function | Catatan bisnis |
+|---|---|
+| `getAttendanceWorkspace` | workspace absensi harian untuk `SUPER_ADMIN` dan `HRD` |
+| `upsertAttendanceRecord` | input/update absensi manual per karyawan dan tanggal |
+
+Helper terkait:
+
+- `resolveAttendancePayrollEligibility()` di `src/server/attendance-engine`, dipakai payroll preview untuk menentukan bonus fulltime dan disiplin.
+
 ### Review, Incident, Training
 
 | Function | Catatan |
@@ -161,6 +173,7 @@ Helper terkait:
 Rule/helper terkait:
 
 - `resolvePayrollPeriod()`
+- `resolveAttendancePayrollEligibility()`
 - `resolveBonusLevel()`
 - `calculateTeamworkPayroll()`
 - `calculateManagerialPayroll()`
@@ -188,7 +201,9 @@ Business rule:
 - MANAGERIAL memakai KPI;
 - bonus kinerja memilih nominal tier 80/90/100 dari grade/salary source sesuai rentang performa, lalu engine membayar nominal itu langsung;
 - SP1/SP2 mengurangi performa payroll secara absolut sebelum tier bonus dipilih, bukan mengalikan nominal bonus;
-- bonus disiplin digate oleh `resolveDisciplineBonus()` dan saat ini tidak dipicu oleh persentase manual sampai rule absensi final tersedia;
+- bonus fulltime dan bonus disiplin membaca absensi periode; tanpa data absensi keduanya dibayar `0`;
+- bonus disiplin tetap butuh performa payroll minimal 80%, bukan sekadar input persentase manual;
+- bonus disiplin digate oleh `resolveDisciplineBonus()` dan tidak dipicu oleh persentase manual;
 - ticket, incident, adjustment, status training/reguler, dan salary config masuk kalkulasi;
 - snapshot dipakai agar histori tidak berubah.
 

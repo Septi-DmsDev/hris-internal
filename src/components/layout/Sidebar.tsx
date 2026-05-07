@@ -9,6 +9,7 @@ import {
   BarChart3,
   Ticket,
   ClipboardCheck,
+  Fingerprint,
   FileCheck,
   CreditCard,
   TrendingUp,
@@ -94,6 +95,13 @@ const NAV_ITEMS: NavItem[] = [
     href: "/scheduler",
     icon: CalendarCog,
     roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV"],
+    group: "main",
+  },
+  {
+    label: "Absensi",
+    href: "/absensi",
+    icon: Fingerprint,
+    roles: ["SUPER_ADMIN", "HRD"],
     group: "main",
   },
   {

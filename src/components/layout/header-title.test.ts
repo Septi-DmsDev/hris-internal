@@ -11,6 +11,10 @@ describe("resolveHeaderMeta", () => {
     expect(resolveHeaderMeta("/payroll/period-1/employee-1").title).toBe("Detail Payroll");
   });
 
+  it("resolves attendance routes", () => {
+    expect(resolveHeaderMeta("/absensi").title).toBe("Absensi");
+  });
+
   it("falls back to dashboard for unknown route", () => {
     expect(resolveHeaderMeta("/unknown").title).toBe("Dashboard");
   });

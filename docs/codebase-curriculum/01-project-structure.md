@@ -62,6 +62,7 @@ src/
 | `src/app/(dashboard)/performance/*` | katalog poin, aktivitas, monthly performance |
 | `src/app/(dashboard)/performance/training/*` | evaluasi training |
 | `src/app/(dashboard)/tickets/*` | ticket izin/sakit/cuti |
+| `src/app/(dashboard)/absensi/*` | input manual absensi kehadiran/disiplin |
 | `src/app/(dashboard)/reviews/*` | review + incident |
 | `src/app/(dashboard)/payroll/*` | workspace payroll, detail, export, payslip |
 | `src/app/(dashboard)/finance/*` | finance dashboard |
@@ -98,6 +99,7 @@ Route handler aktif:
 |---|---|
 | `src/server/actions/*` | server action untuk query/mutation |
 | `src/server/point-engine/*` | kalkulasi target/performa dan parser workbook |
+| `src/server/attendance-engine/*` | helper eligibility fulltime/disiplin dari absensi |
 | `src/server/payroll-engine/*` | periode, level bonus, kalkulator payroll, export, payslip, summary |
 | `src/server/ticketing-engine/*` | helper leave quota eligibility |
 | `src/server/review-engine/*` | helper reviewer employee id |
@@ -107,6 +109,7 @@ Action file aktif:
 
 ```text
 auth.ts
+attendance.ts
 branches.ts
 dashboard.ts
 divisions.ts

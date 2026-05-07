@@ -138,7 +138,7 @@ export default async function EmployeeDashboard() {
   const performanceSub = latestPerformance
     ? isTeamwork
       ? `MINGGUAN: ${latestPerformance.weeklyPercent}%  |  HARIAN: ${latestPerformance.dailyPercent}%`
-      : `PERIODE: ${latestPerformance.periodStartDate.toISOString().slice(0, 7)}`
+      : `PERIODE: ${latestPerformance.periodEndDate.toISOString().slice(0, 7)}`
     : "Belum ada data";
 
   const approvedPoints = latestPerformance

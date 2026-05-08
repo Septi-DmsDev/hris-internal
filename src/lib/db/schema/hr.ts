@@ -54,6 +54,20 @@ export const attendanceTicketAuditActionEnum = pgEnum("attendance_ticket_audit_a
   "REJECT_HRD",
 ]);
 
+export const overtimeTypeEnum = pgEnum("overtime_type", [
+  "OVERTIME_1H",
+  "OVERTIME_2H",
+  "OVERTIME_3H",
+  "LEMBUR_FULLDAY",
+  "PATCH_ABSENCE_3H",
+]);
+
+export const overtimeRequestStatusEnum = pgEnum("overtime_request_status", [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+
 export const attendanceTickets = pgTable("attendance_tickets", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
@@ -91,6 +105,35 @@ export const attendanceTicketAuditLogs = pgTable("attendance_ticket_audit_logs",
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const overtimeRequests = pgTable("overtime_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  requestDate: date("request_date", { mode: "date" }).notNull(),
+  overtimeType: overtimeTypeEnum("overtime_type").notNull(),
+  overtimeHours: integer("overtime_hours").notNull(),
+  breakHours: integer("break_hours").notNull().default(0),
+  baseAmount: numeric("base_amount", { precision: 12, scale: 2 }).notNull(),
+  mealAmount: numeric("meal_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  periodCode: varchar("period_code", { length: 7 }).notNull(),
+  periodStartDate: date("period_start_date", { mode: "date" }).notNull(),
+  periodEndDate: date("period_end_date", { mode: "date" }).notNull(),
+  reason: text("reason").notNull(),
+  status: overtimeRequestStatusEnum("status").notNull().default("PENDING"),
+  reviewNotes: text("review_notes"),
+  requestedByUserId: uuid("requested_by_user_id").notNull(),
+  approvedByUserId: uuid("approved_by_user_id"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedByUserId: uuid("rejected_by_user_id"),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("idx_overtime_requests_employee_date").on(table.employeeId, table.requestDate),
+  index("idx_overtime_requests_status").on(table.status),
+  index("idx_overtime_requests_period_code").on(table.periodCode),
+]);
 
 // Attendance Records
 
@@ -224,6 +267,8 @@ export type AttendanceTicket = typeof attendanceTickets.$inferSelect;
 export type NewAttendanceTicket = typeof attendanceTickets.$inferInsert;
 export type AttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferSelect;
 export type NewAttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferInsert;
+export type OvertimeRequest = typeof overtimeRequests.$inferSelect;
+export type NewOvertimeRequest = typeof overtimeRequests.$inferInsert;
 export type EmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferSelect;
 export type NewEmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferInsert;
 export type LeaveQuota = typeof leaveQuotas.$inferSelect;

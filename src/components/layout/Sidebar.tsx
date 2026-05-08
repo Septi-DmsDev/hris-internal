@@ -9,6 +9,7 @@ import {
   BarChart3,
   ListChecks,
   Ticket,
+  Clock3,
   ClipboardCheck,
   Fingerprint,
   FileCheck,
@@ -82,6 +83,13 @@ const NAV_ITEMS: NavItem[] = [
     href: "/tickets",
     icon: Ticket,
     roles: ["SUPER_ADMIN", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL", "PAYROLL_VIEWER"],
+    group: "main",
+  },
+  {
+    label: "Overtime",
+    href: "/overtime",
+    icon: Clock3,
+    roles: ["SUPER_ADMIN", "HRD", "SPV", "TEAMWORK"],
     group: "main",
   },
   {

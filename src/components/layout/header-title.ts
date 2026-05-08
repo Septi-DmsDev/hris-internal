@@ -18,6 +18,7 @@ export function resolveHeaderMeta(pathname: string) {
   if (pathname.startsWith("/divisi")) return { title: "Penempatan", description: "Mutasi massal cabang/divisi/jabatan/grade/kelompok" };
   if (pathname.startsWith("/ticketingapproval")) return { title: "Approval Izin", description: "Antrian persetujuan tiket" };
   if (pathname.startsWith("/tickets")) return { title: "Ticketing", description: "Izin, sakit, dan cuti" };
+  if (pathname.startsWith("/overtime")) return { title: "Overtime", description: "Pengajuan dan approval overtime" };
   if (pathname.startsWith("/absensi")) return { title: "Absensi", description: "Input dan rekap kehadiran" };
   if (pathname.startsWith("/reviews")) return { title: "Review", description: "Review dan incident kerja" };
   if (pathname.startsWith("/master/branches")) return { title: "Master Cabang", description: "Daftar cabang perusahaan" };

@@ -7,6 +7,7 @@ import {
   Users,
   User,
   BarChart3,
+  ListChecks,
   Ticket,
   ClipboardCheck,
   Fingerprint,
@@ -67,6 +68,13 @@ const NAV_ITEMS: NavItem[] = [
     href: "/performance",
     icon: BarChart3,
     roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL"],
+    group: "main",
+  },
+  {
+    label: "Team Performance",
+    href: "/teamperformance",
+    icon: ListChecks,
+    roles: ["SUPER_ADMIN", "HRD", "KABAG", "SPV"],
     group: "main",
   },
   {

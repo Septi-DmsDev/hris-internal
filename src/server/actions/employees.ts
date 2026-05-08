@@ -36,6 +36,7 @@ import type { UserRole } from "@/types";
 
 const EMPLOYEE_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "FINANCE"];
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
+const DEFAULT_EMPLOYEE_LOGIN_PASSWORD = "12345678";
 
 type EmployeeDetailRow = {
   id: string;
@@ -169,11 +170,6 @@ function normalizeImportEmail(username: string): string {
   if (!value) return "";
   if (value.includes("@")) return value;
   return `${value.replace(/\s+/g, ".")}@hris.internal`;
-}
-
-function normalizeImportEmployeeCode(username: string): string {
-  const base = username.trim().split("@")[0] || username.trim();
-  return base.replace(/\s+/g, "_").toUpperCase().slice(0, 30);
 }
 
 function matchBranchId(branchRows: Array<{ id: string; name: string }>, rawBranchName: string) {
@@ -350,10 +346,28 @@ export async function getEmployees() {
     if (roleRow.divisionIds.length === 0) return [];
     return (await baseQuery
       .where(inArray(employees.divisionId, roleRow.divisionIds))
-      .orderBy(asc(employees.fullName))) as EmployeeListRow[];
+      .orderBy(asc(employees.startDate), asc(employees.fullName))) as EmployeeListRow[];
   }
 
-  return (await baseQuery.orderBy(asc(employees.fullName))) as EmployeeListRow[];
+  return (await baseQuery.orderBy(asc(employees.startDate), asc(employees.fullName))) as EmployeeListRow[];
+}
+
+async function getNextGeneratedUid() {
+  const rows = await db
+    .select({ employeeCode: employees.employeeCode })
+    .from(employees);
+
+  let maxUid = 0;
+  for (const row of rows) {
+    const code = row.employeeCode?.trim() ?? "";
+    if (!/^\d{4}$/.test(code)) continue;
+    const value = Number.parseInt(code, 10);
+    if (Number.isFinite(value) && value > maxUid) {
+      maxUid = value;
+    }
+  }
+
+  return String(maxUid + 1).padStart(4, "0");
 }
 
 export async function getEmployeeFormOptions() {
@@ -660,24 +674,38 @@ export async function createEmployee(input: unknown) {
   const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
   if (authError) return authError;
 
-  const parsed = employeeSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Input karyawan tidak valid." };
-  }
+  const rawInput = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>;
 
-  try {
-    const result = await db.transaction(async (tx) => {
-      return persistEmployeeRecord(tx, parsed.data);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const nextUid = await getNextGeneratedUid();
+    const parsed = employeeSchema.safeParse({
+      ...rawInput,
+      employeeCode: nextUid,
     });
 
-    revalidatePath("/employees");
-    return { success: true, employeeId: result };
-  } catch (error) {
-    const { code, message, detail, constraint } = unwrapDbError(error);
-    if (code === "23505") return { error: "ID karyawan sudah digunakan, pakai kode lain." };
-    if (code === "23503") return { error: "Referensi karyawan tidak valid atau sudah tidak aktif." };
-    throw new Error([message, detail, constraint].filter(Boolean).join(" | ") || "Gagal membuat data karyawan.");
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Input karyawan tidak valid." };
+    }
+
+    try {
+      const result = await db.transaction(async (tx) => {
+        return persistEmployeeRecord(tx, parsed.data);
+      });
+
+      revalidatePath("/employees");
+      return { success: true, employeeId: result };
+    } catch (error) {
+      const { code, message, detail, constraint } = unwrapDbError(error);
+      if (code === "23505") {
+        // Retry when generated UID collides due to concurrent create.
+        continue;
+      }
+      if (code === "23503") return { error: "Referensi karyawan tidak valid atau sudah tidak aktif." };
+      throw new Error([message, detail, constraint].filter(Boolean).join(" | ") || "Gagal membuat data karyawan.");
+    }
   }
+
+  return { error: "Gagal generate UID unik. Coba ulangi tambah karyawan." };
 }
 
 type ImportOutcome = {
@@ -709,6 +737,9 @@ export async function importEmployeesFromXlsx(formData: FormData) {
   const header = (rows[0] as unknown[]).map((value) => normalizeImportHeader(String(value ?? "")));
   const cabangIdx = header.findIndex((value) => value === "CABANG");
   const namaIdx = header.findIndex((value) => value === "NAMA");
+  const nikIdx = header.findIndex(
+    (value) => value === "NIK" || value === "ID KARYAWAN" || value === "EMPLOYEE CODE"
+  );
   const usernameIdx = header.findIndex((value) => value === "USERNAME");
   const passwordIdx = header.findIndex((value) => value === "PASSWORD");
   const tempatLahirIdx = header.findIndex((value) => value === "TEMPAT LAHIR");
@@ -722,10 +753,17 @@ export async function importEmployeesFromXlsx(formData: FormData) {
   const masukKerjaIdx = header.findIndex((value) => value === "MASUK KERJA");
   const lolosTrainingIdx = header.findIndex((value) => value === "LOLOS TRAINING");
 
-  if (cabangIdx === -1 || namaIdx === -1 || usernameIdx === -1 || passwordIdx === -1 || masukKerjaIdx === -1) {
+  if (
+    cabangIdx === -1 ||
+    namaIdx === -1 ||
+    nikIdx === -1 ||
+    usernameIdx === -1 ||
+    passwordIdx === -1 ||
+    masukKerjaIdx === -1
+  ) {
     return {
       error:
-        "Header kolom tidak sesuai. Pastikan ada kolom: CABANG, NAMA, Username, Password, MASUK KERJA.",
+        "Header kolom tidak sesuai. Pastikan ada kolom: CABANG, NAMA, NIK/ID KARYAWAN, Username, Password, MASUK KERJA.",
     };
   }
 
@@ -797,11 +835,12 @@ export async function importEmployeesFromXlsx(formData: FormData) {
     const rowNumber = index + 1;
     const branchName = String(row[cabangIdx] ?? "").trim();
     const fullName = String(row[namaIdx] ?? "").trim();
+    const employeeCode = String(row[nikIdx] ?? "").trim();
     const username = String(row[usernameIdx] ?? "").trim();
     const password = String(row[passwordIdx] ?? "").trim();
     const branchId = matchBranchId(branchRows, branchName);
 
-    if (!branchName || !fullName || !username || !password) {
+    if (!branchName || !fullName || !employeeCode || !username || !password) {
       outcomes.push({ rowNumber, name: fullName || "-", success: false, message: "Kolom wajib belum lengkap." });
       continue;
     }
@@ -825,7 +864,7 @@ export async function importEmployeesFromXlsx(formData: FormData) {
 
     const divisionId = divisionByBranchId.get(branchId) ?? fallbackDivisionId;
     const employeeInput: EmployeePersistInput = {
-      employeeCode: normalizeImportEmployeeCode(username),
+      employeeCode,
       fullName,
       nickname: undefined,
       photoUrl: undefined,
@@ -875,6 +914,7 @@ export async function importEmployeesFromXlsx(formData: FormData) {
         await db
           .update(employees)
           .set({
+            employeeCode: employeeInput.employeeCode,
             fullName,
             branchId,
             birthPlace: employeeInput.birthPlace ?? null,
@@ -1302,5 +1342,160 @@ export async function createMissingEmployeeAccounts(defaultPassword: string) {
     createdCount,
     totalMissing: employeesWithoutAccount.length,
     errors: errors.length > 0 ? errors : undefined,
+  };
+}
+
+function normalizeUsernameFromLegacyCode(value: string) {
+  const base = value.trim().toLowerCase();
+  if (!base) return "";
+  const sanitized = base
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/\.+/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  return sanitized.slice(0, 50);
+}
+
+function resolveUniqueLoginEmail(baseUsername: string, usedEmails: Set<string>) {
+  const normalizedBase = baseUsername || "user";
+  let username = normalizedBase;
+  let suffix = 1;
+
+  while (true) {
+    const email = `${username}@hris.internal`;
+    if (!usedEmails.has(email)) {
+      usedEmails.add(email);
+      return email;
+    }
+    suffix += 1;
+    username = `${normalizedBase}.${suffix}`;
+  }
+}
+
+export async function regenerateEmployeeUidsAndResetLogins() {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const employeeRows = await db
+    .select({
+      id: employees.id,
+      employeeCode: employees.employeeCode,
+      fullName: employees.fullName,
+      startDate: employees.startDate,
+      trainingGraduationDate: employees.trainingGraduationDate,
+      employeeGroup: employees.employeeGroup,
+      userId: userRoles.userId,
+      userRole: userRoles.role,
+    })
+    .from(employees)
+    .leftJoin(userRoles, eq(userRoles.employeeId, employees.id));
+
+  if (employeeRows.length === 0) {
+    return { success: true, totalEmployees: 0, updatedLogins: 0, createdLogins: 0 };
+  }
+
+  const sortedRows = [...employeeRows].sort((a, b) => {
+    const startDiff = a.startDate.getTime() - b.startDate.getTime();
+    if (startDiff !== 0) return startDiff;
+
+    const aGraduated = Boolean(a.trainingGraduationDate);
+    const bGraduated = Boolean(b.trainingGraduationDate);
+    if (aGraduated !== bGraduated) return aGraduated ? -1 : 1;
+
+    if (a.trainingGraduationDate && b.trainingGraduationDate) {
+      const trainingDiff = a.trainingGraduationDate.getTime() - b.trainingGraduationDate.getTime();
+      if (trainingDiff !== 0) return trainingDiff;
+    }
+
+    return a.fullName.localeCompare(b.fullName);
+  });
+
+  const assignedUidByEmployeeId = new Map<string, string>();
+  sortedRows.forEach((row, index) => {
+    assignedUidByEmployeeId.set(row.id, String(index + 1).padStart(4, "0"));
+  });
+
+  const admin = createAdminClient();
+  const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  const usedEmails = new Set((authUsers?.users ?? []).map((user) => (user.email ?? "").toLowerCase()).filter(Boolean));
+
+  let updatedLogins = 0;
+  let createdLogins = 0;
+
+  for (const row of sortedRows) {
+    const assignedUid = assignedUidByEmployeeId.get(row.id)!;
+    const preferredUsername = normalizeUsernameFromLegacyCode(row.employeeCode) || `user.${assignedUid}`;
+    const nextEmail = resolveUniqueLoginEmail(preferredUsername, usedEmails);
+    const nextRole: UserRole = row.userRole
+      ? (row.userRole as UserRole)
+      : row.employeeGroup === "MANAGERIAL"
+        ? "MANAGERIAL"
+        : "TEAMWORK";
+
+    if (row.userId) {
+      const { error } = await admin.auth.admin.updateUserById(row.userId, {
+        email: nextEmail,
+        password: DEFAULT_EMPLOYEE_LOGIN_PASSWORD,
+      });
+      if (error) {
+        return { error: `Gagal update login ${row.fullName}: ${error.message}` };
+      }
+
+      await db
+        .update(userRoles)
+        .set({ role: nextRole, updatedAt: new Date() })
+        .where(eq(userRoles.userId, row.userId));
+      updatedLogins += 1;
+    } else {
+      const { data, error } = await admin.auth.admin.createUser({
+        email: nextEmail,
+        password: DEFAULT_EMPLOYEE_LOGIN_PASSWORD,
+        email_confirm: true,
+      });
+      if (error || !data?.user?.id) {
+        return { error: `Gagal membuat login ${row.fullName}: ${error?.message ?? "Unknown error"}` };
+      }
+
+      await db.insert(userRoles).values({
+        userId: data.user.id,
+        role: nextRole,
+        employeeId: row.id,
+      });
+      createdLogins += 1;
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    for (const row of sortedRows) {
+      await tx
+        .update(employees)
+        .set({
+          employeeCode: `TMP-${row.id.replace(/-/g, "").slice(0, 20)}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, row.id));
+    }
+
+    for (const row of sortedRows) {
+      await tx
+        .update(employees)
+        .set({
+          employeeCode: assignedUidByEmployeeId.get(row.id)!,
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, row.id));
+    }
+  });
+
+  revalidatePath("/employees");
+  revalidatePath("/users");
+  revalidatePath("/settings");
+  revalidatePath("/me");
+
+  return {
+    success: true,
+    totalEmployees: sortedRows.length,
+    updatedLogins,
+    createdLogins,
+    defaultPassword: DEFAULT_EMPLOYEE_LOGIN_PASSWORD,
   };
 }

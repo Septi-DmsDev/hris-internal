@@ -590,7 +590,11 @@ export async function submitDailyActivityEntry(input: unknown) {
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
   const [existingEntry] = await db
-    .select()
+    .select({
+      id: dailyActivityEntries.id,
+      employeeId: dailyActivityEntries.employeeId,
+      status: dailyActivityEntries.status,
+    })
     .from(dailyActivityEntries)
     .where(eq(dailyActivityEntries.id, parsed.data.activityEntryId))
     .limit(1);
@@ -651,7 +655,11 @@ export async function approveDailyActivityEntry(input: unknown) {
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
   const [existingEntry] = await db
-    .select()
+    .select({
+      id: dailyActivityEntries.id,
+      employeeId: dailyActivityEntries.employeeId,
+      status: dailyActivityEntries.status,
+    })
     .from(dailyActivityEntries)
     .where(eq(dailyActivityEntries.id, parsed.data.activityEntryId))
     .limit(1);
@@ -1343,6 +1351,140 @@ export async function getSpvPendingActivities(): Promise<{ activities: SpvPendin
     .orderBy(desc(dailyActivityEntries.submittedAt), desc(dailyActivityEntries.workDate));
 
   return { activities: rows };
+}
+
+export type TeamPerformanceDivision = {
+  id: string;
+  name: string;
+};
+
+export type TeamPerformanceEmployee = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  divisionId: string;
+};
+
+export type TeamPerformanceApprovedActivity = {
+  id: string;
+  employeeId: string;
+  workDate: Date;
+  submittedAt: Date | null;
+  approvedAt: Date | null;
+  externalCode: string | null;
+  notes: string | null;
+  jobIdSnapshot: string | null;
+  workNameSnapshot: string;
+  quantity: string | number;
+  pointValueSnapshot: string | number;
+  totalPoints: string | number;
+  status: string;
+};
+
+export async function getTeamPerformanceWorkspace() {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD", "KABAG", "SPV"]);
+  if (authError) {
+    return {
+      error: authError.error ?? "Akses ditolak.",
+      periodStartDate: null as Date | null,
+      periodEndDate: null as Date | null,
+      divisions: [] as TeamPerformanceDivision[],
+      employees: [] as TeamPerformanceEmployee[],
+      approvedActivities: [] as TeamPerformanceApprovedActivity[],
+    };
+  }
+
+  const roleRow = await getCurrentUserRoleRow();
+  const role = roleRow.role as UserRole;
+  const scopedDivisionIds =
+    DIV_SCOPED_ROLES.includes(role) && roleRow.divisionIds.length > 0
+      ? roleRow.divisionIds
+      : null;
+
+  const today = new Date();
+  const periodCode = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
+  const period = resolvePayrollPeriod(periodCode);
+  const hasSnapshotColumn = await hasJobIdSnapshotColumn();
+
+  const divisionRows = await db
+    .select({
+      id: divisions.id,
+      name: divisions.name,
+    })
+    .from(divisions)
+    .where(
+      scopedDivisionIds
+        ? inArray(divisions.id, scopedDivisionIds)
+        : eq(divisions.isActive, true)
+    )
+    .orderBy(asc(divisions.name));
+
+  const employeeRows = await db
+    .select({
+      id: employees.id,
+      employeeCode: employees.employeeCode,
+      fullName: employees.fullName,
+      divisionId: employees.divisionId,
+    })
+    .from(employees)
+    .where(
+      scopedDivisionIds
+        ? and(
+            eq(employees.employeeGroup, "TEAMWORK"),
+            eq(employees.isActive, true),
+            inArray(employees.divisionId, scopedDivisionIds)
+          )
+        : and(eq(employees.employeeGroup, "TEAMWORK"), eq(employees.isActive, true))
+    )
+    .orderBy(asc(employees.fullName));
+  if (employeeRows.length === 0) {
+    return {
+      periodStartDate: period.periodStartDate,
+      periodEndDate: period.periodEndDate,
+      divisions: divisionRows,
+      employees: [],
+      approvedActivities: [],
+    };
+  }
+
+  const approvedStatuses = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
+  const employeeIds = employeeRows.map((row) => row.id);
+
+  const approvedActivityRows = await db
+    .select({
+      id: dailyActivityEntries.id,
+      employeeId: dailyActivityEntries.employeeId,
+      workDate: dailyActivityEntries.workDate,
+      submittedAt: dailyActivityEntries.submittedAt,
+      approvedAt: dailyActivityEntries.approvedAt,
+      externalCode: pointCatalogEntries.externalCode,
+      notes: dailyActivityEntries.notes,
+      jobIdSnapshot: hasSnapshotColumn ? dailyActivityEntries.jobIdSnapshot : pointCatalogEntries.externalCode,
+      workNameSnapshot: dailyActivityEntries.workNameSnapshot,
+      quantity: dailyActivityEntries.quantity,
+      pointValueSnapshot: dailyActivityEntries.pointValueSnapshot,
+      totalPoints: dailyActivityEntries.totalPoints,
+      status: dailyActivityEntries.status,
+    })
+    .from(dailyActivityEntries)
+    .leftJoin(pointCatalogEntries, eq(dailyActivityEntries.pointCatalogEntryId, pointCatalogEntries.id))
+    .where(
+      and(
+        inArray(dailyActivityEntries.employeeId, employeeIds),
+        gte(dailyActivityEntries.workDate, period.periodStartDate),
+        lte(dailyActivityEntries.workDate, period.periodEndDate),
+        inArray(dailyActivityEntries.status, approvedStatuses)
+      )
+    )
+    .orderBy(desc(dailyActivityEntries.workDate), asc(dailyActivityEntries.workNameSnapshot));
+
+  return {
+    periodStartDate: period.periodStartDate,
+    periodEndDate: period.periodEndDate,
+    divisions: divisionRows,
+    employees: employeeRows,
+    approvedActivities: approvedActivityRows,
+  };
 }
 
 export async function batchDecideDraftActivities(input: {

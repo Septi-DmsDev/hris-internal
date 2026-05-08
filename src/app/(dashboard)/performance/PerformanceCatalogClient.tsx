@@ -253,9 +253,6 @@ type PerformanceCatalogClientProps = {
   canManageCatalog: boolean;
   canManageActivities: boolean;
   canGenerateMonthly: boolean;
-  activeVersionCode: string | null;
-  totalEntries: number;
-  totalDivisions: number;
   versions: PerformanceVersionRow[];
   divisionTargets: PerformanceDivisionTargetRow[];
   entries: PerformanceCatalogEntryRow[];
@@ -356,9 +353,6 @@ export default function PerformanceCatalogClient({
   canManageCatalog,
   canManageActivities,
   canGenerateMonthly,
-  activeVersionCode,
-  totalEntries,
-  totalDivisions,
   versions,
   divisionTargets,
   entries,
@@ -1000,25 +994,6 @@ export default function PerformanceCatalogClient({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Versi Aktif</p>
-          <p className="mt-1.5 text-2xl font-semibold text-slate-900">
-            {activeVersionCode ?? "-"}
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Total Entry Aktif</p>
-          <p className="mt-1.5 text-2xl font-semibold text-slate-900">
-            {totalEntries.toLocaleString("id-ID")}
-          </p>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Total Divisi Aktif</p>
-          <p className="mt-1.5 text-2xl font-semibold text-slate-900">{totalDivisions}</p>
-        </div>
-      </div>
-
       {lastResult ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {lastResult}

@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { batchSubmitDraft } from "@/server/actions/performance";
 import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
@@ -100,6 +107,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [historyDetail, setHistoryDetail] = useState<DateGroup | null>(null);
 
   const selectedCatalog = catalogEntries.find((c) => c.id === inputCatalogId);
 
@@ -520,7 +528,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                       {groupedDraft.map(({ jobId, items }) => {
                         const groupTotal = items.reduce((s, i) => s + i.pointValue * i.qty, 0);
                         return (
-                          <>
+                          <Fragment key={`grp-${jobId}`}>
                             {/* Job ID header row */}
                             <tr key={`hdr-${jobId}`} className="bg-slate-100 border-t border-slate-200">
                               <td className="px-4 py-2 font-semibold text-slate-700 font-mono text-xs" colSpan={2}>
@@ -558,7 +566,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                                 </td>
                               </tr>
                             ))}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -615,7 +623,11 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {dateGroups.map((group) => (
-                    <tr key={group.workDate} className="bg-white hover:bg-slate-50/50">
+                    <tr
+                      key={group.workDate}
+                      className="cursor-pointer bg-white hover:bg-slate-50/50"
+                      onClick={() => setHistoryDetail(group)}
+                    >
                       <td className="px-4 py-3 font-medium text-slate-900">
                         {formatDate(group.workDate)}
                       </td>
@@ -637,7 +649,10 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                               size="sm"
                               variant="outline"
                               className="h-6 px-2 text-xs"
-                              onClick={() => handleEdit(group)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(group);
+                              }}
                             >
                               Edit
                             </Button>
@@ -652,6 +667,53 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={historyDetail !== null} onOpenChange={(open) => !open && setHistoryDetail(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              Detail Draft - {historyDetail ? formatDate(historyDetail.workDate) : "-"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {historyDetail && (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-600">
+                Total job: <span className="font-semibold text-slate-900">{historyDetail.totalJobs}</span>
+                {" • "}
+                Status: <span className="font-semibold text-slate-900">{historyDetail.statusLabel}</span>
+              </p>
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-slate-200 bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Job ID</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis Pekerjaan</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Qty</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Poin</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {historyDetail.entries.map((entry) => (
+                      <tr key={entry.id} className="bg-white">
+                        <td className="px-4 py-2 font-mono text-xs text-slate-700">
+                          {resolveActivityJobIdLabel(entry.jobIdSnapshot, null, entry.notes)}
+                        </td>
+                        <td className="px-4 py-2 text-slate-900">{entry.workNameSnapshot}</td>
+                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">{entry.quantity}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium text-slate-900">{entry.totalPoints}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryDetail(null)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

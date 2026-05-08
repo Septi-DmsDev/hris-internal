@@ -54,6 +54,8 @@ src/
 | `src/app/(dashboard)/layout.tsx` | guard login + sidebar + header |
 | `src/app/(dashboard)/dashboard/*` | ringkasan utama |
 | `src/app/(dashboard)/employees/*` | list, form, detail profil karyawan |
+| `src/app/(dashboard)/positioning/*` | mutasi massal cabang/divisi/jabatan/grade/kelompok |
+| `src/app/(dashboard)/divisi/*` | route kompatibilitas lama yang redirect ke `/positioning` |
 | `src/app/(dashboard)/master/branches/*` | CRUD cabang |
 | `src/app/(dashboard)/master/divisions/*` | CRUD divisi |
 | `src/app/(dashboard)/master/positions/*` | CRUD jabatan |
@@ -62,6 +64,7 @@ src/
 | `src/app/(dashboard)/performance/*` | katalog poin, aktivitas, monthly performance |
 | `src/app/(dashboard)/performance/training/*` | evaluasi training |
 | `src/app/(dashboard)/tickets/*` | ticket izin/sakit/cuti |
+| `src/app/(dashboard)/ticketingapproval/*` | antrian approval tiket dan histori review |
 | `src/app/(dashboard)/absensi/*` | input manual absensi kehadiran/disiplin |
 | `src/app/(dashboard)/reviews/*` | review + incident |
 | `src/app/(dashboard)/payroll/*` | workspace payroll, detail, export, payslip |
@@ -78,6 +81,7 @@ Route handler aktif:
 |---|---|
 | `src/app/(dashboard)/payroll/[periodId]/export.xlsx/route.ts` | export payroll XLSX |
 | `src/app/(dashboard)/payroll/[periodId]/[employeeId]/payslip.pdf/route.ts` | payslip PDF |
+| `src/app/(dashboard)/employees/export.xlsx/route.ts` | export data karyawan XLSX |
 
 ## 5. Struktur `src/lib`
 

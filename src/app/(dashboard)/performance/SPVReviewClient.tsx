@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable } from "@/components/tables/DataTable";
 import {
   Dialog,
   DialogContent,
@@ -32,17 +31,6 @@ export type SpvActivityRow = {
   totalPoints: string;
   status: string;
   submittedAt: string;
-};
-
-export type SpvTeamSummaryRow = {
-  employeeId: string;
-  employeeName: string;
-  employeeCode: string;
-  divisionName: string;
-  performancePercent: number;
-  approvedPoints: number;
-  attendanceCount: number;
-  lastDraftSubmittedAt: string;
 };
 
 type ActivityGroup = {
@@ -76,14 +64,12 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
 
 type Props = {
   activities: SpvActivityRow[];
-  teamSummaries: SpvTeamSummaryRow[];
 };
 
-export default function SPVReviewClient({ activities, teamSummaries }: Props) {
+export default function SPVReviewClient({ activities }: Props) {
   const router = useRouter();
   const [detailGroup, setDetailGroup] = useState<ActivityGroup | null>(null);
   const [decision, setDecision] = useState<DecisionState | null>(null);
-  const [tab, setTab] = useState<"APPROVAL" | "TEAM">("APPROVAL");
   const [notes, setNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,30 +146,6 @@ export default function SPVReviewClient({ activities, teamSummaries }: Props) {
             {groups.length} batch - {activities.length} aktivitas menunggu persetujuan
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
-          <button
-            type="button"
-            onClick={() => setTab("APPROVAL")}
-            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors ${
-              tab === "APPROVAL"
-                ? "bg-teal-600 text-white shadow-sm"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            APPROVAL
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("TEAM")}
-            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors ${
-              tab === "TEAM"
-                ? "bg-teal-600 text-white shadow-sm"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            TEAM
-          </button>
-        </div>
       </div>
 
       {success && (
@@ -197,100 +159,55 @@ export default function SPVReviewClient({ activities, teamSummaries }: Props) {
         </div>
       )}
 
-      {tab === "APPROVAL" ? (
-        groups.length === 0 ? (
-          <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
-            <p className="text-sm text-slate-500">Tidak ada aktivitas yang menunggu persetujuan.</p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Karyawan</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tgl Kerja</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Job</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Poin</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Diajukan</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {groups.map((group) => (
-                  <tr
-                    key={group.key}
-                    className="cursor-pointer bg-white hover:bg-slate-50/60"
-                    onClick={() => setDetailGroup(group)}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-slate-900">{group.employeeName}</p>
-                      <p className="text-xs text-slate-500">{group.employeeCode} - {group.employeeDivisionName}</p>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">{group.workDate}</td>
-                    <td className="px-4 py-3 text-center tabular-nums text-slate-700">{group.activities.length}</td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{group.totalPoints.toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={STATUS_VARIANT[group.status] ?? "outline"}>
-                        {STATUS_LABEL[group.status] ?? group.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{group.submittedAt}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                        <Button size="sm" onClick={() => openDecision("approve", group)}>Terima</Button>
-                        <Button size="sm" variant="destructive" onClick={() => openDecision("reject", group)}>Tolak</Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">Klik baris untuk melihat rincian aktivitas</p>
-          </div>
-        )
+      {groups.length === 0 ? (
+        <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
+          <p className="text-sm text-slate-500">Tidak ada aktivitas yang menunggu persetujuan.</p>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {teamSummaries.length === 0 ? (
-            <div className="rounded-lg border border-slate-100 bg-slate-50 px-6 py-16 text-center">
-              <p className="text-sm text-slate-500">Tidak ada karyawan TEAMWORK di scope divisi Anda.</p>
-            </div>
-          ) : (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {teamSummaries.map((item) => (
-                <div key={item.employeeId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-900">{item.employeeName}</p>
-                      <p className="text-[11px] text-slate-500">{item.employeeCode} - {item.divisionName}</p>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 px-2 py-0 text-[11px]">
-                      {item.performancePercent.toFixed(2)}%
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Karyawan</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tgl Kerja</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Job</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Poin</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Diajukan</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {groups.map((group) => (
+                <tr
+                  key={group.key}
+                  className="cursor-pointer bg-white hover:bg-slate-50/60"
+                  onClick={() => setDetailGroup(group)}
+                >
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-slate-900">{group.employeeName}</p>
+                    <p className="text-xs text-slate-500">{group.employeeCode} - {group.employeeDivisionName}</p>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">{group.workDate}</td>
+                  <td className="px-4 py-3 text-center tabular-nums text-slate-700">{group.activities.length}</td>
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{group.totalPoints.toFixed(2)}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={STATUS_VARIANT[group.status] ?? "outline"}>
+                      {STATUS_LABEL[group.status] ?? group.status}
                     </Badge>
-                  </div>
-
-                  <div className="mt-3 overflow-hidden rounded-lg border border-slate-100">
-                    <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5 text-[11px]">
-                      <span className="text-slate-500">PERFORMA</span>
-                      <span className="font-semibold text-slate-900">{item.performancePercent.toFixed(2)}%</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{group.submittedAt}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" onClick={() => openDecision("approve", group)}>Terima</Button>
+                      <Button size="sm" variant="destructive" onClick={() => openDecision("reject", group)}>Tolak</Button>
                     </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5 text-[11px]">
-                      <span className="text-slate-500">POIN DISETUJUI</span>
-                      <span className="font-semibold text-slate-900">{item.approvedPoints.toLocaleString("id-ID")}</span>
-                    </div>
-                    <div className="flex items-center justify-between border-b border-slate-100 px-2.5 py-1.5 text-[11px]">
-                      <span className="text-slate-500">JUMLAH KEHADIRAN</span>
-                      <span className="font-semibold text-slate-900">{item.attendanceCount}</span>
-                    </div>
-                    <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px]">
-                      <span className="text-slate-500">TGL TERAKHIR SUBMIT DRAFT</span>
-                      <span className="font-semibold text-slate-900">{item.lastDraftSubmittedAt}</span>
-                    </div>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               ))}
-            </div>
-          )}
+            </tbody>
+          </table>
+          <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">Klik baris untuk melihat rincian aktivitas</p>
         </div>
       )}
 

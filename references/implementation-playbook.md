@@ -14,9 +14,10 @@ src/app/(dashboard) page/client
 -> Drizzle query/transaction
 -> src/server/*-engine helper/rule
 -> PostgreSQL
+-> revalidatePath/response ke UI
 ```
 
-Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `performance`, `tickets`, `attendance`, `reviews`, `training`, `payroll`, dan route handler payroll PDF/XLSX. Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
+Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `employees` (termasuk placement helper), `performance`, `tickets`, `attendance`, `reviews`, `training`, `payroll`, serta route handler export karyawan/payroll XLSX dan payslip PDF. Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
 
 ## 1. Sebelum Coding
 
@@ -80,6 +81,11 @@ Untuk modul poin kinerja:
 - daftar pekerjaan harian mengikuti divisi aktual harian di action performance;
 - performa bulanan dihitung dari poin approved/locked vs target snapshot.
 - input managerial bulanan tersedia di `src/server/actions/performance.ts` dan menulis ke `managerial_kpi_summaries` untuk role KABAG/SPV/MANAGERIAL.
+
+Untuk modul ticketing:
+- antrian approval tersedia di route `/ticketingapproval`;
+- role approver aktif saat ini: `SUPER_ADMIN`, `HRD`, `SPV`, `KABAG`;
+- tetap enforce scope/role check di server action ticketing.
 
 Untuk payroll:
 - level bonus memakai `resolveBonusLevel()`;

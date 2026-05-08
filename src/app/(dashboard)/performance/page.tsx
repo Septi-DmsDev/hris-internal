@@ -5,7 +5,6 @@ import {
   getSpvPendingActivities,
   getTwPerformanceData,
 } from "@/server/actions/performance";
-import { getLatestPerformance } from "@/server/actions/me";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import TwPerformanceClient from "./TwPerformanceClient";
 import PerformanceCatalogClient, {
@@ -19,74 +18,7 @@ import PerformanceCatalogClient, {
   type PerformanceDivisionOption,
 } from "./PerformanceCatalogClient";
 import SPVReviewClient from "./SPVReviewClient";
-import type { SpvActivityRow, SpvTeamSummaryRow } from "./SPVReviewClient";
-
-async function buildTeamSummaries({
-  employeeOptions,
-  activityEntries,
-}: {
-  employeeOptions: Array<{
-    id: string;
-    employeeCode: string;
-    fullName: string;
-    divisionName: string | null;
-  }>;
-  activityEntries: Array<{
-    employeeId: string;
-    workDate: Date;
-    totalPoints: string | number;
-    status: string;
-    submittedAt: Date | null;
-  }>;
-}): Promise<SpvTeamSummaryRow[]> {
-  const approvedStatuses = new Set(["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"]);
-  const periodStart = new Date();
-  const day = periodStart.getDate();
-  const currentPeriodStart = day >= 26
-    ? new Date(periodStart.getFullYear(), periodStart.getMonth(), 26)
-    : new Date(periodStart.getFullYear(), periodStart.getMonth() - 1, 26);
-  const currentPeriodEnd = day >= 26
-    ? new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 25)
-    : new Date(periodStart.getFullYear(), periodStart.getMonth(), 25);
-  const presenceDatesByEmployee = new Map<string, Set<string>>();
-  const lastSubmitByEmployee = new Map<string, Date>();
-
-  for (const entry of activityEntries) {
-    if (entry.workDate < currentPeriodStart || entry.workDate > currentPeriodEnd) {
-      continue;
-    }
-
-    if (approvedStatuses.has(entry.status)) {
-      const key = entry.workDate.toISOString().slice(0, 10);
-      const current = presenceDatesByEmployee.get(entry.employeeId) ?? new Set<string>();
-      current.add(key);
-      presenceDatesByEmployee.set(entry.employeeId, current);
-    }
-
-    if (entry.submittedAt) {
-      const existing = lastSubmitByEmployee.get(entry.employeeId);
-      if (!existing || entry.submittedAt > existing) {
-        lastSubmitByEmployee.set(entry.employeeId, entry.submittedAt);
-      }
-    }
-  }
-
-  return await Promise.all(employeeOptions.map(async (employee) => {
-    const latestPerformance = await getLatestPerformance(employee.id);
-    return {
-      employeeId: employee.id,
-      employeeName: employee.fullName,
-      employeeCode: employee.employeeCode,
-      divisionName: employee.divisionName ?? "-",
-      performancePercent: latestPerformance ? Number(latestPerformance.performancePercent) : 0,
-      approvedPoints: latestPerformance ? Number(latestPerformance.totalApprovedPoints) : 0,
-      attendanceCount: presenceDatesByEmployee.get(employee.id)?.size ?? 0,
-      lastDraftSubmittedAt: lastSubmitByEmployee.get(employee.id)
-        ? format(lastSubmitByEmployee.get(employee.id)!, "yyyy-MM-dd HH:mm")
-        : "-",
-    };
-  }));
-}
+import type { SpvActivityRow } from "./SPVReviewClient";
 
 export default async function PerformancePage() {
   const roleRow = await getCurrentUserRoleRow();
@@ -139,24 +71,9 @@ export default async function PerformancePage() {
       status: a.status,
       submittedAt: a.submittedAt ? format(a.submittedAt, "yyyy-MM-dd HH:mm") : "-",
     }));
-    const teamSummaries = await buildTeamSummaries({
-      employeeOptions: workspace.employeeOptions as Array<{
-        id: string;
-        employeeCode: string;
-        fullName: string;
-        divisionName: string | null;
-      }>,
-      activityEntries: workspace.activityEntries as Array<{
-        employeeId: string;
-        workDate: Date;
-        totalPoints: string | number;
-        status: string;
-        submittedAt: Date | null;
-      }>,
-    });
     return (
       <div className="space-y-4">
-        <SPVReviewClient activities={activityRows} teamSummaries={teamSummaries} />
+        <SPVReviewClient activities={activityRows} />
       </div>
     );
   }
@@ -343,9 +260,6 @@ export default async function PerformancePage() {
         canManageCatalog={overview.canManageCatalog}
         canManageActivities={workspace.canManageActivities}
         canGenerateMonthly={workspace.canGenerateMonthly}
-        activeVersionCode={overview.activeVersion?.code ?? null}
-        totalEntries={overview.entrySummary.totalEntries}
-        totalDivisions={overview.entrySummary.totalDivisions}
         versions={versionRows}
         divisionTargets={targetRows}
         entries={entryRows}

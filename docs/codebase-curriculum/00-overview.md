@@ -34,11 +34,13 @@ Fungsi bisnis yang sudah muncul di code:
 - personal dashboard, personal profile, account settings, dan schedule;
 - master data cabang/divisi/jabatan/grade/shift/jadwal kerja;
 - profiling karyawan dan histori perubahan;
+- mutasi massal penempatan (cabang/divisi/jabatan/grade/kelompok karyawan);
 - katalog poin, import workbook, dan entry catalog manual;
 - aktivitas harian TEAMWORK, batch submit, approval SPV/KABAG, HRD flow;
 - generate performa bulanan;
 - input massal persentase performa managerial per periode oleh HRD/SUPER_ADMIN;
 - ticketing izin/sakit/cuti dan leave quota;
+- antrian approval tiket untuk SUPER_ADMIN/HRD/SPV/KABAG;
 - input manual absensi untuk bonus fulltime/disiplin payroll;
 - review karyawan dan incident log;
 - evaluasi training;
@@ -105,10 +107,12 @@ Employee Link
 | User management | ada | `/users`, invite/update/remove access, employee login upsert |
 | Master data | ada | branch, division, position, grade, work schedule, shift master |
 | Employee profiling | ada | create, update, delete, histori, detail page |
+| Employee placement | ada | `/positioning` untuk mutasi massal; `/divisi` dipertahankan sebagai redirect kompatibilitas |
 | Self-service | ada | `/me`, `/me/profile`, `/settings`, `/schedule` |
 | Performance point | ada, perlu hardening | self-service TEAMWORK ada; input massal managerial ada; deadline H+1/H+2 masih perlu enforcement lengkap |
 | Attendance | ada, manual | `/absensi`, dipakai payroll untuk fulltime/disiplin; integrasi fingerprint/ADMS belum ada |
 | Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
+| Ticket approval queue | ada | `/ticketingapproval` dipakai role approver untuk antrian dan histori approval tiket |
 | Review & incident | ada | review score 5 aspek, validate review, create incident |
 | Training evaluation | ada, gap bisnis | keputusan lulus/gagal ada; rule efektif periode payroll berikutnya belum penuh |
 | Payroll | ada, perlu hardening | period, snapshot, preview, finalize, paid, lock, export Excel, payslip PDF |

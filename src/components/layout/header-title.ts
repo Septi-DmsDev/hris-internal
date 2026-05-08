@@ -11,6 +11,7 @@ export function resolveHeaderMeta(pathname: string) {
   if (pathname.startsWith("/finance")) return { title: "Finance", description: "Ringkasan biaya payroll" };
   if (pathname.startsWith("/performance/training")) return { title: "Evaluasi Training", description: "Penilaian masa training" };
   if (pathname.startsWith("/performance")) return { title: "Performa", description: "Poin, target, dan aktivitas" };
+  if (pathname.startsWith("/teamperformance")) return { title: "Team Performance", description: "Rekap poin teamwork per divisi" };
   if (pathname.startsWith("/employees/")) return { title: "Detail Karyawan", description: "Profil dan histori karyawan" };
   if (pathname.startsWith("/employees")) return { title: "Karyawan", description: "Kelola data pribadi karyawan" };
   if (pathname.startsWith("/positioning")) return { title: "Penempatan", description: "Mutasi massal cabang/divisi/jabatan/grade/kelompok" };

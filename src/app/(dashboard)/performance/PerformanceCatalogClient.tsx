@@ -23,6 +23,7 @@ import {
 } from "@/server/actions/point-catalog";
 import {
   approveDailyActivityEntry,
+  batchDecideDraftActivities,
   deleteActivityEntry,
   deleteMonthlyPerformance,
   generateMonthlyPerformance,
@@ -188,6 +189,20 @@ type DecisionState = {
   activityId: string;
   title: string;
   rowLabel: string;
+};
+
+type ActivityDraftGroup = {
+  key: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  employeeDivisionName: string;
+  workDate: string;
+  submittedAt: string;
+  status: "DIAJUKAN" | "DIAJUKAN_ULANG";
+  ids: string[];
+  totalPoints: number;
+  activities: PerformanceActivityRow[];
 };
 
 const ACTIVITY_STATUS_VARIANT: Record<
@@ -376,6 +391,13 @@ export default function PerformanceCatalogClient({
     createManagerialMonthlyInputDraft()
   );
   const [decisionNotes, setDecisionNotes] = useState("");
+  const [draftQueueSearch, setDraftQueueSearch] = useState("");
+  const [draftDetailGroup, setDraftDetailGroup] = useState<ActivityDraftGroup | null>(null);
+  const [draftDecision, setDraftDecision] = useState<{
+    action: "approve" | "reject";
+    group: ActivityDraftGroup;
+  } | null>(null);
+  const [draftDecisionNotes, setDraftDecisionNotes] = useState("");
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -453,6 +475,51 @@ export default function PerformanceCatalogClient({
     return Array.from(byId.values()).sort((a, b) => a.fullName.localeCompare(b.fullName));
   }, [employeeOptions, managerialEmployeeOptions]);
 
+  const isOverrideRole = role === "HRD" || role === "SUPER_ADMIN";
+
+  const overrideDraftGroups = useMemo(() => {
+    if (!isOverrideRole) return [];
+    const pendingActivities = activityEntries.filter(
+      (entry): entry is PerformanceActivityRow & { status: "DIAJUKAN" | "DIAJUKAN_ULANG" } =>
+        entry.status === "DIAJUKAN" || entry.status === "DIAJUKAN_ULANG"
+    );
+    const map = new Map<string, ActivityDraftGroup>();
+    for (const activity of pendingActivities) {
+      const key = `${activity.employeeId}-${activity.workDate}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.ids.push(activity.id);
+        existing.activities.push(activity);
+        existing.totalPoints += Number(activity.totalPoints);
+      } else {
+        map.set(key, {
+          key,
+          employeeId: activity.employeeId,
+          employeeName: activity.employeeName,
+          employeeCode: activity.employeeCode,
+          employeeDivisionName: activity.employeeDivisionName,
+          workDate: activity.workDate,
+          submittedAt: activity.submittedAt,
+          status: activity.status,
+          ids: [activity.id],
+          totalPoints: Number(activity.totalPoints),
+          activities: [activity],
+        });
+      }
+    }
+    const q = draftQueueSearch.trim().toLowerCase();
+    return Array.from(map.values())
+      .filter((group) => {
+        if (!q) return true;
+        return (
+          group.employeeName.toLowerCase().includes(q) ||
+          group.employeeCode.toLowerCase().includes(q) ||
+          group.employeeDivisionName.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  }, [activityEntries, draftQueueSearch, isOverrideRole]);
+
   async function handleClearCatalog() {
     setPending(true);
     resetMessages();
@@ -519,6 +586,34 @@ export default function PerformanceCatalogClient({
           : decisionState.action === "approve"
             ? "Aktivitas berhasil diproses."
             : "Aktivitas berhasil ditolak."
+      );
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleBatchDraftDecision() {
+    if (!draftDecision) return;
+    setPending(true);
+    resetMessages();
+    try {
+      const result = await batchDecideDraftActivities({
+        ids: draftDecision.group.ids,
+        action: draftDecision.action,
+        notes: draftDecisionNotes.trim() || undefined,
+      });
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      setDraftDecision(null);
+      setDraftDetailGroup(null);
+      setDraftDecisionNotes("");
+      setLastResult(
+        draftDecision.action === "approve"
+          ? `Draft harian ${draftDecision.group.employeeName} tanggal ${draftDecision.group.workDate} berhasil dioverride.`
+          : `Draft harian ${draftDecision.group.employeeName} tanggal ${draftDecision.group.workDate} berhasil ditolak.`
       );
       router.refresh();
     } finally {
@@ -1048,6 +1143,87 @@ export default function PerformanceCatalogClient({
               ) : null}
             </div>
           </div>
+          {isOverrideRole ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-slate-800">Draft Harian Diajukan (Override HRD/Admin)</p>
+                <p className="text-xs text-slate-500">{overrideDraftGroups.length} draft</p>
+              </div>
+              <Input
+                value={draftQueueSearch}
+                onChange={(event) => setDraftQueueSearch(event.target.value)}
+                placeholder="Cari karyawan..."
+              />
+              {overrideDraftGroups.length === 0 ? (
+                <p className="rounded-md bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
+                  Tidak ada draft harian yang menunggu override.
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-md border border-slate-200">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Karyawan</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tanggal</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Total Job</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Poin</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {overrideDraftGroups.map((group) => (
+                        <tr
+                          key={group.key}
+                          className="cursor-pointer bg-white hover:bg-slate-50/70"
+                          onClick={() => setDraftDetailGroup(group)}
+                        >
+                          <td className="px-3 py-2.5">
+                            <p className="font-medium text-slate-900">{group.employeeName}</p>
+                            <p className="text-xs text-slate-500">{group.employeeCode} · {group.employeeDivisionName}</p>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-700">{group.workDate}</td>
+                          <td className="px-3 py-2.5 text-center tabular-nums text-slate-700">{group.activities.length}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{group.totalPoints.toFixed(2)}</td>
+                          <td className="px-3 py-2.5">
+                            <Badge variant="secondary">
+                              {group.status === "DIAJUKAN_ULANG" ? "Diajukan Ulang" : "Diajukan"}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setDraftDecisionNotes("");
+                                  setDraftDecision({ action: "approve", group });
+                                }}
+                              >
+                                Override
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  setDraftDecisionNotes("");
+                                  setDraftDecision({ action: "reject", group });
+                                }}
+                              >
+                                Tolak
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="border-t border-slate-200 px-3 py-2 text-xs text-slate-400">
+                    Klik baris draft untuk melihat rincian job id dan jenis pekerjaan.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : null}
           <DataTable
             data={activityEntries}
             columns={activityColumns}
@@ -1346,6 +1522,91 @@ export default function PerformanceCatalogClient({
               disabled={pending}
             >
               {pending ? "Memproses..." : "Lanjutkan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={draftDetailGroup !== null} onOpenChange={(open) => !open && setDraftDetailGroup(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Rincian Draft Harian - {draftDetailGroup?.employeeName}</DialogTitle>
+          </DialogHeader>
+          {draftDetailGroup ? (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">
+                {draftDetailGroup.employeeCode} · {draftDetailGroup.employeeDivisionName} · Tgl Kerja: {draftDetailGroup.workDate} · Diajukan: {draftDetailGroup.submittedAt}
+              </p>
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-slate-200 bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">No</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Job ID</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Jenis Pekerjaan</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Qty</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Poin/Unit</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {draftDetailGroup.activities.map((activity, index) => (
+                      <tr key={activity.id} className="bg-white">
+                        <td className="px-3 py-2.5 text-xs text-slate-400">{index + 1}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-slate-600">
+                          {resolveActivityJobIdLabel(activity.jobIdSnapshot, null, activity.notes)}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-900">{activity.workNameSnapshot}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{activity.quantity}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{activity.pointValueSnapshot}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-900">{activity.totalPoints}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDraftDetailGroup(null)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={draftDecision !== null} onOpenChange={(open) => !open && setDraftDecision(null)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{draftDecision?.action === "approve" ? "Override Draft Harian" : "Tolak Draft Harian"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              {draftDecision?.group.employeeName} · {draftDecision?.group.workDate} · {draftDecision?.group.activities.length} aktivitas
+            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">
+                Catatan {draftDecision?.action === "reject" ? "(wajib)" : "(opsional)"}
+              </label>
+              <textarea
+                value={draftDecisionNotes}
+                onChange={(event) => setDraftDecisionNotes(event.target.value)}
+                rows={4}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDraftDecision(null)} disabled={pending}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant={draftDecision?.action === "reject" ? "destructive" : "default"}
+              onClick={() => void handleBatchDraftDecision()}
+              disabled={pending || (draftDecision?.action === "reject" && !draftDecisionNotes.trim())}
+            >
+              {pending ? "Memproses..." : draftDecision?.action === "approve" ? "Override Semua" : "Tolak Semua"}
             </Button>
           </DialogFooter>
         </DialogContent>

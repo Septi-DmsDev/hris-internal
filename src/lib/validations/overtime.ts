@@ -18,6 +18,44 @@ export const overtimeDecisionSchema = z.object({
   reviewNotes: z.string().trim().max(500).optional(),
 });
 
+export const spvSelfOvertimeRequestSchema = z.object({
+  requestDate: z.coerce.date({ message: "Tanggal lembur wajib diisi." }),
+  overtimeType: z.enum([
+    "OVERTIME_1H",
+    "OVERTIME_2H",
+    "OVERTIME_3H",
+    "LEMBUR_FULLDAY",
+  ]),
+  reason: z.string().trim().min(3, "Alasan minimal 3 karakter.").max(500),
+});
+
+export const spvScheduleOvertimeSchema = z.object({
+  employeeId: z.string().uuid("Karyawan tujuan tidak valid."),
+  requestDate: z.coerce.date({ message: "Tanggal lembur wajib diisi." }),
+  overtimeType: z.enum([
+    "OVERTIME_1H",
+    "OVERTIME_2H",
+    "OVERTIME_3H",
+    "LEMBUR_FULLDAY",
+  ]),
+  reason: z.string().trim().min(3, "Catatan minimal 3 karakter.").max(500),
+});
+
+export const overtimeDraftItemSchema = z.object({
+  jobId: z.string().trim().min(1, "Job ID wajib diisi.").max(100),
+  workName: z.string().trim().min(1, "Jenis pekerjaan wajib diisi.").max(200),
+  quantity: z.coerce.number().min(0.01, "Qty minimal 0.01."),
+  pointValue: z.coerce.number().min(0, "Poin tidak valid."),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const overtimeDraftSubmitSchema = z.object({
+  requestId: z.string().uuid("Request lembur tidak valid."),
+  items: z.array(overtimeDraftItemSchema).min(1, "Isi minimal 1 draft pekerjaan."),
+});
+
 export type OvertimeRequestInput = z.infer<typeof overtimeRequestSchema>;
 export type OvertimeDecisionInput = z.infer<typeof overtimeDecisionSchema>;
-
+export type SpvSelfOvertimeRequestInput = z.infer<typeof spvSelfOvertimeRequestSchema>;
+export type SpvScheduleOvertimeInput = z.infer<typeof spvScheduleOvertimeSchema>;
+export type OvertimeDraftSubmitInput = z.infer<typeof overtimeDraftSubmitSchema>;

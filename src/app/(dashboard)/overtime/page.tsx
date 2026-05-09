@@ -32,6 +32,8 @@ export default async function OvertimePage() {
     approvedAt: row.approvedAt ? format(row.approvedAt, "yyyy-MM-dd HH:mm") : null,
     rejectedAt: row.rejectedAt ? format(row.rejectedAt, "yyyy-MM-dd HH:mm") : null,
     createdAt: format(row.createdAt, "yyyy-MM-dd HH:mm"),
+    draftTotalPoints: row.draftTotalPoints,
+    draftItems: row.draftItems,
   });
 
   return (
@@ -39,10 +41,19 @@ export default async function OvertimePage() {
       role={workspace.role}
       canSubmit={workspace.canSubmit}
       canApprove={workspace.canApprove}
+      canMonitor={workspace.canMonitor}
+      canSpvManage={workspace.canSpvManage}
+      scopedEmployees={workspace.scopedEmployees}
+      overtimeCatalogEntries={workspace.overtimeCatalogEntries.map((entry) => ({
+        id: entry.id,
+        externalCode: entry.externalCode ?? null,
+        workName: entry.workName,
+        pointValue: Number(entry.pointValue),
+        unitDescription: entry.unitDescription ?? null,
+      }))}
       myRequests={workspace.myRequests.map(mapRow)}
       pendingRequests={workspace.pendingRequests.map(mapRow)}
       processedRequests={workspace.processedRequests.map(mapRow)}
     />
   );
 }
-

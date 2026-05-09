@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { decideOvertimeRequest, submitOvertimeRequest } from "@/server/actions/overtime";
+import {
+  decideOvertimeRequest,
+  scheduleDivisionOvertime,
+  submitOvertimeDraft,
+  submitOvertimeRequest,
+  submitSpvOvertimeRequest,
+} from "@/server/actions/overtime";
 import type { UserRole } from "@/types";
 
 export type OvertimeRow = {
@@ -28,6 +35,32 @@ export type OvertimeRow = {
   approvedAt: string | null;
   rejectedAt: string | null;
   createdAt: string;
+  draftTotalPoints: number;
+  draftItems: {
+    id: string;
+    jobId: string;
+    workName: string;
+    quantity: number;
+    pointValue: number;
+    totalPoints: number;
+    notes: string | null;
+  }[];
+};
+
+export type ScopedEmployeeOption = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  divisionName: string | null;
+  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+};
+
+export type OvertimeCatalogEntry = {
+  id: string;
+  externalCode: string | null;
+  workName: string;
+  pointValue: number;
+  unitDescription: string | null;
 };
 
 const OVERTIME_TYPE_LABEL: Record<OvertimeRow["overtimeType"], string> = {
@@ -54,6 +87,10 @@ export default function OvertimeClient({
   role,
   canSubmit,
   canApprove,
+  canMonitor,
+  canSpvManage,
+  scopedEmployees,
+  overtimeCatalogEntries,
   myRequests,
   pendingRequests,
   processedRequests,
@@ -61,6 +98,10 @@ export default function OvertimeClient({
   role: UserRole;
   canSubmit: boolean;
   canApprove: boolean;
+  canMonitor: boolean;
+  canSpvManage: boolean;
+  scopedEmployees: ScopedEmployeeOption[];
+  overtimeCatalogEntries: OvertimeCatalogEntry[];
   myRequests: OvertimeRow[];
   pendingRequests: OvertimeRow[];
   processedRequests: OvertimeRow[];
@@ -69,7 +110,44 @@ export default function OvertimeClient({
   const [requestDate, setRequestDate] = useState(new Date().toISOString().slice(0, 10));
   const [overtimeType, setOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
   const [reason, setReason] = useState("");
+  const [openTwSubmit, setOpenTwSubmit] = useState(false);
+  const [openTwDraft, setOpenTwDraft] = useState(false);
+  const [openDraftDetail, setOpenDraftDetail] = useState(false);
+  const [activeDraftRequest, setActiveDraftRequest] = useState<OvertimeRow | null>(null);
+  const [draftJobId, setDraftJobId] = useState("");
+  const [draftCatalogId, setDraftCatalogId] = useState("");
+  const [draftQty, setDraftQty] = useState("1");
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [currentJobLines, setCurrentJobLines] = useState<Array<{
+    key: string;
+    catalogEntryId: string;
+    workName: string;
+    quantity: number;
+    pointValue: number;
+    notes: string;
+  }>>([]);
+  const [draftItems, setDraftItems] = useState<Array<{
+    key: string;
+    catalogEntryId: string;
+    jobId: string;
+    workName: string;
+    quantity: number;
+    pointValue: number;
+    totalPoints: number;
+    notes: string;
+  }>>([]);
+  const comboboxRef = useRef<HTMLDivElement>(null);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [openSpvSubmit, setOpenSpvSubmit] = useState(false);
+  const [openSpvSchedule, setOpenSpvSchedule] = useState(false);
+  const [spvRequestDate, setSpvRequestDate] = useState(new Date().toISOString().slice(0, 10));
+  const [spvOvertimeType, setSpvOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
+  const [spvReason, setSpvReason] = useState("");
+  const [targetEmployeeId, setTargetEmployeeId] = useState("");
+  const [scheduleRequestDate, setScheduleRequestDate] = useState(new Date().toISOString().slice(0, 10));
+  const [scheduleOvertimeType, setScheduleOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
+  const [scheduleReason, setScheduleReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -89,6 +167,7 @@ export default function OvertimeClient({
         return;
       }
       setReason("");
+      setOpenTwSubmit(false);
       setSuccess("Pengajuan overtime berhasil dikirim.");
       router.refresh();
     } finally {
@@ -117,11 +196,238 @@ export default function OvertimeClient({
     }
   }
 
+  async function handleSpvSelfSubmit() {
+    setPending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await submitSpvOvertimeRequest({
+        requestDate: spvRequestDate,
+        overtimeType: spvOvertimeType,
+        reason: spvReason,
+      });
+      if (result && "error" in result) {
+        setError(result.error ?? "Pengajuan lembur SPV gagal.");
+        return;
+      }
+      setSpvReason("");
+      setOpenSpvSubmit(false);
+      setSuccess("Pengajuan lembur SPV tersimpan dan otomatis disetujui.");
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleSpvSchedule() {
+    setPending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await scheduleDivisionOvertime({
+        employeeId: targetEmployeeId,
+        requestDate: scheduleRequestDate,
+        overtimeType: scheduleOvertimeType,
+        reason: scheduleReason,
+      });
+      if (result && "error" in result) {
+        setError(result.error ?? "Atur lembur gagal.");
+        return;
+      }
+      setScheduleReason("");
+      setTargetEmployeeId("");
+      setOpenSpvSchedule(false);
+      setSuccess("Lembur terjadwal berhasil disimpan dan otomatis disetujui.");
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function openFillDraft(row: OvertimeRow) {
+    setActiveDraftRequest(row);
+    setDraftItems(
+      row.draftItems.map((item) => ({
+        key: item.id,
+        catalogEntryId: "",
+        jobId: item.jobId,
+        workName: item.workName,
+        quantity: item.quantity,
+        pointValue: item.pointValue,
+        totalPoints: item.totalPoints,
+        notes: item.notes ?? "",
+      }))
+    );
+    setDraftJobId("");
+    setDraftCatalogId("");
+    setDraftQty("1");
+    setCurrentJobLines([]);
+    setOpenTwDraft(true);
+  }
+
+  function addLineToCurrentJob() {
+    const qty = Number(draftQty);
+    if (!draftCatalogId) {
+      setError("Pilih jenis pekerjaan terlebih dahulu.");
+      return;
+    }
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setError("Qty harus lebih dari 0.");
+      return;
+    }
+    const catalog = overtimeCatalogEntries.find((c) => c.id === draftCatalogId);
+    if (!catalog) {
+      setError("Jenis pekerjaan tidak valid.");
+      return;
+    }
+    setError(null);
+    setCurrentJobLines((prev) => [
+      ...prev,
+      {
+        key: `${Date.now()}-${Math.random()}`,
+        catalogEntryId: catalog.id,
+        workName: catalog.workName,
+        quantity: qty,
+        pointValue: Number(catalog.pointValue),
+        notes: "",
+      },
+    ]);
+    setDraftCatalogId("");
+    setDraftQty("1");
+    setCatalogSearch("");
+    setCatalogOpen(false);
+  }
+
+  function removeCurrentLine(key: string) {
+    setCurrentJobLines((prev) => prev.filter((item) => item.key !== key));
+  }
+
+  function commitJobIdGroup() {
+    if (!draftJobId.trim()) {
+      setError("Isi Job ID terlebih dahulu.");
+      return;
+    }
+    if (currentJobLines.length === 0) {
+      setError("Tambahkan minimal 1 jenis pekerjaan untuk Job ID ini.");
+      return;
+    }
+    const jobId = draftJobId.trim();
+    setDraftItems((prev) => [
+      ...prev,
+      ...currentJobLines.map((line) => ({
+        key: `${jobId}-${line.key}`,
+        catalogEntryId: line.catalogEntryId,
+        jobId,
+        workName: line.workName,
+        quantity: line.quantity,
+        pointValue: line.pointValue,
+        totalPoints: Number((line.quantity * line.pointValue).toFixed(2)),
+        notes: line.notes,
+      })),
+    ]);
+    setDraftJobId("");
+    setCurrentJobLines([]);
+    setError(null);
+  }
+
+  function removeDraftItem(key: string) {
+    setDraftItems((prev) => prev.filter((item) => item.key !== key));
+  }
+
+  function removeDraftGroup(jobId: string) {
+    setDraftItems((prev) => prev.filter((item) => item.jobId !== jobId));
+  }
+
+  async function saveDraft() {
+    if (!activeDraftRequest) return;
+    if (draftItems.length === 0) {
+      setError("Isi minimal 1 baris draft lembur.");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await submitOvertimeDraft({
+        requestId: activeDraftRequest.id,
+        items: draftItems.map((item) => ({
+          jobId: item.jobId,
+          workName: item.workName,
+          quantity: item.quantity,
+          pointValue: item.pointValue,
+          notes: item.notes || undefined,
+        })),
+      });
+      if (result && "error" in result) {
+        setError(result.error ?? "Simpan draft lembur gagal.");
+        return;
+      }
+      setOpenTwDraft(false);
+      setSuccess("Draft lembur berhasil disimpan.");
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function openDraftDetailModal(row: OvertimeRow) {
+    if (row.draftItems.length === 0) return;
+    setActiveDraftRequest(row);
+    setOpenDraftDetail(true);
+  }
+
+  const groupedDraft = useMemo(() => {
+    const map = new Map<string, typeof draftItems>();
+    const order: string[] = [];
+    for (const item of draftItems) {
+      if (!map.has(item.jobId)) {
+        map.set(item.jobId, []);
+        order.push(item.jobId);
+      }
+      map.get(item.jobId)!.push(item);
+    }
+    return order.map((jobId) => ({ jobId, items: map.get(jobId)! }));
+  }, [draftItems]);
+
+  const selectedCatalog = overtimeCatalogEntries.find((entry) => entry.id === draftCatalogId) ?? null;
+  const filteredCatalog = useMemo(() => {
+    const q = catalogSearch.trim().toLowerCase();
+    if (!q) return overtimeCatalogEntries;
+    return overtimeCatalogEntries.filter(
+      (entry) => entry.workName.toLowerCase().includes(q) || (entry.externalCode ?? "").toLowerCase().includes(q)
+    );
+  }, [catalogSearch, overtimeCatalogEntries]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target as Node)) {
+        setCatalogOpen(false);
+        setCatalogSearch("");
+      }
+    }
+    if (catalogOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [catalogOpen]);
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <h2 className="text-base font-semibold text-slate-900">Overtime</h2>
-        <p className="text-sm text-slate-500">Role aktif: {role}</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Overtime</h2>
+            <p className="text-sm text-slate-500">Role aktif: {role}</p>
+          </div>
+          {canSpvManage ? (
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setOpenSpvSubmit(true)}>Ajukan Lembur</Button>
+              <Button size="sm" variant="outline" onClick={() => setOpenSpvSchedule(true)}>Atur Lembur</Button>
+            </div>
+          ) : canSubmit ? (
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setOpenTwSubmit(true)}>Ajukan OVT/Lembur</Button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {error ? (
@@ -129,45 +435,6 @@ export default function OvertimeClient({
       ) : null}
       {success ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>
-      ) : null}
-
-      {canSubmit ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900">Pengajuan Overtime (TEAMWORK)</h3>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Tanggal</label>
-              <Input type="date" value={requestDate} onChange={(e) => setRequestDate(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Jenis Overtime</label>
-              <select
-                value={overtimeType}
-                onChange={(e) => setOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                {Object.entries(OVERTIME_TYPE_LABEL).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">{OVERTIME_HELP_TEXT[overtimeType]}</p>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-600">Alasan / Catatan</label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={() => void handleSubmitRequest()} disabled={pending}>
-              {pending ? "Mengirim..." : "Kirim Pengajuan"}
-            </Button>
-          </div>
-        </div>
       ) : null}
 
       {canApprove ? (
@@ -222,7 +489,7 @@ export default function OvertimeClient({
 
       <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
         <div className="border-b border-slate-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-900">{canSubmit ? "Riwayat Pengajuan Saya" : "Riwayat Pengajuan Overtime"}</h3>
+          <h3 className="text-sm font-semibold text-slate-900">{canSubmit ? "Riwayat Pengajuan Saya" : canMonitor ? "Riwayat Overtime (Monitoring HRD)" : "Riwayat Pengajuan Overtime"}</h3>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
@@ -231,15 +498,23 @@ export default function OvertimeClient({
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Tanggal</th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Jenis</th>
               <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Nominal</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Poin</th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Catatan</th>
+              {canSubmit ? (
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Aksi</th>
+              ) : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {(canSubmit ? myRequests : processedRequests).length === 0 ? (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-500">Belum ada data overtime.</td></tr>
+              <tr><td colSpan={canSubmit ? 8 : 7} className="px-3 py-8 text-center text-sm text-slate-500">Belum ada data overtime.</td></tr>
             ) : (canSubmit ? myRequests : processedRequests).map((row) => (
-              <tr key={row.id} className="bg-white">
+              <tr
+                key={row.id}
+                className={row.status === "APPROVED" && row.draftItems.length > 0 ? "cursor-pointer bg-white hover:bg-slate-50/50" : "bg-white"}
+                onClick={() => openDraftDetailModal(row)}
+              >
                 <td className="px-3 py-2">
                   <p className="font-medium text-slate-900">{row.employeeName}</p>
                   <p className="text-xs text-slate-500">{row.employeeCode} · {row.divisionName}</p>
@@ -247,18 +522,349 @@ export default function OvertimeClient({
                 <td className="px-3 py-2 text-slate-700">{row.requestDate}</td>
                 <td className="px-3 py-2 text-slate-700">{OVERTIME_TYPE_LABEL[row.overtimeType]}</td>
                 <td className="px-3 py-2 text-right font-semibold text-slate-900">{currency(row.totalAmount)}</td>
+                <td className="px-3 py-2 text-right font-semibold text-slate-900">{row.draftTotalPoints.toFixed(2)}</td>
                 <td className="px-3 py-2">
                   <Badge variant={row.status === "APPROVED" ? "default" : row.status === "REJECTED" ? "destructive" : "secondary"}>
                     {row.status}
                   </Badge>
                 </td>
                 <td className="px-3 py-2 text-xs text-slate-600">{row.reviewNotes ?? "-"}</td>
+                {canSubmit ? (
+                  <td className="px-3 py-2 text-right">
+                    {row.status === "APPROVED" ? (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openFillDraft(row); }}>
+                        Isi Draft
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-slate-400">-</span>
+                    )}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {openTwSubmit ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white p-4 space-y-3">
+            <h3 className="text-base font-semibold text-slate-900">Ajukan Overtime / Lembur (TEAMWORK)</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tanggal</label>
+                <Input type="date" value={requestDate} onChange={(e) => setRequestDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Jenis Overtime</label>
+                <select
+                  value={overtimeType}
+                  onChange={(e) => setOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {Object.entries(OVERTIME_TYPE_LABEL).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">{OVERTIME_HELP_TEXT[overtimeType]}</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Alasan / Catatan</label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenTwSubmit(false)} disabled={pending}>Batal</Button>
+              <Button onClick={() => void handleSubmitRequest()} disabled={pending}>
+                {pending ? "Mengirim..." : "Kirim Pengajuan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {openTwDraft && activeDraftRequest ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-4xl rounded-lg bg-white p-4 space-y-3">
+            <h3 className="text-base font-semibold text-slate-900">Isi Draft Lembur - {activeDraftRequest.requestDate}</h3>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+              <div className="grid grid-cols-[140px_1fr_90px_auto] gap-2 items-end">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Job ID</label>
+                  <Input value={draftJobId} onChange={(e) => setDraftJobId(e.target.value)} placeholder="Job ID..." />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Jenis Pekerjaan</label>
+                  <div ref={comboboxRef} className="relative">
+                    <button
+                      type="button"
+                      className="h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-left flex items-center justify-between gap-2 hover:bg-slate-50"
+                      onClick={() => { setCatalogOpen((v) => !v); setCatalogSearch(""); }}
+                    >
+                      <span className={selectedCatalog ? "text-slate-900 truncate" : "text-slate-400"}>
+                        {selectedCatalog
+                          ? `${selectedCatalog.workName}${selectedCatalog.unitDescription ? ` (${selectedCatalog.unitDescription})` : ""} - ${selectedCatalog.pointValue.toFixed(2)} poin`
+                          : "Pilih pekerjaan..."}
+                      </span>
+                    </button>
+                    {catalogOpen ? (
+                      <div className="absolute z-50 w-full mt-1 rounded-md border border-slate-200 bg-white shadow-lg">
+                        <div className="p-2 border-b border-slate-100">
+                          <Input value={catalogSearch} onChange={(e) => setCatalogSearch(e.target.value)} placeholder="Cari pekerjaan atau kode..." className="h-8 text-sm" />
+                        </div>
+                        <div className="max-h-52 overflow-y-auto">
+                          {filteredCatalog.length === 0 ? (
+                            <p className="px-3 py-3 text-sm text-slate-400 text-center">Tidak ditemukan</p>
+                          ) : filteredCatalog.map((catalog) => (
+                            <button
+                              key={catalog.id}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 hover:bg-slate-50 ${catalog.id === draftCatalogId ? "bg-teal-50 text-teal-700" : "text-slate-900"}`}
+                              onClick={() => {
+                                setDraftCatalogId(catalog.id);
+                                setCatalogOpen(false);
+                                setCatalogSearch("");
+                                setError(null);
+                              }}
+                            >
+                              <span className="truncate">
+                                {catalog.externalCode ? <span className="font-mono text-xs text-slate-400 mr-1.5">{catalog.externalCode}</span> : null}
+                                {catalog.workName}
+                                {catalog.unitDescription ? <span className="text-slate-400"> ({catalog.unitDescription})</span> : null}
+                              </span>
+                              <span className="shrink-0 text-xs text-slate-500 tabular-nums">{catalog.pointValue.toFixed(2)} poin</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-600">Qty</label>
+                  <Input type="number" min="0.01" step="0.01" value={draftQty} onChange={(e) => setDraftQty(e.target.value)} />
+                </div>
+                <Button variant="outline" onClick={addLineToCurrentJob}>+</Button>
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" variant="secondary" onClick={commitJobIdGroup} disabled={!draftJobId.trim() || currentJobLines.length === 0}>
+                  Tambah Job ID
+                </Button>
+              </div>
+              {currentJobLines.length > 0 ? (
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white border-b border-slate-100">
+                      <tr>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500">Jenis Pekerjaan</th>
+                        <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-500">Qty</th>
+                        <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-500">Poin</th>
+                        <th className="px-3 py-1.5 text-right text-xs font-medium text-slate-500">Total</th>
+                        <th className="px-3 py-1.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {currentJobLines.map((line) => (
+                        <tr key={line.key}>
+                          <td className="px-3 py-1.5">{line.workName}</td>
+                          <td className="px-3 py-1.5 text-right">{line.quantity.toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right">{line.pointValue.toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right font-medium">{(line.quantity * line.pointValue).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <Button size="icon" variant="ghost" onClick={() => removeCurrentLine(line.key)} className="text-black hover:text-red-600 focus-visible:text-red-600 active:text-red-700">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+            <div className="rounded-md border border-slate-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Job ID</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Jenis Pekerjaan</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Qty</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Poin</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Total</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {groupedDraft.length === 0 ? (
+                    <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">Belum ada draft.</td></tr>
+                  ) : groupedDraft.flatMap((group) => ([
+                      <tr key={`hdr-${group.jobId}`} className="bg-slate-100">
+                        <td className="px-3 py-2 font-semibold" colSpan={5}>Job ID: {group.jobId}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Button size="icon" variant="ghost" onClick={() => removeDraftGroup(group.jobId)} className="text-black hover:text-red-600 focus-visible:text-red-600 active:text-red-700">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                      ,
+                      ...group.items.map((item) => (
+                        <tr key={item.key}>
+                          <td className="px-3 py-2">{item.jobId}</td>
+                          <td className="px-3 py-2">{item.workName}</td>
+                          <td className="px-3 py-2 text-right">{item.quantity.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">{item.pointValue.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{item.totalPoints.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">
+                            <Button size="icon" variant="ghost" onClick={() => removeDraftItem(item.key)} className="text-black hover:text-red-600 focus-visible:text-red-600 active:text-red-700">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      )),
+                    ]))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenTwDraft(false)} disabled={pending}>Batal</Button>
+              <Button onClick={() => void saveDraft()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan Draft"}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {openDraftDetail && activeDraftRequest ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl rounded-lg bg-white p-4 space-y-3">
+            <h3 className="text-base font-semibold text-slate-900">Detail Draft Lembur - {activeDraftRequest.requestDate}</h3>
+            <div className="rounded-md border border-slate-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Job ID</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Jenis Pekerjaan</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Qty</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Poin</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {activeDraftRequest.draftItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-3 py-2">{item.jobId}</td>
+                      <td className="px-3 py-2">{item.workName}</td>
+                      <td className="px-3 py-2 text-right">{item.quantity.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right">{item.pointValue.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{item.totalPoints.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setOpenDraftDetail(false)}>Tutup</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {openSpvSubmit ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white p-4 space-y-3">
+            <h3 className="text-base font-semibold text-slate-900">Ajukan Lembur SPV (Auto Approve)</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tanggal</label>
+                <Input type="date" value={spvRequestDate} onChange={(e) => setSpvRequestDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Jenis</label>
+                <select
+                  value={spvOvertimeType}
+                  onChange={(e) => setSpvOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {Object.entries(OVERTIME_TYPE_LABEL).filter(([key]) => key !== "PATCH_ABSENCE_3H").map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Catatan</label>
+              <textarea
+                value={spvReason}
+                onChange={(e) => setSpvReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenSpvSubmit(false)} disabled={pending}>Batal</Button>
+              <Button onClick={() => void handleSpvSelfSubmit()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {openSpvSchedule ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white p-4 space-y-3">
+            <h3 className="text-base font-semibold text-slate-900">Atur Lembur Terjadwal Divisi</h3>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Karyawan (TEAMWORK / MANAGERIAL)</label>
+              <select
+                value={targetEmployeeId}
+                onChange={(e) => setTargetEmployeeId(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Pilih karyawan</option>
+                {scopedEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.employeeCode} - {employee.fullName} ({employee.employeeGroup})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Tanggal</label>
+                <Input type="date" value={scheduleRequestDate} onChange={(e) => setScheduleRequestDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Jenis</label>
+                <select
+                  value={scheduleOvertimeType}
+                  onChange={(e) => setScheduleOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {Object.entries(OVERTIME_TYPE_LABEL).filter(([key]) => key !== "PATCH_ABSENCE_3H").map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Catatan Penjadwalan</label>
+              <textarea
+                value={scheduleReason}
+                onChange={(e) => setScheduleReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpenSpvSchedule(false)} disabled={pending}>Batal</Button>
+              <Button onClick={() => void handleSpvSchedule()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
-

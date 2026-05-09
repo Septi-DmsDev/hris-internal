@@ -135,6 +135,25 @@ export const overtimeRequests = pgTable("overtime_requests", {
   index("idx_overtime_requests_period_code").on(table.periodCode),
 ]);
 
+export const overtimeDraftEntries = pgTable("overtime_draft_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  overtimeRequestId: uuid("overtime_request_id").notNull().references(() => overtimeRequests.id, { onDelete: "cascade" }),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  workDate: date("work_date", { mode: "date" }).notNull(),
+  jobId: varchar("job_id", { length: 100 }).notNull(),
+  workName: varchar("work_name", { length: 200 }).notNull(),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+  pointValue: numeric("point_value", { precision: 12, scale: 2 }).notNull(),
+  totalPoints: numeric("total_points", { precision: 12, scale: 2 }).notNull(),
+  notes: text("notes"),
+  createdByUserId: uuid("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("idx_overtime_draft_request").on(table.overtimeRequestId),
+  index("idx_overtime_draft_employee_date").on(table.employeeId, table.workDate),
+]);
+
 // Attendance Records
 
 export const attendanceStatusEnum = pgEnum("attendance_status", [
@@ -269,6 +288,8 @@ export type AttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferSe
 export type NewAttendanceTicketAuditLog = typeof attendanceTicketAuditLogs.$inferInsert;
 export type OvertimeRequest = typeof overtimeRequests.$inferSelect;
 export type NewOvertimeRequest = typeof overtimeRequests.$inferInsert;
+export type OvertimeDraftEntry = typeof overtimeDraftEntries.$inferSelect;
+export type NewOvertimeDraftEntry = typeof overtimeDraftEntries.$inferInsert;
 export type EmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferSelect;
 export type NewEmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferInsert;
 export type LeaveQuota = typeof leaveQuotas.$inferSelect;

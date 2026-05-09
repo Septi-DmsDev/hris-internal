@@ -5,14 +5,23 @@ import { revalidatePath } from "next/cache";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
-import { attendanceTickets, overtimeRequests } from "@/lib/db/schema/hr";
+import { attendanceTickets, overtimeDraftEntries, overtimeRequests } from "@/lib/db/schema/hr";
 import { divisions } from "@/lib/db/schema/master";
+import { pointCatalogEntries } from "@/lib/db/schema/point";
 import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
-import { overtimeDecisionSchema, overtimeRequestSchema } from "@/lib/validations/overtime";
+import { getActivePointCatalogVersion } from "@/server/services/point-catalog-service";
+import {
+  overtimeDecisionSchema,
+  overtimeRequestSchema,
+  overtimeDraftSubmitSchema,
+  spvScheduleOvertimeSchema,
+  spvSelfOvertimeRequestSchema,
+} from "@/lib/validations/overtime";
 import type { UserRole } from "@/types";
 
-const OVERTIME_APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV"];
+const OVERTIME_APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "SPV"];
 const OVERTIME_SUBMITTER_ROLES: UserRole[] = ["TEAMWORK"];
+const OVERTIME_MONITOR_ROLES: UserRole[] = ["HRD"];
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 
 const OVERTIME_TYPE_CONFIG = {
@@ -24,6 +33,58 @@ const OVERTIME_TYPE_CONFIG = {
 } as const;
 
 type OvertimeType = keyof typeof OVERTIME_TYPE_CONFIG;
+let hasOvertimeRequestsTablePromise: Promise<boolean> | null = null;
+let hasOvertimeDraftEntriesTablePromise: Promise<boolean> | null = null;
+
+async function hasOvertimeRequestsTable() {
+  if (!hasOvertimeRequestsTablePromise) {
+    hasOvertimeRequestsTablePromise = db
+      .execute(
+        sql<{ has_table: boolean }>`
+          select exists (
+            select 1
+            from information_schema.tables
+            where table_name = 'overtime_requests'
+          ) as has_table
+        `
+      )
+      .then((rows) => Boolean(rows[0]?.has_table))
+      .catch(() => false);
+  }
+  return hasOvertimeRequestsTablePromise;
+}
+
+async function ensureOvertimeTableReady() {
+  const ready = await hasOvertimeRequestsTable();
+  if (!ready) {
+    return {
+      error:
+        "Modul overtime belum siap di database. Jalankan migration `supabase/migrations/0014_overtime_requests.sql` terlebih dahulu.",
+    } as const;
+  }
+  if (!hasOvertimeDraftEntriesTablePromise) {
+    hasOvertimeDraftEntriesTablePromise = db
+      .execute(
+        sql<{ has_table: boolean }>`
+          select exists (
+            select 1
+            from information_schema.tables
+            where table_name = 'overtime_draft_entries'
+          ) as has_table
+        `
+      )
+      .then((rows) => Boolean(rows[0]?.has_table))
+      .catch(() => false);
+  }
+  const draftReady = await hasOvertimeDraftEntriesTablePromise;
+  if (!draftReady) {
+    return {
+      error:
+        "Modul draft overtime belum siap di database. Jalankan migration `supabase/migrations/0015_overtime_draft_entries.sql` terlebih dahulu.",
+    } as const;
+  }
+  return null;
+}
 
 type OvertimeRequestRow = {
   id: string;
@@ -45,6 +106,32 @@ type OvertimeRequestRow = {
   approvedAt: Date | null;
   rejectedAt: Date | null;
   createdAt: Date;
+  draftTotalPoints: number;
+  draftItems: {
+    id: string;
+    jobId: string;
+    workName: string;
+    quantity: number;
+    pointValue: number;
+    totalPoints: number;
+    notes: string | null;
+  }[];
+};
+
+type ScopedEmployeeOption = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  divisionName: string | null;
+  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+};
+
+type OvertimeCatalogEntry = {
+  id: string;
+  externalCode: string | null;
+  workName: string;
+  pointValue: string | number;
+  unitDescription: string | null;
 };
 
 function resolvePeriodCodeFromDate(date: Date) {
@@ -80,26 +167,73 @@ async function getScopedOvertimeRows(role: UserRole, divisionIds: string[]) {
 
   if (DIV_SCOPED_ROLES.includes(role)) {
     if (divisionIds.length === 0) return [];
-    return (await baseQuery
+    const rows = (await baseQuery
       .where(inArray(employees.divisionId, divisionIds))
-      .orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as OvertimeRequestRow[];
+      .orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as Omit<OvertimeRequestRow, "draftTotalPoints" | "draftItems">[];
+    return withDraftMeta(rows);
   }
 
-  return (await baseQuery.orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as OvertimeRequestRow[];
+  const rows = (await baseQuery.orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as Omit<OvertimeRequestRow, "draftTotalPoints" | "draftItems">[];
+  return withDraftMeta(rows);
+}
+
+async function withDraftMeta(rows: Omit<OvertimeRequestRow, "draftTotalPoints" | "draftItems">[]): Promise<OvertimeRequestRow[]> {
+  if (rows.length === 0) return [];
+  const requestIds = rows.map((row) => row.id);
+  const draftRows = await db
+    .select({
+      id: overtimeDraftEntries.id,
+      overtimeRequestId: overtimeDraftEntries.overtimeRequestId,
+      jobId: overtimeDraftEntries.jobId,
+      workName: overtimeDraftEntries.workName,
+      quantity: overtimeDraftEntries.quantity,
+      pointValue: overtimeDraftEntries.pointValue,
+      totalPoints: overtimeDraftEntries.totalPoints,
+      notes: overtimeDraftEntries.notes,
+    })
+    .from(overtimeDraftEntries)
+    .where(inArray(overtimeDraftEntries.overtimeRequestId, requestIds))
+    .orderBy(overtimeDraftEntries.createdAt);
+
+  const grouped = new Map<string, OvertimeRequestRow["draftItems"]>();
+  for (const item of draftRows) {
+    const entry = {
+      id: item.id,
+      jobId: item.jobId,
+      workName: item.workName,
+      quantity: Number(item.quantity),
+      pointValue: Number(item.pointValue),
+      totalPoints: Number(item.totalPoints),
+      notes: item.notes ?? null,
+    };
+    const list = grouped.get(item.overtimeRequestId) ?? [];
+    list.push(entry);
+    grouped.set(item.overtimeRequestId, list);
+  }
+
+  return rows.map((row) => {
+    const draftItems = grouped.get(row.id) ?? [];
+    const draftTotalPoints = Number(draftItems.reduce((sum, item) => sum + item.totalPoints, 0).toFixed(2));
+    return { ...row, draftItems, draftTotalPoints };
+  });
 }
 
 export async function getOvertimeWorkspace() {
   await requireAuth();
+  const tableError = await ensureOvertimeTableReady();
+  if (tableError) return tableError;
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
 
   const canSubmit = OVERTIME_SUBMITTER_ROLES.includes(role);
   const canApprove = OVERTIME_APPROVER_ROLES.includes(role);
-  if (!canSubmit && !canApprove) {
+  const canMonitor = OVERTIME_MONITOR_ROLES.includes(role);
+  const canSpvManage = role === "SPV";
+  if (!canSubmit && !canApprove && !canMonitor) {
     return { error: "Akses ditolak." };
   }
 
-  const allRows = canApprove ? await getScopedOvertimeRows(role, roleRow.divisionIds) : [];
+  const allRows = canApprove || canMonitor ? await getScopedOvertimeRows(role, roleRow.divisionIds) : [];
 
   const myRows = canSubmit && roleRow.employeeId
     ? ((await db
@@ -128,22 +262,181 @@ export async function getOvertimeWorkspace() {
       .leftJoin(employees, eq(overtimeRequests.employeeId, employees.id))
       .leftJoin(divisions, eq(employees.divisionId, divisions.id))
       .where(eq(overtimeRequests.employeeId, roleRow.employeeId))
-      .orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as OvertimeRequestRow[])
+      .orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as Omit<OvertimeRequestRow, "draftTotalPoints" | "draftItems">[])
     : [];
+  const myRowsWithDraft = await withDraftMeta(myRows);
+
+  let scopedEmployees: ScopedEmployeeOption[] = [];
+  if (canSpvManage) {
+    if (roleRow.divisionIds.length > 0) {
+      scopedEmployees = await db
+        .select({
+          id: employees.id,
+          employeeCode: employees.employeeCode,
+          fullName: employees.fullName,
+          divisionName: divisions.name,
+          employeeGroup: employees.employeeGroup,
+        })
+        .from(employees)
+        .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+        .where(
+          and(
+            inArray(employees.divisionId, roleRow.divisionIds),
+            inArray(employees.employeeGroup, ["TEAMWORK", "MANAGERIAL"]),
+            eq(employees.isActive, true),
+          )
+        )
+        .orderBy(employees.fullName);
+    }
+  }
+
+  let overtimeCatalogEntries: OvertimeCatalogEntry[] = [];
+  if (canSubmit && roleRow.employeeId) {
+    const [employeeRow] = await db
+      .select({ divisionName: divisions.name })
+      .from(employees)
+      .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+      .where(eq(employees.id, roleRow.employeeId))
+      .limit(1);
+
+    const activeVersion = await getActivePointCatalogVersion();
+    if (activeVersion && employeeRow?.divisionName) {
+      const catalogRows = await db
+        .select({
+          id: pointCatalogEntries.id,
+          externalCode: pointCatalogEntries.externalCode,
+          workName: pointCatalogEntries.workName,
+          pointValue: pointCatalogEntries.pointValue,
+          unitDescription: pointCatalogEntries.unitDescription,
+          divisionName: pointCatalogEntries.divisionName,
+          externalRowNumber: pointCatalogEntries.externalRowNumber,
+        })
+        .from(pointCatalogEntries)
+        .where(
+          and(
+            eq(pointCatalogEntries.versionId, activeVersion.id),
+            eq(pointCatalogEntries.isActive, true),
+          )
+        )
+        .orderBy(pointCatalogEntries.externalRowNumber);
+
+      overtimeCatalogEntries = catalogRows
+        .filter((row) => row.divisionName.toUpperCase() === employeeRow.divisionName!.toUpperCase())
+        .map((row) => ({
+          id: row.id,
+          externalCode: row.externalCode ?? null,
+          workName: row.workName,
+          pointValue: row.pointValue,
+          unitDescription: row.unitDescription ?? null,
+        }));
+    }
+  }
 
   return {
     role,
     canSubmit,
     canApprove,
-    myRequests: myRows,
+    canMonitor,
+    canSpvManage,
+    scopedEmployees,
+    overtimeCatalogEntries,
+    myRequests: myRowsWithDraft,
     pendingRequests: allRows.filter((row) => row.status === "PENDING"),
     processedRequests: allRows.filter((row) => row.status !== "PENDING"),
+  };
+}
+
+export async function submitOvertimeDraft(input: unknown) {
+  const authError = await checkRole(["TEAMWORK"]);
+  if (authError) return authError;
+  const tableError = await ensureOvertimeTableReady();
+  if (tableError) return tableError;
+
+  const parsed = overtimeDraftSubmitSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Draft lembur tidak valid." };
+  }
+
+  const roleRow = await getCurrentUserRoleRow();
+  const user = await getUser();
+  const actorUserId = user?.id ?? roleRow.userId;
+  if (!roleRow.employeeId) return { error: "Akun Anda belum terhubung ke data karyawan." };
+
+  const [requestRow] = await db
+    .select({
+      id: overtimeRequests.id,
+      employeeId: overtimeRequests.employeeId,
+      status: overtimeRequests.status,
+      requestDate: overtimeRequests.requestDate,
+    })
+    .from(overtimeRequests)
+    .where(eq(overtimeRequests.id, parsed.data.requestId))
+    .limit(1);
+
+  if (!requestRow) return { error: "Request lembur tidak ditemukan." };
+  if (requestRow.employeeId !== roleRow.employeeId) return { error: "Anda hanya boleh mengisi draft lembur milik sendiri." };
+  if (requestRow.status !== "APPROVED") return { error: "Draft lembur hanya bisa diisi untuk jadwal yang sudah approved." };
+
+  await db.transaction(async (tx) => {
+    await tx.delete(overtimeDraftEntries).where(eq(overtimeDraftEntries.overtimeRequestId, requestRow.id));
+    await tx.insert(overtimeDraftEntries).values(
+      parsed.data.items.map((item) => ({
+        overtimeRequestId: requestRow.id,
+        employeeId: roleRow.employeeId!,
+        workDate: requestRow.requestDate,
+        jobId: item.jobId.trim(),
+        workName: item.workName.trim(),
+        quantity: item.quantity.toFixed(2),
+        pointValue: item.pointValue.toFixed(2),
+        totalPoints: (item.quantity * item.pointValue).toFixed(2),
+        notes: item.notes?.trim() || null,
+        createdByUserId: actorUserId,
+      }))
+    );
+  });
+
+  revalidatePath("/overtime");
+  return { success: true };
+}
+
+function buildOvertimeInsertData(params: {
+  employeeId: string;
+  requestDate: Date;
+  overtimeType: OvertimeType;
+  reason: string;
+  actorUserId: string;
+  autoApproved?: boolean;
+}) {
+  const cfg = OVERTIME_TYPE_CONFIG[params.overtimeType];
+  const periodCode = resolvePeriodCodeFromDate(params.requestDate);
+  const period = resolvePayrollPeriod(periodCode);
+  const totalAmount = cfg.baseAmount + cfg.mealAmount;
+
+  return {
+    employeeId: params.employeeId,
+    requestDate: params.requestDate,
+    overtimeType: params.overtimeType,
+    overtimeHours: cfg.overtimeHours,
+    breakHours: cfg.breakHours,
+    baseAmount: cfg.baseAmount.toFixed(2),
+    mealAmount: cfg.mealAmount.toFixed(2),
+    totalAmount: totalAmount.toFixed(2),
+    periodCode,
+    periodStartDate: period.periodStartDate,
+    periodEndDate: period.periodEndDate,
+    reason: params.reason,
+    status: params.autoApproved ? "APPROVED" as const : "PENDING" as const,
+    requestedByUserId: params.actorUserId,
+    approvedByUserId: params.autoApproved ? params.actorUserId : null,
+    approvedAt: params.autoApproved ? new Date() : null,
   };
 }
 
 export async function submitOvertimeRequest(input: unknown) {
   const authError = await checkRole(OVERTIME_SUBMITTER_ROLES);
   if (authError) return authError;
+  const tableError = await ensureOvertimeTableReady();
+  if (tableError) return tableError;
 
   const parsed = overtimeRequestSchema.safeParse(input);
   if (!parsed.success) {
@@ -158,10 +451,8 @@ export async function submitOvertimeRequest(input: unknown) {
   }
 
   const overtimeType = parsed.data.overtimeType as OvertimeType;
-  const cfg = OVERTIME_TYPE_CONFIG[overtimeType];
   const periodCode = resolvePeriodCodeFromDate(parsed.data.requestDate);
   const period = resolvePayrollPeriod(periodCode);
-  const totalAmount = cfg.baseAmount + cfg.mealAmount;
 
   if (overtimeType === "PATCH_ABSENCE_3H") {
     const [approvedAbsence] = await db
@@ -199,21 +490,98 @@ export async function submitOvertimeRequest(input: unknown) {
   }
 
   await db.insert(overtimeRequests).values({
-    employeeId: roleRow.employeeId,
-    requestDate: parsed.data.requestDate,
-    overtimeType,
-    overtimeHours: cfg.overtimeHours,
-    breakHours: cfg.breakHours,
-    baseAmount: cfg.baseAmount.toFixed(2),
-    mealAmount: cfg.mealAmount.toFixed(2),
-    totalAmount: totalAmount.toFixed(2),
-    periodCode,
-    periodStartDate: period.periodStartDate,
-    periodEndDate: period.periodEndDate,
-    reason: parsed.data.reason,
-    status: "PENDING",
-    requestedByUserId: actorUserId,
+    ...buildOvertimeInsertData({
+      employeeId: roleRow.employeeId,
+      requestDate: parsed.data.requestDate,
+      overtimeType,
+      reason: parsed.data.reason,
+      actorUserId,
+    }),
   });
+
+  revalidatePath("/overtime");
+  return { success: true };
+}
+
+export async function submitSpvOvertimeRequest(input: unknown) {
+  const authError = await checkRole(["SPV"]);
+  if (authError) return authError;
+  const tableError = await ensureOvertimeTableReady();
+  if (tableError) return tableError;
+
+  const parsed = spvSelfOvertimeRequestSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input lembur SPV tidak valid." };
+  }
+
+  const roleRow = await getCurrentUserRoleRow();
+  const user = await getUser();
+  const actorUserId = user?.id ?? roleRow.userId;
+  if (!roleRow.employeeId) {
+    return { error: "Akun SPV belum terhubung ke data karyawan." };
+  }
+
+  await db.insert(overtimeRequests).values(
+    buildOvertimeInsertData({
+      employeeId: roleRow.employeeId,
+      requestDate: parsed.data.requestDate,
+      overtimeType: parsed.data.overtimeType,
+      reason: parsed.data.reason,
+      actorUserId,
+      autoApproved: true,
+    })
+  );
+
+  revalidatePath("/overtime");
+  return { success: true };
+}
+
+export async function scheduleDivisionOvertime(input: unknown) {
+  const authError = await checkRole(["SPV"]);
+  if (authError) return authError;
+  const tableError = await ensureOvertimeTableReady();
+  if (tableError) return tableError;
+
+  const parsed = spvScheduleOvertimeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Data atur lembur tidak valid." };
+  }
+
+  const roleRow = await getCurrentUserRoleRow();
+  const user = await getUser();
+  const actorUserId = user?.id ?? roleRow.userId;
+
+  const [targetEmployee] = await db
+    .select({
+      id: employees.id,
+      divisionId: employees.divisionId,
+      employeeGroup: employees.employeeGroup,
+      isActive: employees.isActive,
+    })
+    .from(employees)
+    .where(eq(employees.id, parsed.data.employeeId))
+    .limit(1);
+
+  if (!targetEmployee || !targetEmployee.isActive) {
+    return { error: "Karyawan tujuan tidak ditemukan atau sudah nonaktif." };
+  }
+  if (!roleRow.divisionIds.includes(targetEmployee.divisionId)) {
+    return { error: "Karyawan tujuan di luar scope divisi SPV." };
+  }
+  if (!["TEAMWORK", "MANAGERIAL"].includes(targetEmployee.employeeGroup)) {
+    return { error: "Atur lembur hanya untuk TEAMWORK dan MANAGERIAL." };
+  }
+
+  await db.insert(overtimeRequests).values(
+    buildOvertimeInsertData({
+      employeeId: targetEmployee.id,
+      requestDate: parsed.data.requestDate,
+      overtimeType: parsed.data.overtimeType,
+      reason: `Terjadwal SPV: ${parsed.data.reason}`,
+      actorUserId,
+      autoApproved: true,
+    })
+  );
 
   revalidatePath("/overtime");
   return { success: true };
@@ -222,6 +590,8 @@ export async function submitOvertimeRequest(input: unknown) {
 export async function decideOvertimeRequest(input: unknown) {
   const authError = await checkRole(OVERTIME_APPROVER_ROLES);
   if (authError) return authError;
+  const tableError = await ensureOvertimeTableReady();
+  if (tableError) return tableError;
 
   const parsed = overtimeDecisionSchema.safeParse(input);
   if (!parsed.success) {

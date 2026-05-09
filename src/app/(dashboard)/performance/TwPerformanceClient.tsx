@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { Camera, ChevronDown, ScanSearch, Trash2 } from "lucide-react";
 import { batchSubmitDraft } from "@/server/actions/performance";
 import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
 import type { TwCatalogEntry, TwActivityItem } from "@/server/actions/performance";
@@ -25,6 +25,10 @@ type DraftItem = {
   workName: string;
   pointValue: number;
   qty: number;
+};
+
+type JobGroup = {
+  jobId: string;
 };
 
 type CurrentJobLine = {
@@ -79,6 +83,90 @@ function formatDate(d: string) {
   });
 }
 
+type BrowserTesseract = {
+  recognize: (
+    image: Blob | string,
+    lang?: string,
+    options?: {
+      logger?: (message: unknown) => void;
+      tessedit_char_whitelist?: string;
+      preserve_interword_spaces?: string;
+      user_defined_dpi?: string;
+    }
+  ) => Promise<{ data?: { text?: string } }>;
+};
+
+declare global {
+  interface Window {
+    Tesseract?: BrowserTesseract;
+  }
+}
+
+function normalizeJobId(raw: string) {
+  return raw.replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+function extractJobIdsFromText(text: string) {
+  // Selaras dengan engine referensi: 2 huruf + spasi + 2-6 angka
+  const regex = /(?:^|[\s,;|])([A-Za-z]{2})\s+(\d{2,6})(?=\s|$|[^A-Za-z0-9])/g;
+  const found = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    found.add(normalizeJobId(`${m[1]} ${m[2]}`));
+  }
+  return Array.from(found);
+}
+
+async function preprocessForOcr(file: Blob): Promise<Blob> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Gagal memuat gambar"));
+    image.src = URL.createObjectURL(file);
+  });
+
+  const w = img.naturalWidth || 640;
+  const h = img.naturalHeight || 480;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, w * 2);
+  canvas.height = Math.max(1, h * 2);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return file;
+
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    sum += g;
+    d[i] = g;
+    d[i + 1] = g;
+    d[i + 2] = g;
+  }
+  const mean = sum / (d.length / 4);
+  const darkBg = mean < 128;
+
+  for (let i = 0; i < d.length; i += 4) {
+    let g = d[i];
+    if (darkBg) g = 255 - g;
+    g = (g - 128) * 1.4 + 128;
+    g = Math.max(80, Math.min(235, g));
+    d[i] = g;
+    d[i + 1] = g;
+    d[i + 2] = g;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  ctx.filter = "contrast(120%) brightness(102%)";
+  ctx.drawImage(canvas, 0, 0);
+  ctx.filter = "none";
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  return blob ?? file;
+}
+
 type Props = {
   catalogEntries: TwCatalogEntry[];
   activities: TwActivityItem[];
@@ -87,10 +175,12 @@ type Props = {
 
 export default function TwPerformanceClient({ catalogEntries, activities, divisionName }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"submit" | "history">("submit");
 
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
+  const [jobGroups, setJobGroups] = useState<JobGroup[]>([]);
   const [editingDate, setEditingDate] = useState<string | null>(null);
 
   // Stage 1: current Job ID group being built
@@ -108,6 +198,25 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [historyDetail, setHistoryDetail] = useState<DateGroup | null>(null);
+  const [openOcrModal, setOpenOcrModal] = useState(false);
+  const [ocrPending, setOcrPending] = useState(false);
+  const [ocrText, setOcrText] = useState("");
+  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
+  const [ocrStreamOn, setOcrStreamOn] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    const workDate = searchParams.get("workDate");
+    const fromOvertime = searchParams.get("fromOvertime");
+    if (!workDate) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)) return;
+    setSelectedDate(workDate);
+    setActiveTab("submit");
+    if (fromOvertime) {
+      setSuccess(`Tanggal draft diatur dari overtime approved (${workDate}). Lanjutkan isi Job ID dan jenis pekerjaan.`);
+    }
+  }, [searchParams]);
 
   const selectedCatalog = catalogEntries.find((c) => c.id === inputCatalogId);
 
@@ -131,6 +240,14 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
     if (catalogOpen) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [catalogOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
   // Add one work type line to the current Job ID group
   function addLineToCurrentJob() {
@@ -164,7 +281,8 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
     if (!currentJobId.trim()) { setError("Isi Job ID terlebih dahulu."); return; }
     if (currentJobLines.length === 0) { setError("Tambahkan minimal 1 jenis pekerjaan untuk Job ID ini."); return; }
     setError(null);
-    const jobId = currentJobId.trim();
+    const jobId = normalizeJobId(currentJobId);
+    setJobGroups((prev) => (prev.some((g) => g.jobId === jobId) ? prev : [...prev, { jobId }]));
     setDraftItems((prev) => [
       ...prev,
       ...currentJobLines.map((line) => ({
@@ -186,12 +304,35 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
 
   function removeDraftGroup(jobId: string) {
     setDraftItems((prev) => prev.filter((i) => i.jobId !== jobId));
+    setJobGroups((prev) => prev.filter((g) => g.jobId !== jobId));
+  }
+
+  function editDraftGroup(jobId: string) {
+    const groupItems = draftItems.filter((item) => item.jobId === jobId);
+    setCurrentJobId(jobId);
+    setCurrentJobLines(
+      groupItems.map((item) => ({
+        key: `${item.key}-edit`,
+        catalogEntryId: item.catalogEntryId,
+        workName: item.workName,
+        pointValue: item.pointValue,
+        qty: item.qty,
+      }))
+    );
+    setDraftItems((prev) => prev.filter((item) => item.jobId !== jobId));
+    setJobGroups((prev) => prev.filter((g) => g.jobId !== jobId));
+    setActiveTab("submit");
   }
 
   async function handleSubmit() {
     if (draftItems.length === 0) { setError("Tambahkan minimal 1 aktivitas."); return; }
     if (currentJobLines.length > 0) {
       setError("Ada jenis pekerjaan di Job ID saat ini yang belum dimasukkan ke draft. Tekan [+ Job ID] terlebih dahulu.");
+      return;
+    }
+    const emptyGroups = jobGroups.filter((g) => !draftItems.some((i) => i.jobId === g.jobId));
+    if (emptyGroups.length > 0) {
+      setError(`Masih ada Job ID tanpa pekerjaan: ${emptyGroups.map((g) => g.jobId).join(", ")}`);
       return;
     }
     setPending(true);
@@ -210,6 +351,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
         return;
       }
       setDraftItems([]);
+      setJobGroups([]);
       setCurrentJobId("");
       setCurrentJobLines([]);
       setEditingDate(null);
@@ -237,12 +379,140 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
       });
     setSelectedDate(group.workDate);
     setDraftItems(items);
+    setJobGroups(Array.from(new Set(items.map((i) => i.jobId))).map((jobId) => ({ jobId })));
     setCurrentJobId("");
     setCurrentJobLines([]);
     setEditingDate(group.workDate);
     setError(null);
     setSuccess(null);
     setActiveTab("submit");
+  }
+
+  async function ensureTesseractLoaded() {
+    if (typeof window === "undefined") return null;
+    if (window.Tesseract) return window.Tesseract;
+    await new Promise<void>((resolve, reject) => {
+      const existing = document.querySelector<HTMLScriptElement>("script[data-ocr='tesseract']");
+      if (existing) {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Gagal memuat OCR engine")), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.async = true;
+      script.dataset.ocr = "tesseract";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Gagal memuat OCR engine"));
+      document.body.appendChild(script);
+    });
+    return window.Tesseract ?? null;
+  }
+
+  function mergeDetectedJobIds(jobIds: string[]) {
+    if (jobIds.length === 0) {
+      setError("Kode Job ID tidak terdeteksi. Pastikan format seperti TT 6312 terlihat jelas.");
+      return;
+    }
+    setJobGroups((prev) => {
+      const set = new Set(prev.map((g) => g.jobId));
+      const next = [...prev];
+      for (const jobId of jobIds) {
+        if (!set.has(jobId)) {
+          next.push({ jobId });
+          set.add(jobId);
+        }
+      }
+      return next;
+    });
+    setSuccess(`OCR berhasil mendeteksi ${jobIds.length} Job ID.`);
+    setError(null);
+    setOpenOcrModal(false);
+    setActiveTab("submit");
+  }
+
+  async function runOcrOnBlob(blob: Blob) {
+    setOcrPending(true);
+    setError(null);
+    try {
+      const engine = await ensureTesseractLoaded();
+      if (!engine) {
+        setError("OCR engine tidak tersedia di browser ini.");
+        return;
+      }
+      const preprocessed = await preprocessForOcr(blob);
+
+      const [rawResult, processedResult] = await Promise.all([
+        engine.recognize(blob, "eng", {
+          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_/.",
+          preserve_interword_spaces: "1",
+          user_defined_dpi: "300",
+        }),
+        engine.recognize(preprocessed, "eng", {
+          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_/.",
+          preserve_interword_spaces: "1",
+          user_defined_dpi: "300",
+        }),
+      ]);
+
+      const rawText = rawResult?.data?.text ?? "";
+      const processedText = processedResult?.data?.text ?? "";
+      const mergedText = [rawText, processedText].filter(Boolean).join("\n");
+      setOcrText(mergedText);
+
+      const mergedIds = Array.from(new Set([
+        ...extractJobIdsFromText(rawText),
+        ...extractJobIdsFromText(processedText),
+      ]));
+      mergeDetectedJobIds(mergedIds);
+    } catch {
+      setError("OCR gagal diproses. Coba ulangi dengan gambar yang lebih jelas.");
+    } finally {
+      setOcrPending(false);
+    }
+  }
+
+  async function handleUploadImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setOcrPreview(URL.createObjectURL(file));
+    await runOcrOnBlob(file);
+  }
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setOcrStreamOn(true);
+    } catch {
+      setError("Akses kamera ditolak atau tidak tersedia.");
+    }
+  }
+
+  function stopCamera() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setOcrStreamOn(false);
+  }
+
+  async function captureFromCamera() {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    setOcrPreview(dataUrl);
+    const blob = await (await fetch(dataUrl)).blob();
+    await runOcrOnBlob(blob);
   }
 
   const dateGroups = useMemo((): DateGroup[] => {
@@ -281,7 +551,8 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
   // Group committed draft items by Job ID (preserve insertion order)
   const groupedDraft = useMemo(() => {
     const seen = new Map<string, DraftItem[]>();
-    const order: string[] = [];
+    const order: string[] = jobGroups.map((g) => g.jobId);
+    for (const jobId of order) seen.set(jobId, []);
     for (const item of draftItems) {
       if (!seen.has(item.jobId)) {
         seen.set(item.jobId, []);
@@ -290,7 +561,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
       seen.get(item.jobId)!.push(item);
     }
     return order.map((jobId) => ({ jobId, items: seen.get(jobId)! }));
-  }, [draftItems]);
+  }, [draftItems, jobGroups]);
 
   const draftTotal = draftItems.reduce((s, i) => s + i.pointValue * i.qty, 0);
   const currentJobLineTotal = currentJobLines.reduce((s, l) => s + l.pointValue * l.qty, 0);
@@ -527,6 +798,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                     <tbody>
                       {groupedDraft.map(({ jobId, items }) => {
                         const groupTotal = items.reduce((s, i) => s + i.pointValue * i.qty, 0);
+                        const isEmpty = items.length === 0;
                         return (
                           <Fragment key={`grp-${jobId}`}>
                             {/* Job ID header row */}
@@ -538,17 +810,28 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                                 {groupTotal.toFixed(2)}
                               </td>
                               <td className="px-4 py-2 text-right">
-                                <button
-                                  onClick={() => removeDraftGroup(jobId)}
-                                  className="text-slate-400 hover:text-red-500 transition-colors"
-                                  title="Hapus seluruh Job ID ini"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={() => editDraftGroup(jobId)}>
+                                    Edit
+                                  </Button>
+                                  <button
+                                    onClick={() => removeDraftGroup(jobId)}
+                                    className="text-slate-400 hover:text-red-500 transition-colors"
+                                    title="Hapus seluruh Job ID ini"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                             {/* Work type rows */}
-                            {items.map((item) => (
+                            {isEmpty ? (
+                              <tr className="bg-white border-t border-slate-100">
+                                <td colSpan={4} className="px-4 py-2.5 text-xs text-amber-700">
+                                  Job ID ini belum punya pekerjaan. Klik Edit untuk melengkapi.
+                                </td>
+                              </tr>
+                            ) : items.map((item) => (
                               <tr key={item.key} className="bg-white hover:bg-slate-50/50 border-t border-slate-100">
                                 <td className="px-4 py-2 pl-8 text-slate-700">{item.workName}</td>
                                 <td className="px-4 py-2 text-right tabular-nums text-slate-600">{item.qty}</td>
@@ -585,9 +868,13 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                 </div>
               )}
 
-              {draftItems.length > 0 && (
+              {jobGroups.length > 0 && (
                 <div className="flex justify-end">
-                  <Button onClick={() => void handleSubmit()} disabled={pending} size="lg">
+                  <Button
+                    onClick={() => void handleSubmit()}
+                    disabled={pending || jobGroups.some((g) => !draftItems.some((i) => i.jobId === g.jobId))}
+                    size="lg"
+                  >
                     {pending ? "Mengirim…" : editingDate ? "Kirim Ulang Draft" : "Kirim Draft"}
                   </Button>
                 </div>
@@ -667,6 +954,67 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
           )}
         </TabsContent>
       </Tabs>
+
+      <button
+        type="button"
+        onClick={() => setOpenOcrModal(true)}
+        className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-teal-600 text-white shadow-lg hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+        title="Scan Job ID"
+      >
+        <ScanSearch className="mx-auto h-6 w-6" />
+      </button>
+
+      <Dialog open={openOcrModal} onOpenChange={(open) => { setOpenOcrModal(open); if (!open) stopCamera(); }}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Scan Job ID (OCR)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Upload screenshot/foto atau gunakan kamera. Format yang terbaca: contoh <code>TT 6312</code>.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50">
+                <span>Upload Gambar</span>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => void handleUploadImage(e)} />
+              </label>
+              {!ocrStreamOn ? (
+                <Button type="button" variant="outline" onClick={() => void startCamera()}>
+                  <Camera className="mr-2 h-4 w-4" />
+                  Buka Kamera
+                </Button>
+              ) : (
+                <>
+                  <Button type="button" onClick={() => void captureFromCamera()} disabled={ocrPending}>Ambil & Scan</Button>
+                  <Button type="button" variant="outline" onClick={stopCamera}>Tutup Kamera</Button>
+                </>
+              )}
+            </div>
+
+            {ocrStreamOn && (
+              <div className="overflow-hidden rounded-md border border-slate-200">
+                <video ref={videoRef} autoPlay playsInline muted className="h-64 w-full object-cover" />
+              </div>
+            )}
+
+            {ocrPreview && (
+              <div className="overflow-hidden rounded-md border border-slate-200">
+                <img src={ocrPreview} alt="OCR Preview" className="max-h-64 w-full object-contain bg-slate-50" />
+              </div>
+            )}
+
+            {ocrText ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-1 text-xs font-semibold uppercase text-slate-500">Teks Terdeteksi</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs text-slate-700">{ocrText}</pre>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setOpenOcrModal(false); stopCamera(); }}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={historyDetail !== null} onOpenChange={(open) => !open && setHistoryDetail(null)}>
         <DialogContent className="sm:max-w-3xl">

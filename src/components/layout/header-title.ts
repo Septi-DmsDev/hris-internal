@@ -28,6 +28,7 @@ export function resolveHeaderMeta(pathname: string) {
   if (pathname.startsWith("/master/work-schedules")) return { title: "Jadwal Kerja", description: "Pengaturan jadwal dan shift" };
   if (pathname.startsWith("/master/")) return { title: "Master Data", description: "Pengaturan data referensi" };
   if (pathname.startsWith("/users")) return { title: "Manajemen Pengguna", description: "Role dan akses akun" };
+  if (pathname.startsWith("/history")) return { title: "History Sistem", description: "Audit perubahan lintas modul" };
   if (pathname.startsWith("/settings")) return { title: "Pengaturan", description: "Profil akun login" };
   return { title: "Dashboard", description: "Ringkasan operasional" };
 }

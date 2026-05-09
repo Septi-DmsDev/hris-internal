@@ -19,6 +19,9 @@ import { dailyActivityEntries, monthlyPointPerformances } from "@/lib/db/schema/
 import { aliasedTable, and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { resolvePointTargetForDivision } from "@/config/constants";
 import type { UserRole } from "@/types";
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+import { isEmployeeProfileComplete } from "@/lib/auth/profile-completion";
 import {
   buildPersonalQuickActions,
   buildTeamworkActivitySummary,
@@ -30,9 +33,15 @@ import {
 type MyEmployeeCore = {
   id: string;
   employeeCode: string;
+  nik: string | null;
   fullName: string;
   nickname: string | null;
   photoUrl: string | null;
+  birthPlace: string | null;
+  birthDate: Date | null;
+  gender: string | null;
+  religion: string | null;
+  maritalStatus: string | null;
   phoneNumber: string | null;
   address: string | null;
   startDate: Date;
@@ -145,6 +154,7 @@ export type MyProfileResult = {
     statuses: MyStatusHistoryRow[];
   };
   emptyReason: string | null;
+  profileCompletionRequired: boolean;
 };
 
 const PAYROLL_SUMMARY_ROLES: UserRole[] = [
@@ -164,9 +174,15 @@ async function getMyEmployeeCore(employeeId: string): Promise<MyEmployeeCore | n
     .select({
       id: employees.id,
       employeeCode: employees.employeeCode,
+      nik: employees.nik,
       fullName: employees.fullName,
       nickname: employees.nickname,
       photoUrl: employees.photoUrl,
+      birthPlace: employees.birthPlace,
+      birthDate: employees.birthDate,
+      gender: employees.gender,
+      religion: employees.religion,
+      maritalStatus: employees.maritalStatus,
       phoneNumber: employees.phoneNumber,
       address: employees.address,
       startDate: employees.startDate,
@@ -724,6 +740,7 @@ export async function getMyProfile(): Promise<MyProfileResult> {
         statuses: [],
       },
       emptyReason: null,
+      profileCompletionRequired: false,
     };
   }
 
@@ -742,6 +759,7 @@ export async function getMyProfile(): Promise<MyProfileResult> {
         statuses: [],
       },
       emptyReason: "Akun Anda belum terhubung ke data karyawan. Hubungi HRD.",
+      profileCompletionRequired: false,
     };
   }
 
@@ -761,6 +779,7 @@ export async function getMyProfile(): Promise<MyProfileResult> {
         statuses: [],
       },
       emptyReason: "Data karyawan pribadi tidak ditemukan atau belum aktif.",
+      profileCompletionRequired: false,
     };
   }
 
@@ -777,5 +796,104 @@ export async function getMyProfile(): Promise<MyProfileResult> {
     activeSchedule,
     histories,
     emptyReason: null,
+    profileCompletionRequired: !isEmployeeProfileComplete({
+      nik: employee.nik,
+      birthPlace: employee.birthPlace,
+      birthDate: employee.birthDate,
+      gender: employee.gender,
+      religion: employee.religion,
+      maritalStatus: employee.maritalStatus,
+      phoneNumber: employee.phoneNumber,
+      address: employee.address,
+      photoUrl: employee.photoUrl,
+      userEmail: userEmail || null,
+    }),
   };
+}
+
+const updateMyProfileSchema = z.object({
+  nik: z.string().trim().min(1, "NIK wajib diisi.").max(50, "NIK maksimal 50 karakter."),
+  nickname: z.string().trim().min(1, "Nama panggilan wajib diisi.").max(100, "Nama panggilan maksimal 100 karakter."),
+  birthPlace: z.string().trim().min(1, "Tempat lahir wajib diisi.").max(100, "Tempat lahir maksimal 100 karakter."),
+  birthDate: z.coerce.date({ message: "Tanggal lahir wajib diisi." }),
+  gender: z.string().trim().min(1, "Jenis kelamin wajib diisi.").max(20, "Jenis kelamin maksimal 20 karakter."),
+  religion: z.string().trim().min(1, "Agama wajib diisi.").max(50, "Agama maksimal 50 karakter."),
+  maritalStatus: z.string().trim().min(1, "Status wajib diisi.").max(50, "Status maksimal 50 karakter."),
+  phoneNumber: z.string().trim().min(1, "Nomor HP wajib diisi.").max(30, "Nomor HP maksimal 30 karakter."),
+  address: z.string().trim().min(1, "Alamat wajib diisi."),
+  photoUrl: z.string().trim().url("URL foto profil tidak valid."),
+});
+
+export async function updateMyPersonalProfile(formData: FormData) {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+
+  if (!roleRow.employeeId) {
+    return { error: "Akun belum terhubung ke data karyawan. Hubungi HRD." };
+  }
+
+  const parsed = updateMyProfileSchema.safeParse({
+    nik: formData.get("nik"),
+    nickname: formData.get("nickname"),
+    birthPlace: formData.get("birthPlace"),
+    birthDate: formData.get("birthDate"),
+    gender: formData.get("gender"),
+    religion: formData.get("religion"),
+    maritalStatus: formData.get("maritalStatus"),
+    phoneNumber: formData.get("phoneNumber"),
+    address: formData.get("address"),
+    photoUrl: formData.get("photoUrl"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Data profil tidak valid." };
+  }
+
+  const [existingEmployee] = await db
+    .select({
+      nik: employees.nik,
+    })
+    .from(employees)
+    .where(eq(employees.id, roleRow.employeeId))
+    .limit(1);
+
+  if (!existingEmployee) {
+    return { error: "Data karyawan tidak ditemukan." };
+  }
+
+  if (existingEmployee.nik && existingEmployee.nik !== parsed.data.nik) {
+    return { error: "NIK sudah pernah diisi. Perubahan NIK hanya bisa dilakukan HRD." };
+  }
+
+  const nikHasConflict = await db
+    .select({ id: employees.id })
+    .from(employees)
+    .where(eq(employees.nik, parsed.data.nik))
+    .limit(1);
+
+  if (nikHasConflict.length > 0 && nikHasConflict[0]?.id !== roleRow.employeeId) {
+    return { error: "NIK sudah digunakan karyawan lain." };
+  }
+
+  await db
+    .update(employees)
+    .set({
+      nik: existingEmployee.nik ?? parsed.data.nik,
+      nickname: parsed.data.nickname,
+      birthPlace: parsed.data.birthPlace,
+      birthDate: parsed.data.birthDate,
+      gender: parsed.data.gender,
+      religion: parsed.data.religion,
+      maritalStatus: parsed.data.maritalStatus,
+      phoneNumber: parsed.data.phoneNumber,
+      address: parsed.data.address,
+      photoUrl: parsed.data.photoUrl,
+      updatedAt: new Date(),
+    })
+    .where(eq(employees.id, roleRow.employeeId));
+
+  revalidatePath("/me");
+  revalidatePath("/me/profile");
+  revalidatePath("/dashboard");
+  return { success: "Profil pribadi berhasil diperbarui." };
 }

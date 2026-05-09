@@ -256,6 +256,18 @@ export default async function EmployeeDetailPage({
           row.notes ?? "-",
         ])}
       />
+
+      <HistoryTable
+        title="Histori Pengajuan Resign"
+        headers={["Tanggal Efektif", "Status Tiket", "Alasan", "Catatan Review", "Alasan Tolak"]}
+        rows={(histories.resigns ?? []).map((row) => [
+          formatDate(row.effectiveDate),
+          row.status,
+          row.reason ?? "-",
+          row.reviewNotes ?? "-",
+          row.rejectionReason ?? "-",
+        ])}
+      />
     </div>
   );
 }

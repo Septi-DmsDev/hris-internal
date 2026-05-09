@@ -6,6 +6,7 @@ import {
   text,
   boolean,
   integer,
+  numeric,
   timestamp,
 } from "drizzle-orm/pg-core";
 
@@ -18,6 +19,9 @@ export const branches = pgTable("branches", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   address: text("address"),
+  latitude: numeric("latitude", { precision: 10, scale: 7 }),
+  longitude: numeric("longitude", { precision: 10, scale: 7 }),
+  maxAttendanceRadiusMeters: integer("max_attendance_radius_meters").notNull().default(150),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),

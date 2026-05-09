@@ -3,7 +3,20 @@ import { z } from "zod";
 export const branchSchema = z.object({
   name: z.string().min(1, "Nama cabang wajib diisi").max(100),
   address: z.string().optional(),
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
+  maxAttendanceRadiusMeters: z.coerce.number().int().min(20).max(5000).default(150),
   isActive: z.boolean().default(true),
+}).superRefine((value, ctx) => {
+  const hasLat = value.latitude !== undefined;
+  const hasLon = value.longitude !== undefined;
+  if (hasLat !== hasLon) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["latitude"],
+      message: "Latitude dan longitude harus diisi berpasangan.",
+    });
+  }
 });
 
 export const divisionSchema = z.object({

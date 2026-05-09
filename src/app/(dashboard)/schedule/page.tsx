@@ -17,6 +17,7 @@ const TICKET_TYPE_LABELS: Record<string, string> = {
   IZIN: "Izin",
   EMERGENCY: "Emergency",
   SETENGAH_HARI: "1/2 Hari",
+  RESIGN: "Resign",
 };
 
 const TICKET_TYPE_COLORS: Record<string, string> = {
@@ -25,6 +26,7 @@ const TICKET_TYPE_COLORS: Record<string, string> = {
   IZIN: "bg-yellow-100 text-yellow-800",
   EMERGENCY: "bg-red-100 text-red-800",
   SETENGAH_HARI: "bg-purple-100 text-purple-800",
+  RESIGN: "bg-slate-200 text-slate-800",
 };
 
 const TICKET_STATUS_LABELS: Record<string, string> = {
@@ -61,6 +63,7 @@ function getDayBg(dayStatus: string, ticketOverride: string | null): string {
       case "IZIN": return "bg-yellow-50 border-yellow-200";
       case "EMERGENCY": return "bg-red-50 border-red-200";
       case "SETENGAH_HARI": return "bg-purple-50 border-purple-200";
+      case "RESIGN": return "bg-slate-100 border-slate-300";
       default: return "bg-slate-50 border-slate-200";
     }
   }

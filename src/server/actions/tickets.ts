@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
 import { divisions } from "@/lib/db/schema/master";
 import { resolveLeaveQuotaEligibility } from "@/server/ticketing-engine/resolve-leave-quota-eligibility";
+import { revokeEmployeeSystemAccess } from "@/server/services/employee-access-service";
 
 const APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "SPV", "KABAG"];
 const SELF_SERVICE_TICKET_ROLES: UserRole[] = ["KABAG", "SPV", "MANAGERIAL", "FINANCE", "TEAMWORK", "PAYROLL_VIEWER"];
@@ -147,7 +148,8 @@ export async function createTicket(input: unknown) {
   }
 
   const { startDate, endDate } = parsed.data;
-  const daysCount = diffDays(startDate, endDate);
+  const normalizedEndDate = parsed.data.ticketType === "RESIGN" ? startDate : endDate;
+  const daysCount = diffDays(startDate, normalizedEndDate);
   const attachmentUrl = parsed.data.attachmentUrl?.trim() || null;
 
   if (parsed.data.ticketType === "SAKIT" && daysCount > 1 && !attachmentUrl) {
@@ -159,7 +161,7 @@ export async function createTicket(input: unknown) {
       employeeId,
       ticketType: parsed.data.ticketType,
       startDate,
-      endDate,
+      endDate: normalizedEndDate,
       daysCount,
       reason: parsed.data.reason,
       attachmentUrl,
@@ -269,10 +271,11 @@ export async function approveTicket(input: unknown) {
     }
   }
 
+  let shouldRevokeAccess = false;
   await db.transaction(async (tx) => {
     let payrollImpact = parsed.data.payrollImpact ?? "UNPAID";
 
-    if (!parsed.data.payrollImpact && ticket.ticketType !== "SETENGAH_HARI") {
+    if (!parsed.data.payrollImpact && !["SETENGAH_HARI", "RESIGN"].includes(ticket.ticketType)) {
       const year = new Date(ticket.startDate).getFullYear();
       const employeeStartDate = await getEmployeeStartDate(ticket.employeeId);
       const eligible = employeeStartDate
@@ -350,10 +353,29 @@ export async function approveTicket(input: unknown) {
         payrollImpact,
       },
     });
+
+    if (ticket.ticketType === "RESIGN") {
+      await tx
+        .update(employees)
+        .set({
+          isActive: false,
+          employmentStatus: "RESIGN",
+          payrollStatus: "NONAKTIF",
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, ticket.employeeId));
+      shouldRevokeAccess = true;
+    }
   });
+
+  if (shouldRevokeAccess) {
+    await revokeEmployeeSystemAccess(ticket.employeeId);
+  }
 
   revalidatePath("/tickets");
   revalidatePath("/ticketingapproval");
+  revalidatePath("/employees");
+  revalidatePath("/users");
   return { success: true };
 }
 

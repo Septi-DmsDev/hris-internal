@@ -45,11 +45,33 @@ export default async function AttendancePage({ searchParams }: PageProps) {
     divisionName: employee.divisionName ?? "-",
   }));
 
+  const fallbackRequests = workspace.fallbackRequests.map((req) => ({
+    id: req.id,
+    employeeId: req.employeeId,
+    employeeName: req.employeeName ?? "-",
+    employeeCode: req.employeeCode ?? "-",
+    divisionName: req.divisionName ?? "-",
+    attendanceDate: format(req.attendanceDate, "yyyy-MM-dd"),
+    photoUrl: req.photoUrl,
+    latitude: req.latitude ? String(req.latitude) : "",
+    longitude: req.longitude ? String(req.longitude) : "",
+    distanceMeters: req.distanceMeters ?? null,
+    radiusMetersSnapshot: req.radiusMetersSnapshot ?? null,
+    geofenceMatched: req.geofenceMatched,
+    fingerprintFailureReason: req.fingerprintFailureReason,
+    developerModeDisabledConfirmed: req.developerModeDisabledConfirmed,
+    status: req.status,
+    reviewNotes: req.reviewNotes ?? "",
+    reviewedAt: req.reviewedAt ? format(req.reviewedAt, "yyyy-MM-dd HH:mm") : "-",
+    createdAt: req.createdAt ? format(req.createdAt, "yyyy-MM-dd HH:mm") : "-",
+  }));
+
   return (
     <AttendanceClient
       selectedDate={workspace.selectedDate}
       employees={employees}
       records={records}
+      fallbackRequests={fallbackRequests}
     />
   );
 }

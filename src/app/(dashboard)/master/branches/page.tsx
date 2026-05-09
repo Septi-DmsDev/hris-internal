@@ -8,6 +8,9 @@ export default async function BranchesPage() {
     id: branch.id,
     name: branch.name,
     address: branch.address,
+    latitude: branch.latitude != null ? String(branch.latitude) : null,
+    longitude: branch.longitude != null ? String(branch.longitude) : null,
+    maxAttendanceRadiusMeters: branch.maxAttendanceRadiusMeters,
     isActive: branch.isActive,
   }));
 

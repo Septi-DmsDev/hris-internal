@@ -95,7 +95,8 @@ async function AdminDashboard() {
   const totalPending =
     stats.pendingApprovals.tickets +
     stats.pendingApprovals.activities +
-    stats.pendingApprovals.reviews;
+    stats.pendingApprovals.reviews +
+    stats.pendingApprovals.alpha;
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -140,6 +141,11 @@ async function AdminDashboard() {
             label="Review Karyawan Perlu Divalidasi"
             value={stats.pendingApprovals.reviews}
             href="/reviews"
+          />
+          <AlertCard
+            label="Antrian Kasus ALPHA"
+            value={stats.pendingApprovals.alpha}
+            href="/ticketingapproval"
           />
         </div>
       </section>

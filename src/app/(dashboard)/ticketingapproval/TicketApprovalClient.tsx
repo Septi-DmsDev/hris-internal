@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { approveTicket, rejectTicket } from "@/server/actions/tickets";
+import { detectAlphaAbsences, issueAlphaSp1, sendAlphaCall } from "@/server/actions/alpha";
 import type { UserRole } from "@/types";
 
 export type ApprovalTicketRow = {
@@ -52,6 +53,7 @@ const TICKET_TYPE_LABEL: Record<string, string> = {
   IZIN: "Izin",
   EMERGENCY: "Emergency",
   SETENGAH_HARI: "Setengah Hari",
+  RESIGN: "Resign",
 };
 
 const QUEUE_STATUS_LABEL: Record<string, string> = {
@@ -97,10 +99,23 @@ const PAYROLL_IMPACT_LABEL: Record<string, string> = {
 type Props = {
   tickets: ApprovalTicketRow[];
   historyTickets: TicketHistoryRow[];
+  alphaRows: {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    employeeCode: string;
+    divisionName: string;
+    alphaDate: string;
+    alphaCount: number;
+    status: string;
+    callSentAt: string | null;
+    sp1IssuedAt: string | null;
+    notes: string | null;
+  }[];
   role: UserRole;
 };
 
-export default function TicketApprovalClient({ tickets, historyTickets, role }: Props) {
+export default function TicketApprovalClient({ tickets, historyTickets, alphaRows, role }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<"QUEUE" | "HISTORY">("QUEUE");
   const [decision, setDecision] = useState<DecisionState | null>(null);
@@ -111,6 +126,7 @@ export default function TicketApprovalClient({ tickets, historyTickets, role }: 
   const [success, setSuccess] = useState<string | null>(null);
 
   const isHrd = ["SUPER_ADMIN", "HRD"].includes(role);
+  const [alphaPending, setAlphaPending] = useState(false);
 
   async function handleDecision() {
     if (!decision) return;
@@ -257,6 +273,118 @@ export default function TicketApprovalClient({ tickets, historyTickets, role }: 
 
   return (
     <div className="space-y-4">
+      {isHrd && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-amber-900">Monitoring ALPHA</h3>
+              <p className="text-xs text-amber-700">
+                Deteksi tim yang tidak ceklok dan tidak ada izin disetujui sampai jam kerja selesai.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              disabled={alphaPending}
+              onClick={async () => {
+                setAlphaPending(true);
+                setError(null);
+                try {
+                  const result = await detectAlphaAbsences();
+                  if (result && "error" in result) {
+                    setError(result.error ?? "Gagal deteksi ALPHA.");
+                    return;
+                  }
+                  setSuccess(`Sinkron ALPHA selesai. Event baru: ${result.created}.`);
+                  router.refresh();
+                } finally {
+                  setAlphaPending(false);
+                }
+              }}
+            >
+              {alphaPending ? "Memproses..." : "Sinkron ALPHA Hari Ini"}
+            </Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-amber-200 text-amber-900">
+                  <th className="py-2 text-left">Karyawan</th>
+                  <th className="py-2 text-left">Tanggal</th>
+                  <th className="py-2 text-left">Akumulasi</th>
+                  <th className="py-2 text-left">Status</th>
+                  <th className="py-2 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alphaRows.slice(0, 12).map((row) => (
+                  <tr key={row.id} className="border-b border-amber-100 last:border-0">
+                    <td className="py-2">
+                      <p className="font-medium text-slate-900">{row.employeeName}</p>
+                      <p className="text-xs text-slate-500">{row.employeeCode} - {row.divisionName}</p>
+                    </td>
+                    <td className="py-2 text-slate-700">{row.alphaDate}</td>
+                    <td className="py-2 text-slate-700">{row.alphaCount}x</td>
+                    <td className="py-2 text-slate-700">{row.status}</td>
+                    <td className="py-2">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={alphaPending || row.status === "SP1_ISSUED"}
+                          onClick={async () => {
+                            setAlphaPending(true);
+                            setError(null);
+                            try {
+                              const res = await sendAlphaCall({ alphaEventId: row.id });
+                              if (res && "error" in res) {
+                                setError(res.error ?? "Gagal kirim pemanggilan.");
+                                return;
+                              }
+                              setSuccess("Notifikasi pemanggilan berhasil dikirim.");
+                              router.refresh();
+                            } finally {
+                              setAlphaPending(false);
+                            }
+                          }}
+                        >
+                          Pemanggilan
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={alphaPending || row.alphaCount < 2 || row.status === "SP1_ISSUED"}
+                          onClick={async () => {
+                            setAlphaPending(true);
+                            setError(null);
+                            try {
+                              const res = await issueAlphaSp1({ alphaEventId: row.id });
+                              if (res && "error" in res) {
+                                setError(res.error ?? "Gagal menerbitkan SP1.");
+                                return;
+                              }
+                              setSuccess("SP1 berhasil diterbitkan.");
+                              router.refresh();
+                            } finally {
+                              setAlphaPending(false);
+                            }
+                          }}
+                        >
+                          Beri SP1
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {alphaRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-500">Belum ada event ALPHA.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">

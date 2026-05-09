@@ -43,6 +43,7 @@ export const workDayStatusEnum = pgEnum("work_day_status", [
 export const employees = pgTable("employees", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeCode: varchar("employee_code", { length: 30 }).notNull().unique(),
+  nik: varchar("nik", { length: 50 }).unique(),
   fullName: varchar("full_name", { length: 150 }).notNull(),
   nickname: varchar("nickname", { length: 100 }),
   photoUrl: text("photo_url"),

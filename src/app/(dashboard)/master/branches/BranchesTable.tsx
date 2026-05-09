@@ -34,6 +34,9 @@ export type BranchRow = {
   id: string;
   name: string;
   address: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  maxAttendanceRadiusMeters: number;
   isActive: boolean;
 };
 
@@ -117,6 +120,11 @@ export default function BranchesTable({ data }: BranchesTableProps) {
         ),
       },
       {
+        header: "Radius",
+        accessorKey: "maxAttendanceRadiusMeters",
+        cell: ({ row }) => `${row.original.maxAttendanceRadiusMeters} m`,
+      },
+      {
         header: "Aksi",
         id: "actions",
         cell: ({ row }) => (
@@ -190,6 +198,24 @@ export default function BranchesTable({ data }: BranchesTableProps) {
               <Input id="branch-create-address" name="address" maxLength={255} />
             </div>
             <div className="space-y-2">
+              <label htmlFor="branch-create-latitude" className="text-sm font-medium">
+                Latitude Cabang
+              </label>
+              <Input id="branch-create-latitude" name="latitude" placeholder="-6.2000000" />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="branch-create-longitude" className="text-sm font-medium">
+                Longitude Cabang
+              </label>
+              <Input id="branch-create-longitude" name="longitude" placeholder="106.8166667" />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="branch-create-radius" className="text-sm font-medium">
+                Radius Maksimal Absensi Fallback (meter)
+              </label>
+              <Input id="branch-create-radius" name="maxAttendanceRadiusMeters" type="number" min={20} max={5000} defaultValue={150} />
+            </div>
+            <div className="space-y-2">
               <label htmlFor="branch-create-active" className="text-sm font-medium">
                 Status
               </label>
@@ -249,6 +275,39 @@ export default function BranchesTable({ data }: BranchesTableProps) {
                   name="address"
                   maxLength={255}
                   defaultValue={editingRow.address ?? ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="branch-edit-latitude" className="text-sm font-medium">
+                  Latitude Cabang
+                </label>
+                <Input
+                  id="branch-edit-latitude"
+                  name="latitude"
+                  defaultValue={editingRow.latitude ?? ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="branch-edit-longitude" className="text-sm font-medium">
+                  Longitude Cabang
+                </label>
+                <Input
+                  id="branch-edit-longitude"
+                  name="longitude"
+                  defaultValue={editingRow.longitude ?? ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="branch-edit-radius" className="text-sm font-medium">
+                  Radius Maksimal Absensi Fallback (meter)
+                </label>
+                <Input
+                  id="branch-edit-radius"
+                  name="maxAttendanceRadiusMeters"
+                  type="number"
+                  min={20}
+                  max={5000}
+                  defaultValue={editingRow.maxAttendanceRadiusMeters}
                 />
               </div>
               <div className="space-y-2">

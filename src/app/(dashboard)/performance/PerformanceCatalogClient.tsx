@@ -263,6 +263,15 @@ function createManagerialMonthlyInputDraft(): ManagerialMonthlyInputDraft {
   };
 }
 
+function formatOneDecimal(value: string | number) {
+  const num = Number(value);
+  if (Number.isNaN(num)) return "0,0";
+  return num.toLocaleString("id-ID", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
 type PerformanceCatalogClientProps = {
   role: UserRole;
   canManageCatalog: boolean;
@@ -422,7 +431,7 @@ export default function PerformanceCatalogClient({
     const pv = Number(selectedCatalogEntry.pointValue);
     const qty = Number(activityDraft.quantity);
     if (Number.isNaN(pv) || Number.isNaN(qty) || qty <= 0) return null;
-    return (pv * qty).toLocaleString("id-ID", { maximumFractionDigits: 2 });
+    return formatOneDecimal(pv * qty);
   }, [selectedCatalogEntry, activityDraft.quantity]);
 
   const filteredCatalogEntries = useMemo(() => {
@@ -682,7 +691,7 @@ export default function PerformanceCatalogClient({
           ? " KPI payroll managerial akan otomatis tersinkron saat periode payroll dibuat."
           : "";
       setLastResult(
-        `Performa ${result.performancePercent.toFixed(2)}% untuk ${result.employeeName} (${result.employeeGroup}) periode ${result.periodCode} berhasil disimpan.${syncNote}`
+        `Performa ${result.performancePercent.toFixed(1)}% untuk ${result.employeeName} (${result.employeeGroup}) periode ${result.periodCode} berhasil disimpan.${syncNote}`
       );
       router.refresh();
     } finally {
@@ -896,7 +905,7 @@ export default function PerformanceCatalogClient({
         accessorKey: "totalPoints",
         cell: ({ row }) => (
           <span className="font-medium">
-            {Number(row.original.totalPoints).toLocaleString("id-ID")}
+            {formatOneDecimal(row.original.totalPoints)}
           </span>
         ),
       },
@@ -1040,7 +1049,7 @@ export default function PerformanceCatalogClient({
       {
         header: "Approved",
         accessorKey: "totalApprovedPoints",
-        cell: ({ row }) => Number(row.original.totalApprovedPoints).toLocaleString("id-ID"),
+        cell: ({ row }) => formatOneDecimal(row.original.totalApprovedPoints),
       },
       {
         header: "Performa",
@@ -1189,7 +1198,7 @@ export default function PerformanceCatalogClient({
                           </td>
                           <td className="px-3 py-2.5 text-slate-700">{group.workDate}</td>
                           <td className="px-3 py-2.5 text-center tabular-nums text-slate-700">{group.activities.length}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{group.totalPoints.toFixed(2)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{formatOneDecimal(group.totalPoints)}</td>
                           <td className="px-3 py-2.5">
                             <Badge variant="secondary">
                               {group.status === "DIAJUKAN_ULANG" ? "Diajukan Ulang" : "Diajukan"}

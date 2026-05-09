@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { getTicketsForApproval, getTicketsForApprovalHistory } from "@/server/actions/tickets";
+import { getAlphaMonitoringWorkspace } from "@/server/actions/alpha";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import TicketApprovalClient from "./TicketApprovalClient";
@@ -13,9 +14,10 @@ export default async function TicketApprovalPage() {
     redirect("/dashboard");
   }
 
-  const [queue, history] = await Promise.all([
+  const [queue, history, alphaWorkspace] = await Promise.all([
     getTicketsForApproval(),
     getTicketsForApprovalHistory(),
+    getAlphaMonitoringWorkspace(),
   ]);
 
   const rows = queue.tickets.map((t) => ({
@@ -55,9 +57,23 @@ export default async function TicketApprovalPage() {
     createdAt: t.createdAt instanceof Date ? format(t.createdAt, "yyyy-MM-dd HH:mm") : String(t.createdAt),
   }));
 
+  const alphaRows = alphaWorkspace.alphaEvents.map((row) => ({
+    id: row.id,
+    employeeId: row.employeeId,
+    employeeName: row.employeeName ?? "-",
+    employeeCode: row.employeeCode ?? "-",
+    divisionName: row.divisionName ?? "-",
+    alphaDate: row.alphaDate instanceof Date ? format(row.alphaDate, "yyyy-MM-dd") : String(row.alphaDate),
+    alphaCount: row.alphaCount,
+    status: row.status,
+    callSentAt: row.callSentAt instanceof Date ? format(row.callSentAt, "yyyy-MM-dd HH:mm") : null,
+    sp1IssuedAt: row.sp1IssuedAt instanceof Date ? format(row.sp1IssuedAt, "yyyy-MM-dd HH:mm") : null,
+    notes: row.notes ?? null,
+  }));
+
   return (
     <div className="space-y-4">
-      <TicketApprovalClient tickets={rows} historyTickets={historyRows} role={role} />
+      <TicketApprovalClient tickets={rows} historyTickets={historyRows} alphaRows={alphaRows} role={role} />
     </div>
   );
 }

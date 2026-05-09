@@ -69,6 +69,7 @@ const APPROVABLE_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG"] as const;
 const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const;
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 let hasJobIdSnapshotColumnPromise: Promise<boolean> | null = null;
+let hasMonthlyInputSourceColumnPromise: Promise<boolean> | null = null;
 
 const dailyActivityEntriesLegacy = pgTable("daily_activity_entries", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -123,6 +124,26 @@ async function hasJobIdSnapshotColumn() {
   }
 
   return hasJobIdSnapshotColumnPromise;
+}
+
+async function hasMonthlyInputSourceColumn() {
+  if (!hasMonthlyInputSourceColumnPromise) {
+    hasMonthlyInputSourceColumnPromise = db
+      .execute(
+        sql<{ has_column: boolean }>`
+          select exists (
+            select 1
+            from information_schema.columns
+            where table_name = 'monthly_point_performances'
+              and column_name = 'input_source'
+          ) as has_column
+        `,
+      )
+      .then((rows) => Boolean(rows[0]?.has_column))
+      .catch(() => false);
+  }
+
+  return hasMonthlyInputSourceColumnPromise;
 }
 
 async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[]) {
@@ -244,6 +265,7 @@ async function getScopedActivityEntries(role: UserRole, divisionIds: string[], e
 
 async function getScopedMonthlyPerformance(role: UserRole, divisionIds: string[], employeeId?: string | null) {
   const employeeDivision = aliasedTable(divisions, "employee_division");
+  const hasInputSourceColumn = await hasMonthlyInputSourceColumn();
   const baseQuery = db
     .select({
       id: monthlyPointPerformances.id,
@@ -260,7 +282,9 @@ async function getScopedMonthlyPerformance(role: UserRole, divisionIds: string[]
       totalTargetPoints: monthlyPointPerformances.totalTargetPoints,
       totalApprovedPoints: monthlyPointPerformances.totalApprovedPoints,
       performancePercent: monthlyPointPerformances.performancePercent,
-      inputSource: monthlyPointPerformances.inputSource,
+      inputSource: hasInputSourceColumn
+        ? monthlyPointPerformances.inputSource
+        : sql<"GENERATED">`'GENERATED'`,
       status: monthlyPointPerformances.status,
       calculatedAt: monthlyPointPerformances.calculatedAt,
     })
@@ -769,16 +793,19 @@ export async function generateMonthlyPerformance(input: unknown) {
 
   const periodStartDate = parsed.data.periodStartDate;
   const periodEndDate = parsed.data.periodEndDate;
-  const manualRows = await db
-    .select({ employeeId: monthlyPointPerformances.employeeId })
-    .from(monthlyPointPerformances)
-    .where(
-      and(
-        eq(monthlyPointPerformances.periodStartDate, periodStartDate),
-        eq(monthlyPointPerformances.periodEndDate, periodEndDate),
-        eq(monthlyPointPerformances.inputSource, "MANUAL_INPUT")
-      )
-    );
+  const hasInputSourceColumn = await hasMonthlyInputSourceColumn();
+  const manualRows = hasInputSourceColumn
+    ? await db
+        .select({ employeeId: monthlyPointPerformances.employeeId })
+        .from(monthlyPointPerformances)
+        .where(
+          and(
+            eq(monthlyPointPerformances.periodStartDate, periodStartDate),
+            eq(monthlyPointPerformances.periodEndDate, periodEndDate),
+            eq(monthlyPointPerformances.inputSource, "MANUAL_INPUT")
+          )
+        )
+    : [];
   const manualEmployeeIds = new Set(manualRows.map((row) => row.employeeId));
   const regeneratedEmployees = targetEmployees.filter((employee) => !manualEmployeeIds.has(employee.id));
 
@@ -881,7 +908,7 @@ export async function generateMonthlyPerformance(input: unknown) {
         dailySubmissions,
       });
 
-      await tx.insert(monthlyPointPerformances).values({
+      const monthlyPayload = {
         employeeId: employee.id,
         periodStartDate,
         periodEndDate,
@@ -892,9 +919,14 @@ export async function generateMonthlyPerformance(input: unknown) {
         totalTargetPoints: calculated.totalTargetPoints,
         totalApprovedPoints: calculated.totalApprovedPoints.toFixed(2),
         performancePercent: calculated.performancePercent.toFixed(2),
-        inputSource: "GENERATED",
         status: "FINALIZED",
-      });
+      };
+
+      await tx.insert(monthlyPointPerformances).values(
+        hasInputSourceColumn
+          ? { ...monthlyPayload, inputSource: "GENERATED" as const }
+          : monthlyPayload
+      );
     }
   });
 
@@ -946,6 +978,7 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
 
 
   let managerialKpiSynced = false;
+  const hasInputSourceColumn = await hasMonthlyInputSourceColumn();
 
   await db.transaction(async (tx) => {
     const divisionSnapshot = await resolveDivisionSnapshotForPeriod(employee.id, resolvedPeriod.periodStartDate);
@@ -986,7 +1019,7 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
         )
       );
 
-    await tx.insert(monthlyPointPerformances).values({
+    const monthlyPayload = {
       employeeId: employee.id,
       periodStartDate: resolvedPeriod.periodStartDate,
       periodEndDate: resolvedPeriod.periodEndDate,
@@ -997,9 +1030,14 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
       totalTargetPoints,
       totalApprovedPoints: totalApprovedPoints.toFixed(2),
       performancePercent: parsed.data.performancePercent.toFixed(2),
-      inputSource: "MANUAL_INPUT",
       status: "FINALIZED",
-    });
+    };
+
+    await tx.insert(monthlyPointPerformances).values(
+      hasInputSourceColumn
+        ? { ...monthlyPayload, inputSource: "MANUAL_INPUT" as const }
+        : monthlyPayload
+    );
 
     if (employee.employeeGroup === "MANAGERIAL" && period) {
       const [existing] = await tx

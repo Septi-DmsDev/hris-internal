@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { getMyProfile } from "@/server/actions/me";
+import MyPersonalProfileForm from "./MyPersonalProfileForm";
 
 const EMPLOYMENT_STATUS_LABEL: Record<string, string> = {
   TRAINING: "Training",
@@ -140,11 +141,37 @@ export default async function MyProfilePage() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Data Pribadi</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <DetailItem label="NIK" value={employee.nik ?? "-"} />
           <DetailItem label="Nama Panggilan" value={employee.nickname ?? "-"} />
+          <DetailItem label="Tempat Lahir" value={employee.birthPlace ?? "-"} />
+          <DetailItem label="Tanggal Lahir" value={formatDate(employee.birthDate)} />
+          <DetailItem label="Jenis Kelamin" value={employee.gender ?? "-"} />
+          <DetailItem label="Agama" value={employee.religion ?? "-"} />
+          <DetailItem label="Status" value={employee.maritalStatus ?? "-"} />
           <DetailItem label="Nomor HP" value={employee.phoneNumber ?? "-"} />
           <DetailItem label="Email Login" value={result.userEmail || "-"} />
           <DetailItem label="Alamat" value={employee.address ?? "-"} />
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Lengkapi / Ubah Data Diri</h2>
+        <MyPersonalProfileForm
+          initialData={{
+            nik: employee.nik ?? "",
+            nickname: employee.nickname ?? "",
+            birthPlace: employee.birthPlace ?? "",
+            birthDate: employee.birthDate ? formatDate(employee.birthDate) : "",
+            gender: employee.gender ?? "",
+            religion: employee.religion ?? "",
+            maritalStatus: employee.maritalStatus ?? "",
+            phoneNumber: employee.phoneNumber ?? "",
+            address: employee.address ?? "",
+            photoUrl: employee.photoUrl ?? "",
+            nikLocked: Boolean(employee.nik),
+            profileCompletionRequired: result.profileCompletionRequired,
+          }}
+        />
       </section>
 
       <section className="space-y-3">

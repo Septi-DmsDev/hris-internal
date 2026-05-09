@@ -34,6 +34,7 @@ export type EmployeeFormOptions = {
 export type EmployeeRow = {
   id: string;
   employeeCode: string;
+  nik: string | null;
   fullName: string;
   branchName: string;
   phoneNumber: string;
@@ -49,6 +50,7 @@ export type EmployeeRow = {
 
 type EmployeeDraft = {
   employeeCode: string;
+  nik: string;
   fullName: string;
   branchId: string;
   birthPlace: string;
@@ -92,6 +94,7 @@ function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
 
   return {
     employeeCode: "",
+    nik: "",
     fullName: "",
     branchId: options.branches[0]?.id ?? "",
     birthPlace: "",
@@ -126,6 +129,7 @@ function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>, logi
 
   return {
     employeeCode: employee.employeeCode,
+    nik: employee.nik ?? "",
     fullName: employee.fullName,
     branchId: employee.branchId,
     birthPlace: employee.birthPlace ?? "",
@@ -157,6 +161,7 @@ function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>, logi
 function toActionInput(draft: EmployeeDraft) {
   return {
     employeeCode: draft.employeeCode,
+    nik: draft.nik,
     fullName: draft.fullName,
     birthPlace: draft.birthPlace,
     birthDate: draft.birthDate,
@@ -192,6 +197,7 @@ function EmployeePersonalForm({ draft, onChange, options }: { draft: EmployeeDra
       <Field label="SUPERVISOR"><select value={draft.supervisorEmployeeId} onChange={(e) => onChange("supervisorEmployeeId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Pilih supervisor</option>{options.supervisors.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}</select></Field>
       <Field label="NAMA"><Input value={draft.fullName} onChange={(e) => onChange("fullName", e.target.value)} required /></Field>
       <Field label="UID (otomatis saat tambah baru)"><Input value={draft.employeeCode} onChange={(e) => onChange("employeeCode", e.target.value)} required /></Field>
+      <Field label="NIK"><Input value={draft.nik} onChange={(e) => onChange("nik", e.target.value)} maxLength={50} /></Field>
       <Field label="Username"><Input value={draft.username} onChange={(e) => onChange("username", e.target.value)} /></Field>
       <Field label="Email"><Input type="email" value={draft.email} onChange={(e) => onChange("email", e.target.value)} /></Field>
       <Field label="Password"><Input type="password" value={draft.password} onChange={(e) => onChange("password", e.target.value)} /></Field>
@@ -352,6 +358,7 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
   const columns: ColumnDef<EmployeeRow>[] = useMemo(() => [
     { header: "CABANG", accessorKey: "branchName" },
     { header: "UID", accessorKey: "employeeCode" },
+    { header: "NIK", accessorKey: "nik" },
     {
       header: "NAMA",
       accessorKey: "fullName",

@@ -1,9 +1,12 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { isDatabaseConnectionError } from "@/lib/db/errors";
 import { userRoles } from "@/lib/db/schema/auth";
+import { employees } from "@/lib/db/schema/employee";
+import { isEmployeeProfileComplete } from "@/lib/auth/profile-completion";
 import { eq } from "drizzle-orm";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
@@ -47,6 +50,37 @@ export default async function DashboardLayout({
   }
 
   const role = userRoleRow.role;
+  const pathname = (await headers()).get("x-pathname") ?? "";
+
+  if ((role === "TEAMWORK" || role === "MANAGERIAL") && userRoleRow.employeeId) {
+    const [employeeRow] = await db
+      .select({
+        nik: employees.nik,
+        birthPlace: employees.birthPlace,
+        birthDate: employees.birthDate,
+        gender: employees.gender,
+        religion: employees.religion,
+        maritalStatus: employees.maritalStatus,
+        phoneNumber: employees.phoneNumber,
+        address: employees.address,
+        photoUrl: employees.photoUrl,
+      })
+      .from(employees)
+      .where(eq(employees.id, userRoleRow.employeeId))
+      .limit(1);
+
+    const complete = employeeRow
+      ? isEmployeeProfileComplete({
+          ...employeeRow,
+          userEmail: user.email ?? null,
+        })
+      : false;
+
+    const isProfilePath = pathname.startsWith("/me/profile");
+    if (!complete && !isProfilePath) {
+      redirect("/me/profile?complete_profile=1");
+    }
+  }
 
   return (
     <div className="flex min-h-screen">

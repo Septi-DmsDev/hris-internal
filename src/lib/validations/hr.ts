@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const createTicketSchema = z.object({
   employeeId: z.string().uuid("Karyawan tidak valid.").optional().or(z.literal("")),
-  ticketType: z.enum(["CUTI", "SAKIT", "IZIN", "EMERGENCY", "SETENGAH_HARI"]),
+  ticketType: z.enum(["CUTI", "SAKIT", "IZIN", "EMERGENCY", "SETENGAH_HARI", "RESIGN"]),
   startDate: z.coerce.date({ message: "Tanggal mulai wajib diisi." }),
   endDate: z.coerce.date({ message: "Tanggal akhir wajib diisi." }),
   reason: z.string().trim().min(5, "Alasan minimal 5 karakter."),
@@ -57,8 +57,14 @@ export const deleteIncidentSchema = z.object({
   incidentId: z.string().uuid("Incident tidak valid."),
 });
 
+export const alphaActionSchema = z.object({
+  alphaEventId: z.string().uuid("Event ALPHA tidak valid."),
+  notes: z.string().trim().optional().transform((v) => v || undefined),
+});
+
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 export type TicketDecisionInput = z.infer<typeof ticketDecisionSchema>;
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
 export type CreateIncidentInput = z.infer<typeof createIncidentSchema>;
 export type DeleteIncidentInput = z.infer<typeof deleteIncidentSchema>;
+export type AlphaActionInput = z.infer<typeof alphaActionSchema>;

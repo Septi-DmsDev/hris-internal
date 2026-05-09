@@ -26,6 +26,7 @@ export const ticketTypeEnum = pgEnum("ticket_type", [
   "IZIN",
   "EMERGENCY",
   "SETENGAH_HARI",
+  "RESIGN",
 ]);
 
 export const ticketStatusEnum = pgEnum("ticket_status", [
@@ -175,6 +176,12 @@ export const attendanceSourceEnum = pgEnum("attendance_source", [
   "FINGERPRINT_ADMS",
 ]);
 
+export const attendanceFallbackStatusEnum = pgEnum("attendance_fallback_status", [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+
 export const employeeAttendanceRecords = pgTable("employee_attendance_records", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
@@ -196,6 +203,33 @@ export const employeeAttendanceRecords = pgTable("employee_attendance_records", 
   index("idx_employee_attendance_records_date").on(table.attendanceDate),
   index("idx_employee_attendance_records_source").on(table.source),
   uniqueIndex("employee_attendance_employee_date_uidx").on(table.employeeId, table.attendanceDate),
+]);
+
+export const attendanceFallbackRequests = pgTable("attendance_fallback_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  attendanceDate: date("attendance_date", { mode: "date" }).notNull(),
+  photoUrl: text("photo_url").notNull(),
+  latitude: numeric("latitude", { precision: 10, scale: 7 }).notNull(),
+  longitude: numeric("longitude", { precision: 10, scale: 7 }).notNull(),
+  branchLatitudeSnapshot: numeric("branch_latitude_snapshot", { precision: 10, scale: 7 }),
+  branchLongitudeSnapshot: numeric("branch_longitude_snapshot", { precision: 10, scale: 7 }),
+  radiusMetersSnapshot: integer("radius_meters_snapshot"),
+  distanceMeters: integer("distance_meters"),
+  geofenceMatched: boolean("geofence_matched").notNull().default(false),
+  fingerprintFailureReason: text("fingerprint_failure_reason").notNull(),
+  developerModeDisabledConfirmed: boolean("developer_mode_disabled_confirmed").notNull().default(false),
+  status: attendanceFallbackStatusEnum("status").notNull().default("PENDING"),
+  reviewedByUserId: uuid("reviewed_by_user_id"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewNotes: text("review_notes"),
+  createdByUserId: uuid("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("idx_attendance_fallback_requests_date").on(table.attendanceDate),
+  index("idx_attendance_fallback_requests_status").on(table.status),
+  uniqueIndex("attendance_fallback_employee_date_uidx").on(table.employeeId, table.attendanceDate),
 ]);
 
 // ─── Leave Quota ──────────────────────────────────────────────────────────────
@@ -263,6 +297,17 @@ export const incidentImpactEnum = pgEnum("incident_impact", [
   "NONE",
 ]);
 
+export const alphaActionStatusEnum = pgEnum("alpha_action_status", [
+  "PENDING",
+  "CALL_SENT",
+  "SP1_ISSUED",
+]);
+
+export const employeeAlertTypeEnum = pgEnum("employee_alert_type", [
+  "ALPHA_CALL",
+  "ALPHA_SP1",
+]);
+
 export const incidentLogs = pgTable("incident_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
@@ -280,6 +325,40 @@ export const incidentLogs = pgTable("incident_logs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
+export const attendanceAlphaEvents = pgTable("attendance_alpha_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  alphaDate: date("alpha_date", { mode: "date" }).notNull(),
+  alphaCount: integer("alpha_count").notNull().default(1),
+  status: alphaActionStatusEnum("status").notNull().default("PENDING"),
+  callSentAt: timestamp("call_sent_at", { withTimezone: true }),
+  callSentByUserId: uuid("call_sent_by_user_id"),
+  sp1IssuedAt: timestamp("sp1_issued_at", { withTimezone: true }),
+  sp1IssuedByUserId: uuid("sp1_issued_by_user_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("attendance_alpha_events_employee_date_uidx").on(table.employeeId, table.alphaDate),
+  index("idx_attendance_alpha_events_date").on(table.alphaDate),
+  index("idx_attendance_alpha_events_status").on(table.status),
+]);
+
+export const employeeAlerts = pgTable("employee_alerts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  alertType: employeeAlertTypeEnum("alert_type").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  refDate: date("ref_date", { mode: "date" }),
+  sourceRefId: uuid("source_ref_id"),
+  sentByUserId: uuid("sent_by_user_id"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_employee_alerts_employee_created").on(table.employeeId, table.createdAt),
+]);
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AttendanceTicket = typeof attendanceTickets.$inferSelect;
@@ -292,9 +371,15 @@ export type OvertimeDraftEntry = typeof overtimeDraftEntries.$inferSelect;
 export type NewOvertimeDraftEntry = typeof overtimeDraftEntries.$inferInsert;
 export type EmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferSelect;
 export type NewEmployeeAttendanceRecord = typeof employeeAttendanceRecords.$inferInsert;
+export type AttendanceFallbackRequest = typeof attendanceFallbackRequests.$inferSelect;
+export type NewAttendanceFallbackRequest = typeof attendanceFallbackRequests.$inferInsert;
 export type LeaveQuota = typeof leaveQuotas.$inferSelect;
 export type NewLeaveQuota = typeof leaveQuotas.$inferInsert;
 export type EmployeeReview = typeof employeeReviews.$inferSelect;
 export type NewEmployeeReview = typeof employeeReviews.$inferInsert;
 export type IncidentLog = typeof incidentLogs.$inferSelect;
 export type NewIncidentLog = typeof incidentLogs.$inferInsert;
+export type AttendanceAlphaEvent = typeof attendanceAlphaEvents.$inferSelect;
+export type NewAttendanceAlphaEvent = typeof attendanceAlphaEvents.$inferInsert;
+export type EmployeeAlert = typeof employeeAlerts.$inferSelect;
+export type NewEmployeeAlert = typeof employeeAlerts.$inferInsert;

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/tables/DataTable";
-import { upsertAttendanceRecord } from "@/server/actions/attendance";
+import { approveAttendanceFallbackRequest, rejectAttendanceFallbackRequest, upsertAttendanceRecord } from "@/server/actions/attendance";
 
 type EmployeeOption = {
   id: string;
@@ -46,6 +46,26 @@ type Props = {
   selectedDate: string;
   employees: EmployeeOption[];
   records: AttendanceRow[];
+  fallbackRequests: {
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    employeeCode: string;
+    divisionName: string;
+    attendanceDate: string;
+    photoUrl: string;
+    latitude: string;
+    longitude: string;
+    distanceMeters: number | null;
+    radiusMetersSnapshot: number | null;
+    geofenceMatched: boolean;
+    fingerprintFailureReason: string;
+    developerModeDisabledConfirmed: boolean;
+    status: string;
+    reviewNotes: string;
+    reviewedAt: string;
+    createdAt: string;
+  }[];
 };
 
 const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
@@ -74,7 +94,7 @@ function createDraft(selectedDate: string): AttendanceDraft {
   };
 }
 
-export default function AttendanceClient({ selectedDate, employees, records }: Props) {
+export default function AttendanceClient({ selectedDate, employees, records, fallbackRequests }: Props) {
   const router = useRouter();
   const [draft, setDraft] = useState<AttendanceDraft>(() => createDraft(selectedDate));
   const [pending, setPending] = useState(false);
@@ -281,6 +301,86 @@ export default function AttendanceClient({ selectedDate, employees, records }: P
       </div>
 
       <DataTable data={records} columns={columns} searchKey="employeeName" searchPlaceholder="Cari karyawan..." />
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-3 text-sm font-semibold text-slate-900">Antrian Fallback Sidik Jari</h3>
+        {fallbackRequests.length === 0 ? (
+          <p className="text-sm text-slate-500">Tidak ada pengajuan fallback untuk tanggal ini.</p>
+        ) : (
+          <div className="space-y-3">
+            {fallbackRequests.map((req) => (
+              <div key={req.id} className="rounded-md border border-slate-200 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">{req.employeeName}</p>
+                    <p className="text-xs text-slate-500">{req.employeeCode} - {req.divisionName}</p>
+                    <p className="mt-1 text-xs text-slate-600">Alasan: {req.fingerprintFailureReason}</p>
+                    <p className="text-xs text-slate-600">Lokasi: {req.latitude}, {req.longitude}</p>
+                    <p className="text-xs text-slate-600">
+                      Jarak: {req.distanceMeters ?? "-"} m / Radius: {req.radiusMetersSnapshot ?? "-"} m
+                    </p>
+                    <p className="text-xs text-slate-600">Geofence: {req.geofenceMatched ? "Sesuai" : "Tidak sesuai"}</p>
+                    <p className="text-xs text-slate-600">Developer mode off: {req.developerModeDisabledConfirmed ? "Ya" : "Tidak"}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge variant={req.status === "APPROVED" ? "default" : req.status === "REJECTED" ? "destructive" : "secondary"}>
+                      {req.status}
+                    </Badge>
+                    <a href={req.photoUrl} target="_blank" className="text-xs text-teal-700 underline">Lihat Foto Bukti</a>
+                  </div>
+                </div>
+                {req.status === "PENDING" && (
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        setPending(true);
+                        setError(null);
+                        try {
+                          const result = await approveAttendanceFallbackRequest({ requestId: req.id });
+                          if (result && "error" in result) {
+                            setError(result.error);
+                            return;
+                          }
+                          setSuccess("Fallback disetujui. Status absensi jadi HADIR.");
+                          router.refresh();
+                        } finally {
+                          setPending(false);
+                        }
+                      }}
+                      disabled={pending}
+                    >
+                      Approve (Hadir)
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={async () => {
+                        setPending(true);
+                        setError(null);
+                        try {
+                          const result = await rejectAttendanceFallbackRequest({ requestId: req.id });
+                          if (result && "error" in result) {
+                            setError(result.error);
+                            return;
+                          }
+                          setSuccess("Fallback ditolak. Status absensi jadi ALPA.");
+                          router.refresh();
+                        } finally {
+                          setPending(false);
+                        }
+                      }}
+                      disabled={pending}
+                    >
+                      Tolak (ALPA)
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

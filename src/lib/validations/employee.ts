@@ -14,6 +14,7 @@ const optionalTime = z.preprocess(
 export const employeeSchema = z
   .object({
     employeeCode: z.string().trim().min(1, "ID karyawan wajib diisi").max(30),
+    nik: z.string().trim().max(50).optional().transform((value) => value || undefined),
     fullName: z.string().trim().min(1, "Nama lengkap wajib diisi").max(150),
     nickname: z.string().trim().max(100).optional().transform((value) => value || undefined),
     photoUrl: optionalText,

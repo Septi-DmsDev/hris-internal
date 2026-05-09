@@ -19,6 +19,11 @@ export async function createBranch(formData: FormData) {
   const raw = {
     name: formData.get("name")?.toString() ?? "",
     address: formData.get("address")?.toString() || undefined,
+    latitude: formData.get("latitude")?.toString() ? Number(formData.get("latitude")) : undefined,
+    longitude: formData.get("longitude")?.toString() ? Number(formData.get("longitude")) : undefined,
+    maxAttendanceRadiusMeters: formData.get("maxAttendanceRadiusMeters")?.toString()
+      ? Number(formData.get("maxAttendanceRadiusMeters"))
+      : 150,
     isActive: formData.get("isActive") !== "false",
   };
 
@@ -28,7 +33,11 @@ export async function createBranch(formData: FormData) {
   }
 
   try {
-    await db.insert(branches).values(parsed.data);
+    await db.insert(branches).values({
+      ...parsed.data,
+      latitude: parsed.data.latitude != null ? String(parsed.data.latitude) : null,
+      longitude: parsed.data.longitude != null ? String(parsed.data.longitude) : null,
+    });
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (code === "23505") return { error: "Data dengan kode ini sudah ada, gunakan kode yang berbeda." };
@@ -47,6 +56,11 @@ export async function updateBranch(id: string, formData: FormData) {
   const raw = {
     name: formData.get("name")?.toString() ?? "",
     address: formData.get("address")?.toString() || undefined,
+    latitude: formData.get("latitude")?.toString() ? Number(formData.get("latitude")) : undefined,
+    longitude: formData.get("longitude")?.toString() ? Number(formData.get("longitude")) : undefined,
+    maxAttendanceRadiusMeters: formData.get("maxAttendanceRadiusMeters")?.toString()
+      ? Number(formData.get("maxAttendanceRadiusMeters"))
+      : 150,
     isActive: formData.get("isActive") !== "false",
   };
 
@@ -58,7 +72,12 @@ export async function updateBranch(id: string, formData: FormData) {
   try {
     const result = await db
       .update(branches)
-      .set({ ...parsed.data, updatedAt: new Date() })
+      .set({
+        ...parsed.data,
+        latitude: parsed.data.latitude != null ? String(parsed.data.latitude) : null,
+        longitude: parsed.data.longitude != null ? String(parsed.data.longitude) : null,
+        updatedAt: new Date(),
+      })
       .where(eq(branches.id, id))
       .returning({ id: branches.id });
 

@@ -17,6 +17,7 @@ export default async function EmployeesPage() {
   const employeeRecords = employees as Array<{
     id: string;
     employeeCode: string;
+    nik: string | null;
     fullName: string;
     branchName: string | null;
     phoneNumber: string | null;
@@ -39,6 +40,7 @@ export default async function EmployeesPage() {
   const rows: EmployeeRow[] = employeeRecords.map((employee) => ({
     id: employee.id,
     employeeCode: employee.employeeCode,
+    nik: employee.nik,
     fullName: employee.fullName,
     branchName: employee.branchName ?? "-",
     phoneNumber: employee.phoneNumber ?? "-",

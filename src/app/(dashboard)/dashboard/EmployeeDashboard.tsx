@@ -1,7 +1,7 @@
 import { getMyDashboard } from "@/server/actions/me";
 import { db } from "@/lib/db";
-import { leaveQuotas } from "@/lib/db/schema/hr";
-import { and, eq } from "drizzle-orm";
+import { employeeAlerts, leaveQuotas } from "@/lib/db/schema/hr";
+import { and, desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import {
   Activity,
@@ -115,6 +115,13 @@ export default async function EmployeeDashboard() {
   // Fetch leave quota
   const currentYear = new Date().getFullYear();
   let leaveQuota = null;
+  let alerts: {
+    id: string;
+    alertType: string;
+    title: string;
+    message: string;
+    createdAt: Date;
+  }[] = [];
   if (employee?.id) {
     const quotaRows = await db
       .select()
@@ -127,6 +134,18 @@ export default async function EmployeeDashboard() {
       )
       .limit(1);
     leaveQuota = quotaRows[0] ?? null;
+    alerts = await db
+      .select({
+        id: employeeAlerts.id,
+        alertType: employeeAlerts.alertType,
+        title: employeeAlerts.title,
+        message: employeeAlerts.message,
+        createdAt: employeeAlerts.createdAt,
+      })
+      .from(employeeAlerts)
+      .where(eq(employeeAlerts.employeeId, employee.id))
+      .orderBy(desc(employeeAlerts.createdAt))
+      .limit(5);
   }
 
   const isTeamwork = role === "TEAMWORK";
@@ -360,6 +379,20 @@ export default async function EmployeeDashboard() {
       </section>
 
       {/* Quick Links */}
+      {alerts.length > 0 && (
+        <section className="rounded-xl border border-red-200 bg-red-50 p-5">
+          <h3 className="text-sm font-bold text-red-900 mb-3">Peringatan HRD</h3>
+          <div className="space-y-2">
+            {alerts.map((alert) => (
+              <div key={alert.id} className="rounded-md border border-red-200 bg-white px-3 py-2">
+                <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
+                <p className="text-xs text-slate-600">{alert.message}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
           Akses Cepat

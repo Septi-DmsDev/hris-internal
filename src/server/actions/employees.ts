@@ -33,6 +33,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
 import type { UserRole } from "@/types";
+import { revokeEmployeeSystemAccess } from "@/server/services/employee-access-service";
 
 const EMPLOYEE_READ_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "FINANCE"];
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
@@ -41,6 +42,7 @@ const DEFAULT_EMPLOYEE_LOGIN_PASSWORD = "12345678";
 type EmployeeDetailRow = {
   id: string;
   employeeCode: string;
+  nik: string | null;
   fullName: string;
   nickname: string | null;
   photoUrl: string | null;
@@ -82,6 +84,7 @@ type EmployeeDetailRow = {
 type EmployeeListRow = {
   id: string;
   employeeCode: string;
+  nik: string | null;
   fullName: string;
   nickname: string | null;
   phoneNumber: string | null;
@@ -135,6 +138,7 @@ type EmployeePersistInput = Omit<EmployeeInput, "supervisorEmployeeId"> & {
 function toEmployeeRecord(input: EmployeePersistInput) {
   return {
     employeeCode: input.employeeCode,
+    nik: input.nik,
     fullName: input.fullName,
     nickname: input.nickname,
     photoUrl: input.photoUrl,
@@ -316,6 +320,7 @@ export async function getEmployees() {
     .select({
       id: employees.id,
       employeeCode: employees.employeeCode,
+      nik: employees.nik,
       fullName: employees.fullName,
       nickname: employees.nickname,
       phoneNumber: employees.phoneNumber,
@@ -510,6 +515,7 @@ export async function getEmployeeById(id: string) {
     .select({
       id: employees.id,
       employeeCode: employees.employeeCode,
+      nik: employees.nik,
       fullName: employees.fullName,
       nickname: employees.nickname,
       photoUrl: employees.photoUrl,
@@ -571,7 +577,7 @@ export async function getEmployeeById(id: string) {
   const previousSupervisor = aliasedTable(employees, "previous_supervisor");
   const nextSupervisor = aliasedTable(employees, "new_supervisor");
 
-  const [currentScheduleAssignment, divisionHistoryRows, positionHistoryRows, gradeHistoryRows, supervisorHistoryRows, statusHistoryRows] =
+  const [currentScheduleAssignment, divisionHistoryRows, positionHistoryRows, gradeHistoryRows, supervisorHistoryRows, statusHistoryRows, resignHistoryRows] =
     await Promise.all([
       db
         .select({
@@ -654,6 +660,24 @@ export async function getEmployeeById(id: string) {
         .from(employeeStatusHistories)
         .where(eq(employeeStatusHistories.employeeId, id))
         .orderBy(desc(employeeStatusHistories.effectiveDate)),
+      db
+        .select({
+          id: attendanceTickets.id,
+          effectiveDate: attendanceTickets.startDate,
+          status: attendanceTickets.status,
+          reason: attendanceTickets.reason,
+          reviewNotes: attendanceTickets.reviewNotes,
+          rejectionReason: attendanceTickets.rejectionReason,
+          createdAt: attendanceTickets.createdAt,
+        })
+        .from(attendanceTickets)
+        .where(
+          and(
+            eq(attendanceTickets.employeeId, id),
+            eq(attendanceTickets.ticketType, "RESIGN")
+          )
+        )
+        .orderBy(desc(attendanceTickets.createdAt)),
     ]);
 
   return {
@@ -666,6 +690,7 @@ export async function getEmployeeById(id: string) {
       grades: gradeHistoryRows,
       supervisors: supervisorHistoryRows,
       statuses: statusHistoryRows,
+      resigns: resignHistoryRows,
     },
   };
 }
@@ -1013,6 +1038,8 @@ export async function updateEmployee(id: string, input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? "Input karyawan tidak valid." };
   }
 
+  let shouldRevokeAccess = false;
+
   try {
     await db.transaction(async (tx) => {
       const [existingEmployee] = await tx.select().from(employees).where(eq(employees.id, id)).limit(1);
@@ -1028,6 +1055,8 @@ export async function updateEmployee(id: string, input: unknown) {
           updatedAt: new Date(),
         })
         .where(eq(employees.id, id));
+
+      shouldRevokeAccess = parsed.data.employmentStatus === "RESIGN" || parsed.data.isActive === false;
 
       if (existingEmployee.divisionId !== parsed.data.divisionId) {
         await tx.insert(employeeDivisionHistories).values({
@@ -1127,8 +1156,13 @@ export async function updateEmployee(id: string, input: unknown) {
     throw error;
   }
 
+  if (shouldRevokeAccess) {
+    await revokeEmployeeSystemAccess(id);
+  }
+
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);
+  revalidatePath("/users");
   return { success: true };
 }
 
@@ -1241,11 +1275,6 @@ export async function deleteEmployee(id: string) {
 
   await db.transaction(async (tx) => {
     await tx
-      .update(userRoles)
-      .set({ employeeId: null })
-      .where(eq(userRoles.employeeId, id));
-
-    await tx
       .update(employees)
       .set({
         isActive: false,
@@ -1255,8 +1284,11 @@ export async function deleteEmployee(id: string) {
       .where(eq(employees.id, id));
   });
 
+  await revokeEmployeeSystemAccess(id);
+
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);
+  revalidatePath("/users");
   return { success: true };
 }
 
@@ -1343,6 +1375,31 @@ export async function createMissingEmployeeAccounts(defaultPassword: string) {
     totalMissing: employeesWithoutAccount.length,
     errors: errors.length > 0 ? errors : undefined,
   };
+}
+
+export async function revokeResignedEmployeesAccess() {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD"]);
+  if (authError) return authError;
+
+  const targets = await db
+    .select({ id: employees.id })
+    .from(employees)
+    .where(
+      and(
+        inArray(employees.employmentStatus, ["RESIGN", "NONAKTIF"]),
+        eq(employees.isActive, false)
+      )
+    );
+
+  let revokedCount = 0;
+  for (const target of targets) {
+    const result = await revokeEmployeeSystemAccess(target.id);
+    if (result.roleRevoked) revokedCount += 1;
+  }
+
+  revalidatePath("/users");
+  revalidatePath("/employees");
+  return { success: true, totalCandidates: targets.length, revokedCount };
 }
 
 function normalizeUsernameFromLegacyCode(value: string) {

@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { employees } from "@/lib/db/schema/employee";
 import { dailyActivityEntries, monthlyPointPerformances } from "@/lib/db/schema/point";
-import { attendanceTickets, employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
+import { attendanceAlphaEvents, attendanceTickets, employeeReviews, incidentLogs } from "@/lib/db/schema/hr";
 import { requireAuth, getCurrentUserRoleRow } from "@/lib/auth/session";
 import { and, avg, count, eq, inArray, sql } from "drizzle-orm";
 import type { UserRole } from "@/types";
@@ -21,6 +21,7 @@ export type DashboardStats = {
     tickets: number;
     activities: number;
     reviews: number;
+    alpha: number;
   };
   activityByStatus: { status: string; jumlah: number }[];
   divisionPerformance: {
@@ -74,6 +75,12 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     .leftJoin(employees, eq(employeeReviews.employeeId, employees.id))
     .where(and(eq(employeeReviews.status, "SUBMITTED"), divScope));
 
+  const [alphaPending] = await db
+    .select({ cnt: count() })
+    .from(attendanceAlphaEvents)
+    .leftJoin(employees, eq(attendanceAlphaEvents.employeeId, employees.id))
+    .where(and(sql`${attendanceAlphaEvents.status} <> 'SP1_ISSUED'`, divScope));
+
   const actStatusRows = await db
     .select({ status: dailyActivityEntries.status, jumlah: count() })
     .from(dailyActivityEntries)
@@ -112,6 +119,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       tickets: Number(ticketPending?.cnt ?? 0),
       activities: Number(activityPending?.cnt ?? 0),
       reviews: Number(reviewPending?.cnt ?? 0),
+      alpha: Number(alphaPending?.cnt ?? 0),
     },
     activityByStatus: actStatusRows.map((r) => ({ status: r.status, jumlah: Number(r.jumlah) })),
     divisionPerformance: divPerfRows.map((r) => ({

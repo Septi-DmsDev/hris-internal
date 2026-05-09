@@ -16,6 +16,7 @@ import {
   CreditCard,
   TrendingUp,
   Database,
+  History,
   Building2,
   Settings,
   UserCog,
@@ -140,6 +141,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: TrendingUp,
     roles: ["SUPER_ADMIN", "FINANCE", "PAYROLL_VIEWER"],
     group: "main",
+  },
+  {
+    label: "History",
+    href: "/history",
+    icon: History,
+    roles: ["SUPER_ADMIN", "HRD"],
+    group: "admin",
   },
   {
     label: "Pengguna",

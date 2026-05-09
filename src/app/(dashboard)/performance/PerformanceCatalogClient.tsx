@@ -649,7 +649,12 @@ export default function PerformanceCatalogClient({
         return;
       }
       setMonthlyOpen(false);
-      setLastResult(`Monthly performance berhasil digenerate untuk ${result.generatedEmployees} karyawan.`);
+      const skipped = Number(result.skippedManualOverrides ?? 0);
+      setLastResult(
+        skipped > 0
+          ? `Monthly performance berhasil digenerate untuk ${result.generatedEmployees} karyawan. ${skipped} karyawan manual override tidak ditimpa.`
+          : `Monthly performance berhasil digenerate untuk ${result.generatedEmployees} karyawan.`
+      );
       router.refresh();
     } finally {
       setPending(false);

@@ -260,6 +260,7 @@ async function getScopedMonthlyPerformance(role: UserRole, divisionIds: string[]
       totalTargetPoints: monthlyPointPerformances.totalTargetPoints,
       totalApprovedPoints: monthlyPointPerformances.totalApprovedPoints,
       performancePercent: monthlyPointPerformances.performancePercent,
+      inputSource: monthlyPointPerformances.inputSource,
       status: monthlyPointPerformances.status,
       calculatedAt: monthlyPointPerformances.calculatedAt,
     })
@@ -768,43 +769,59 @@ export async function generateMonthlyPerformance(input: unknown) {
 
   const periodStartDate = parsed.data.periodStartDate;
   const periodEndDate = parsed.data.periodEndDate;
+  const manualRows = await db
+    .select({ employeeId: monthlyPointPerformances.employeeId })
+    .from(monthlyPointPerformances)
+    .where(
+      and(
+        eq(monthlyPointPerformances.periodStartDate, periodStartDate),
+        eq(monthlyPointPerformances.periodEndDate, periodEndDate),
+        eq(monthlyPointPerformances.inputSource, "MANUAL_INPUT")
+      )
+    );
+  const manualEmployeeIds = new Set(manualRows.map((row) => row.employeeId));
+  const regeneratedEmployees = targetEmployees.filter((employee) => !manualEmployeeIds.has(employee.id));
 
   const SUBMITTED_STATUSES = ["DIAJUKAN", "DIAJUKAN_ULANG", "DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
   const APPROVED_STATUSES = ["DISETUJUI_SPV", "OVERRIDE_HRD", "DIKUNCI_PAYROLL"] as const;
-  const employeeIds = targetEmployees.map((e) => e.id);
+  const employeeIds = regeneratedEmployees.map((e) => e.id);
 
-  const [activities, leaveRows] = await Promise.all([
-    db
-      .select({
-        employeeId: dailyActivityEntries.employeeId,
-        workDate: dailyActivityEntries.workDate,
-        totalPoints: dailyActivityEntries.totalPoints,
-        status: dailyActivityEntries.status,
-      })
-      .from(dailyActivityEntries)
-      .where(
-        and(
-          inArray(dailyActivityEntries.employeeId, employeeIds),
-          gte(dailyActivityEntries.workDate, periodStartDate),
-          lte(dailyActivityEntries.workDate, periodEndDate),
-          inArray(dailyActivityEntries.status, SUBMITTED_STATUSES)
-        )
-      ),
-    db
-      .select({
-        employeeId: attendanceTickets.employeeId,
-        daysCount: attendanceTickets.daysCount,
-      })
-      .from(attendanceTickets)
-      .where(
-        and(
-          inArray(attendanceTickets.employeeId, employeeIds),
-          lte(attendanceTickets.startDate, periodEndDate),
-          gte(attendanceTickets.endDate, periodStartDate),
-          inArray(attendanceTickets.status, ["APPROVED_SPV", "APPROVED_HRD", "AUTO_APPROVED", "LOCKED"])
-        )
-      ),
-  ]);
+  const [activities, leaveRows] = await Promise.all(
+    employeeIds.length === 0
+      ? [Promise.resolve([]), Promise.resolve([])]
+      : [
+          db
+            .select({
+              employeeId: dailyActivityEntries.employeeId,
+              workDate: dailyActivityEntries.workDate,
+              totalPoints: dailyActivityEntries.totalPoints,
+              status: dailyActivityEntries.status,
+            })
+            .from(dailyActivityEntries)
+            .where(
+              and(
+                inArray(dailyActivityEntries.employeeId, employeeIds),
+                gte(dailyActivityEntries.workDate, periodStartDate),
+                lte(dailyActivityEntries.workDate, periodEndDate),
+                inArray(dailyActivityEntries.status, SUBMITTED_STATUSES)
+              )
+            ),
+          db
+            .select({
+              employeeId: attendanceTickets.employeeId,
+              daysCount: attendanceTickets.daysCount,
+            })
+            .from(attendanceTickets)
+            .where(
+              and(
+                inArray(attendanceTickets.employeeId, employeeIds),
+                lte(attendanceTickets.startDate, periodEndDate),
+                gte(attendanceTickets.endDate, periodStartDate),
+                inArray(attendanceTickets.status, ["APPROVED_SPV", "APPROVED_HRD", "AUTO_APPROVED", "LOCKED"])
+              )
+            ),
+        ]
+  );
 
   // Per-employee: approved total dan per-hari submitted (untuk rata-rata persentase)
   const approvedSumByEmployee = new Map<string, number>();
@@ -834,16 +851,19 @@ export async function generateMonthlyPerformance(input: unknown) {
   }
 
   await db.transaction(async (tx) => {
-    await tx
-      .delete(monthlyPointPerformances)
-      .where(
-        and(
-          eq(monthlyPointPerformances.periodStartDate, periodStartDate),
-          eq(monthlyPointPerformances.periodEndDate, periodEndDate)
-        )
-      );
+    if (employeeIds.length > 0) {
+      await tx
+        .delete(monthlyPointPerformances)
+        .where(
+          and(
+            eq(monthlyPointPerformances.periodStartDate, periodStartDate),
+            eq(monthlyPointPerformances.periodEndDate, periodEndDate),
+            inArray(monthlyPointPerformances.employeeId, employeeIds)
+          )
+        );
+    }
 
-    for (const employee of targetEmployees) {
+    for (const employee of regeneratedEmployees) {
       const divisionSnapshot = await resolveDivisionSnapshotForPeriod(employee.id, periodStartDate);
       const rawTargetDays = await resolveTargetDaysForPeriod(employee.id, periodStartDate, periodEndDate);
       const leaveDays = leaveCountByEmployee.get(employee.id) ?? 0;
@@ -872,13 +892,14 @@ export async function generateMonthlyPerformance(input: unknown) {
         totalTargetPoints: calculated.totalTargetPoints,
         totalApprovedPoints: calculated.totalApprovedPoints.toFixed(2),
         performancePercent: calculated.performancePercent.toFixed(2),
+        inputSource: "GENERATED",
         status: "FINALIZED",
       });
     }
   });
 
   revalidatePath("/performance");
-  return { success: true, generatedEmployees: targetEmployees.length };
+  return { success: true, generatedEmployees: regeneratedEmployees.length, skippedManualOverrides: manualEmployeeIds.size };
 }
 
 export async function inputEmployeeMonthlyPerformance(input: unknown) {
@@ -976,6 +997,7 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
       totalTargetPoints,
       totalApprovedPoints: totalApprovedPoints.toFixed(2),
       performancePercent: parsed.data.performancePercent.toFixed(2),
+      inputSource: "MANUAL_INPUT",
       status: "FINALIZED",
     });
 

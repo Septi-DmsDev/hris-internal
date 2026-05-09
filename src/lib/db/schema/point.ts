@@ -46,6 +46,11 @@ export const monthlyPointPerformanceStatusEnum = pgEnum("monthly_point_performan
   "LOCKED",
 ]);
 
+export const monthlyPointPerformanceInputSourceEnum = pgEnum("monthly_point_performance_input_source", [
+  "GENERATED",
+  "MANUAL_INPUT",
+]);
+
 export const pointCatalogVersions = pgTable("point_catalog_versions", {
   id: uuid("id").defaultRandom().primaryKey(),
   code: varchar("code", { length: 50 }).notNull().unique(),
@@ -133,6 +138,7 @@ export const monthlyPointPerformances = pgTable("monthly_point_performances", {
   totalTargetPoints: integer("total_target_points").notNull(),
   totalApprovedPoints: numeric("total_approved_points", { precision: 14, scale: 2 }).notNull(),
   performancePercent: numeric("performance_percent", { precision: 7, scale: 2 }).notNull(),
+  inputSource: monthlyPointPerformanceInputSourceEnum("input_source").notNull().default("GENERATED"),
   status: monthlyPointPerformanceStatusEnum("status").notNull().default("DRAFT"),
   calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

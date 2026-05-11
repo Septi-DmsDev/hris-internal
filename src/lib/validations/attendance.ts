@@ -60,19 +60,12 @@ export const admsAttendanceRecordSchema = z.object({
   attendanceStatus: z.enum(ATTENDANCE_STATUSES).default("HADIR"),
   checkInTime: admsTime.optional(),
   checkOutTime: admsTime.optional(),
-  punctualityStatus: z.enum(ATTENDANCE_PUNCTUALITY_STATUSES).optional(),
+  breakOutTime: admsTime.optional(),
+  breakInTime: admsTime.optional(),
   notes: z.string().trim().max(300).optional(),
   externalUserCode: z.string().trim().max(120).optional(),
   externalEventId: z.string().trim().max(120).optional(),
   rawPayload: z.record(z.string(), z.unknown()).optional(),
-}).superRefine((value, ctx) => {
-  if (value.attendanceStatus === "HADIR" && !value.punctualityStatus) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["punctualityStatus"],
-      message: "punctualityStatus wajib untuk attendanceStatus HADIR.",
-    });
-  }
 });
 
 export const admsAttendanceIngestSchema = z.object({

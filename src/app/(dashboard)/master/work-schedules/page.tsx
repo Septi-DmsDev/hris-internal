@@ -19,6 +19,10 @@ export default async function WorkSchedulesPage() {
       isWorkingDay: day.isWorkingDay,
       startTime: day.startTime ?? "",
       endTime: day.endTime ?? "",
+      breakStart: day.breakStart ?? "",
+      breakEnd: day.breakEnd ?? "",
+      breakToleranceMinutes: String(day.breakToleranceMinutes),
+      checkInToleranceMinutes: String(day.checkInToleranceMinutes),
       targetPoints: day.targetPoints,
     })),
   }));

@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# worktrees
+.worktrees/
+
 # env files — .env.example boleh di-commit, .env.local tidak
 .env.local
 .env.*.local

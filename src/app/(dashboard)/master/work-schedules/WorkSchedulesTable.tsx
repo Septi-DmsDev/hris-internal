@@ -51,6 +51,10 @@ type WorkScheduleDayDraft = {
   shiftId?: string;
   startTime: string;
   endTime: string;
+  breakStart: string;
+  breakEnd: string;
+  breakToleranceMinutes: string;
+  checkInToleranceMinutes: string;
   targetPoints: string;
 };
 
@@ -108,6 +112,10 @@ function createDefaultDays() {
     shiftId: "",
     startTime: dayOfWeek === 0 ? "" : "08:00",
     endTime: dayOfWeek === 0 ? "" : "17:00",
+    breakStart: dayOfWeek === 0 ? "" : "12:00",
+    breakEnd: dayOfWeek === 0 ? "" : "13:00",
+    breakToleranceMinutes: dayOfWeek === 0 ? "0" : "5",
+    checkInToleranceMinutes: "0",
     targetPoints: dayOfWeek === 0 ? "0" : String(POINT_TARGET_HARIAN),
   })) satisfies WorkScheduleDayDraft[];
 }
@@ -128,13 +136,17 @@ function createDraftFromRow(row: WorkScheduleRow): WorkScheduleDraft {
     name: row.name,
     description: row.description,
     isActive: row.isActive,
-    days: row.days.map((day) => ({
-      ...day,
-      shiftId: "",
-      startTime: day.startTime ?? "",
-      endTime: day.endTime ?? "",
-      targetPoints: String(day.targetPoints),
-    })),
+      days: row.days.map((day) => ({
+        ...day,
+        shiftId: "",
+        startTime: day.startTime ?? "",
+        endTime: day.endTime ?? "",
+        breakStart: day.breakStart ?? "",
+        breakEnd: day.breakEnd ?? "",
+        breakToleranceMinutes: String(day.breakToleranceMinutes ?? 5),
+        checkInToleranceMinutes: String(day.checkInToleranceMinutes ?? 0),
+        targetPoints: String(day.targetPoints),
+      })),
   };
 }
 
@@ -144,14 +156,18 @@ function toActionInput(draft: WorkScheduleDraft) {
     name: draft.name,
     description: draft.description,
     isActive: draft.isActive,
-    days: draft.days.map((day) => ({
-      dayOfWeek: day.dayOfWeek,
-      dayStatus: day.dayStatus,
-      isWorkingDay: day.isWorkingDay,
-      startTime: day.startTime,
-      endTime: day.endTime,
-      targetPoints: Number(day.targetPoints || 0),
-    })),
+      days: draft.days.map((day) => ({
+        dayOfWeek: day.dayOfWeek,
+        dayStatus: day.dayStatus,
+        isWorkingDay: day.isWorkingDay,
+        startTime: day.startTime,
+        endTime: day.endTime,
+        breakStart: day.breakStart,
+        breakEnd: day.breakEnd,
+        breakToleranceMinutes: Number(day.breakToleranceMinutes || 0),
+        checkInToleranceMinutes: Number(day.checkInToleranceMinutes || 0),
+        targetPoints: Number(day.targetPoints || 0),
+      })),
   };
 }
 
@@ -276,16 +292,24 @@ function ScheduleForm({
                 onChange={(event) => {
                   const isWorkingDay = event.target.value === "true";
                   onDayChange(index, "isWorkingDay", isWorkingDay);
-                  if (!isWorkingDay) {
-                    onDayChange(index, "dayStatus", "OFF");
-                    onDayChange(index, "startTime", "");
-                    onDayChange(index, "endTime", "");
-                    onDayChange(index, "targetPoints", "0");
-                  } else {
-                    onDayChange(index, "dayStatus", "KERJA");
-                    onDayChange(index, "targetPoints", String(POINT_TARGET_HARIAN));
-                  }
-                }}
+                if (!isWorkingDay) {
+                  onDayChange(index, "dayStatus", "OFF");
+                  onDayChange(index, "startTime", "");
+                  onDayChange(index, "endTime", "");
+                  onDayChange(index, "breakStart", "");
+                  onDayChange(index, "breakEnd", "");
+                  onDayChange(index, "breakToleranceMinutes", "0");
+                  onDayChange(index, "checkInToleranceMinutes", "0");
+                  onDayChange(index, "targetPoints", "0");
+                } else {
+                  onDayChange(index, "dayStatus", "KERJA");
+                  onDayChange(index, "breakStart", "12:00");
+                  onDayChange(index, "breakEnd", "13:00");
+                  onDayChange(index, "breakToleranceMinutes", "5");
+                  onDayChange(index, "checkInToleranceMinutes", "0");
+                  onDayChange(index, "targetPoints", String(POINT_TARGET_HARIAN));
+                }
+              }}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="true">Ya</option>
@@ -355,6 +379,54 @@ function ScheduleForm({
                 disabled={!day.isWorkingDay}
                 onChange={(event) =>
                   onDayChange(index, "endTime", event.target.value)
+                }
+                />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Mulai Istirahat</p>
+              <Input
+                type="time"
+                value={day.breakStart}
+                disabled={!day.isWorkingDay}
+                onChange={(event) =>
+                  onDayChange(index, "breakStart", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Selesai Istirahat</p>
+              <Input
+                type="time"
+                value={day.breakEnd}
+                disabled={!day.isWorkingDay}
+                onChange={(event) =>
+                  onDayChange(index, "breakEnd", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Toleransi Istirahat (menit)</p>
+              <Input
+                type="number"
+                min={0}
+                max={60}
+                value={day.breakToleranceMinutes}
+                disabled={!day.isWorkingDay}
+                onChange={(event) =>
+                  onDayChange(index, "breakToleranceMinutes", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Toleransi Masuk (menit)</p>
+              <Input
+                type="number"
+                min={0}
+                max={60}
+                value={day.checkInToleranceMinutes}
+                disabled={!day.isWorkingDay}
+                onChange={(event) =>
+                  onDayChange(index, "checkInToleranceMinutes", event.target.value)
                 }
               />
             </div>
@@ -529,7 +601,8 @@ export default function WorkSchedulesTable({
         cell: ({ row }) => {
           const workingDays = row.original.days.filter((day) => day.isWorkingDay);
           if (!workingDays.length) return "Semua hari off";
-          return `${workingDays[0]?.startTime ?? "-"} - ${workingDays[0]?.endTime ?? "-"} / ${workingDays[0]?.targetPoints ?? 0} poin`;
+          const firstDay = workingDays[0];
+          return `${firstDay?.startTime ?? "-"} - ${firstDay?.endTime ?? "-"} / istirahat ${firstDay?.breakStart ?? "-"}-${firstDay?.breakEnd ?? "-"} / tol ${firstDay?.breakToleranceMinutes ?? 0}m / ${firstDay?.targetPoints ?? 0} poin`;
         },
       },
       {

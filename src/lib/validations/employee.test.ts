@@ -57,6 +57,18 @@ describe("employeeSchema", () => {
 });
 
 describe("workScheduleSchema", () => {
+  const baseWorkingDay = {
+    dayStatus: "KERJA" as const,
+    isWorkingDay: true,
+    startTime: "08:00",
+    endTime: "17:00",
+    breakStart: "12:00",
+    breakEnd: "13:00",
+    breakToleranceMinutes: 5,
+    checkInToleranceMinutes: 0,
+    targetPoints: POINT_TARGET_HARIAN,
+  };
+
   it("menolak jadwal yang tidak memiliki 7 hari unik", () => {
     const parsed = workScheduleSchema.safeParse({
       code: "REG-A",
@@ -64,12 +76,12 @@ describe("workScheduleSchema", () => {
       isActive: true,
       days: [
         { dayOfWeek: 0, dayStatus: "OFF", isWorkingDay: false, targetPoints: 0 },
-        { dayOfWeek: 1, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
-        { dayOfWeek: 2, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
-        { dayOfWeek: 3, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
-        { dayOfWeek: 4, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
-        { dayOfWeek: 5, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
-        { dayOfWeek: 5, dayStatus: "KERJA", isWorkingDay: true, startTime: "08:00", endTime: "17:00", targetPoints: POINT_TARGET_HARIAN },
+        { dayOfWeek: 1, ...baseWorkingDay },
+        { dayOfWeek: 2, ...baseWorkingDay },
+        { dayOfWeek: 3, ...baseWorkingDay },
+        { dayOfWeek: 4, ...baseWorkingDay },
+        { dayOfWeek: 5, ...baseWorkingDay },
+        { dayOfWeek: 5, ...baseWorkingDay },
       ],
     });
 
@@ -90,6 +102,10 @@ describe("workScheduleSchema", () => {
         isWorkingDay: dayOfWeek !== 0,
         startTime: dayOfWeek === 1 ? "" : dayOfWeek === 0 ? undefined : "08:00",
         endTime: dayOfWeek === 1 ? "" : dayOfWeek === 0 ? undefined : "17:00",
+        breakStart: dayOfWeek === 0 ? undefined : "12:00",
+        breakEnd: dayOfWeek === 0 ? undefined : "13:00",
+        breakToleranceMinutes: dayOfWeek === 0 ? 0 : 5,
+        checkInToleranceMinutes: 0,
         targetPoints: dayOfWeek === 0 ? 0 : POINT_TARGET_HARIAN,
       })),
     });
@@ -97,6 +113,31 @@ describe("workScheduleSchema", () => {
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
       expect(parsed.error.issues[0]?.message).toContain("Jam masuk");
+    }
+  });
+
+  it("menolak break window yang tidak berpasangan", () => {
+    const parsed = workScheduleSchema.safeParse({
+      code: "REG-C",
+      name: "Reguler C",
+      isActive: true,
+      days: Array.from({ length: 7 }, (_, dayOfWeek) => ({
+        dayOfWeek,
+        dayStatus: dayOfWeek === 0 ? "OFF" : "KERJA",
+        isWorkingDay: dayOfWeek !== 0,
+        startTime: dayOfWeek === 0 ? "" : "08:00",
+        endTime: dayOfWeek === 0 ? "" : "17:00",
+        breakStart: dayOfWeek === 0 ? "" : "12:00",
+        breakEnd: dayOfWeek === 0 ? "" : "",
+        breakToleranceMinutes: dayOfWeek === 0 ? 0 : 5,
+        checkInToleranceMinutes: 0,
+        targetPoints: dayOfWeek === 0 ? 0 : POINT_TARGET_HARIAN,
+      })),
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain("istirahat");
     }
   });
 });

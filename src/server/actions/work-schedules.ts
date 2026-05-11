@@ -160,6 +160,10 @@ export async function createWorkSchedule(input: unknown) {
           isWorkingDay: day.isWorkingDay,
           startTime: day.startTime,
           endTime: day.endTime,
+          breakStart: day.breakStart ?? null,
+          breakEnd: day.breakEnd ?? null,
+          breakToleranceMinutes: day.breakToleranceMinutes,
+          checkInToleranceMinutes: day.checkInToleranceMinutes,
           targetPoints: day.targetPoints,
         }))
       );
@@ -213,6 +217,10 @@ export async function updateWorkSchedule(id: string, input: unknown) {
           isWorkingDay: day.isWorkingDay,
           startTime: day.startTime,
           endTime: day.endTime,
+          breakStart: day.breakStart ?? null,
+          breakEnd: day.breakEnd ?? null,
+          breakToleranceMinutes: day.breakToleranceMinutes,
+          checkInToleranceMinutes: day.checkInToleranceMinutes,
           targetPoints: day.targetPoints,
         }))
       );

@@ -43,6 +43,13 @@
       "when": 1777429076156,
       "tag": "0005_kabag_role_and_user_role_divisions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778493454303,
+      "tag": "0023_attendance_schedule_break_tolerance",
+      "breakpoints": true
     }
   ]
 }

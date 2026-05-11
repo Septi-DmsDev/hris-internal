@@ -188,6 +188,10 @@ function buildDefaultScheduleDays(scheduleId: string, startTime: string, endTime
       isWorkingDay,
       startTime: isWorkingDay ? startTime : null,
       endTime: isWorkingDay ? endTime : null,
+      breakStart: isWorkingDay ? "12:00" : null,
+      breakEnd: isWorkingDay ? "13:00" : null,
+      breakToleranceMinutes: isWorkingDay ? 5 : 0,
+      checkInToleranceMinutes: 0,
       targetPoints: isWorkingDay ? POINT_TARGET_HARIAN : 0,
     };
   });

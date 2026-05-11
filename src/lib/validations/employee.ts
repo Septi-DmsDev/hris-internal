@@ -86,6 +86,10 @@ export const workScheduleDaySchema = z
     isWorkingDay: z.boolean().default(true),
     startTime: optionalTime,
     endTime: optionalTime,
+    breakStart: optionalTime,
+    breakEnd: optionalTime,
+    breakToleranceMinutes: z.coerce.number().int().min(0).max(60).default(5),
+    checkInToleranceMinutes: z.coerce.number().int().min(0).max(60).default(0),
     targetPoints: z.coerce.number().int().min(0).default(POINT_TARGET_HARIAN),
   })
   .superRefine((value, ctx) => {
@@ -107,6 +111,14 @@ export const workScheduleDaySchema = z
         code: "custom",
         path: ["endTime"],
         message: "Jam pulang tidak boleh sama dengan jam masuk.",
+      });
+    }
+
+    if (Boolean(value.breakStart) !== Boolean(value.breakEnd)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["breakStart"],
+        message: "Jam istirahat masuk dan selesai harus diisi berpasangan.",
       });
     }
   });

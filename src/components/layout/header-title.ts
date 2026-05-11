@@ -1,6 +1,4 @@
 export function resolveHeaderMeta(pathname: string) {
-  if (pathname === "/me") return { title: "Saya", description: "Ringkasan akun pribadi" };
-  if (pathname === "/me/profile") return { title: "Profil Saya", description: "Detail data pribadi" };
   if (pathname.startsWith("/payroll/") && pathname.endsWith("/payslip.pdf")) {
     return { title: "Slip Gaji", description: "Dokumen pembayaran karyawan" };
   }
@@ -21,11 +19,13 @@ export function resolveHeaderMeta(pathname: string) {
   if (pathname.startsWith("/overtime")) return { title: "Overtime", description: "Pengajuan dan approval overtime" };
   if (pathname.startsWith("/absensi")) return { title: "Absensi", description: "Input dan rekap kehadiran" };
   if (pathname.startsWith("/reviews")) return { title: "Review", description: "Review dan incident kerja" };
+  if (pathname === "/master") return { title: "Master Data", description: "Cabang dan katalog poin" };
   if (pathname.startsWith("/master/branches")) return { title: "Master Cabang", description: "Daftar cabang perusahaan" };
   if (pathname.startsWith("/master/divisions")) return { title: "Master Divisi", description: "Daftar divisi aktif" };
   if (pathname.startsWith("/master/positions")) return { title: "Master Jabatan", description: "Daftar jabatan kerja" };
   if (pathname.startsWith("/master/grades")) return { title: "Master Grade", description: "Daftar grade karyawan" };
   if (pathname.startsWith("/master/work-schedules")) return { title: "Jadwal Kerja", description: "Pengaturan jadwal dan shift" };
+  if (pathname.startsWith("/master/catalogpoin")) return { title: "Katalog Poin", description: "Manajemen katalog poin performa" };
   if (pathname.startsWith("/master/")) return { title: "Master Data", description: "Pengaturan data referensi" };
   if (pathname.startsWith("/users")) return { title: "Manajemen Pengguna", description: "Role dan akses akun" };
   if (pathname.startsWith("/history")) return { title: "History Sistem", description: "Audit perubahan lintas modul" };

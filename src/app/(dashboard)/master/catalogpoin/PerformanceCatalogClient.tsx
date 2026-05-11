@@ -156,7 +156,9 @@ type ActivityDraft = {
   id?: string;
   employeeId: string;
   workDate: string;
-  totalPoints: string;
+  actualDivisionId: string;
+  pointCatalogEntryId: string;
+  quantity: string;
   notes: string | null;
 };
 
@@ -232,7 +234,9 @@ function createActivityDraft(): ActivityDraft {
   return {
     employeeId: "",
     workDate: new Date().toISOString().slice(0, 10),
-    totalPoints: "",
+    actualDivisionId: "",
+    pointCatalogEntryId: "",
+    quantity: "1",
     notes: "",
   };
 }
@@ -276,8 +280,10 @@ type PerformanceCatalogClientProps = {
   versions: PerformanceVersionRow[];
   divisionTargets: PerformanceDivisionTargetRow[];
   entries: PerformanceCatalogEntryRow[];
+  allCatalogEntries: PerformanceCatalogEntryRow[];
   employeeOptions: PerformanceEmployeeOption[];
   managerialEmployeeOptions: PerformanceManagerialEmployeeOption[];
+  divisionOptions: PerformanceDivisionOption[];
   activityEntries: PerformanceActivityRow[];
   monthlyPerformances: PerformanceMonthlyRow[];
 };
@@ -374,8 +380,10 @@ export default function PerformanceCatalogClient({
   versions,
   divisionTargets,
   entries,
+  allCatalogEntries,
   employeeOptions,
   managerialEmployeeOptions,
+  divisionOptions,
   activityEntries,
   monthlyPerformances,
 }: PerformanceCatalogClientProps) {
@@ -412,6 +420,30 @@ export default function PerformanceCatalogClient({
   // Xlsx import state
   const [xlsxOpen, setXlsxOpen] = useState(false);
   const [xlsxFile, setXlsxFile] = useState<File | null>(null);
+
+  const selectedCatalogEntry = useMemo(
+    () => allCatalogEntries.find((e) => e.id === activityDraft.pointCatalogEntryId) ?? null,
+    [activityDraft.pointCatalogEntryId, allCatalogEntries]
+  );
+
+  const liveTotal = useMemo(() => {
+    if (!selectedCatalogEntry) return null;
+    const pv = Number(selectedCatalogEntry.pointValue);
+    const qty = Number(activityDraft.quantity);
+    if (Number.isNaN(pv) || Number.isNaN(qty) || qty <= 0) return null;
+    return formatOneDecimal(pv * qty);
+  }, [selectedCatalogEntry, activityDraft.quantity]);
+
+  const filteredCatalogEntries = useMemo(() => {
+    if (!activityDraft.actualDivisionId) return allCatalogEntries;
+    const selectedDivision = divisionOptions.find(
+      (division) => division.id === activityDraft.actualDivisionId
+    );
+    if (!selectedDivision) return allCatalogEntries;
+    return allCatalogEntries.filter(
+      (entry) => entry.divisionName.toUpperCase() === selectedDivision.name.toUpperCase()
+    );
+  }, [activityDraft.actualDivisionId, allCatalogEntries, divisionOptions]);
 
   function resetMessages() {
     setFormError(null);
@@ -517,7 +549,9 @@ export default function PerformanceCatalogClient({
         id: activityDraft.id,
         employeeId: activityDraft.employeeId,
         workDate: activityDraft.workDate,
-        totalPoints: activityDraft.totalPoints,
+        actualDivisionId: activityDraft.actualDivisionId,
+        pointCatalogEntryId: activityDraft.pointCatalogEntryId,
+        quantity: activityDraft.quantity,
         notes: activityDraft.notes,
       });
       if (result && "error" in result) {
@@ -908,7 +942,9 @@ export default function PerformanceCatalogClient({
                         id: entry.id,
                         employeeId: entry.employeeId,
                         workDate: entry.workDate,
-                        totalPoints: entry.totalPoints,
+                        actualDivisionId: entry.actualDivisionId ?? "",
+                        pointCatalogEntryId: entry.pointCatalogEntryId,
+                        quantity: entry.quantity,
                         notes: entry.notes,
                       });
                       setActivityOpen(true);
@@ -1091,7 +1127,7 @@ export default function PerformanceCatalogClient({
             <div>
               <h2 className="text-base font-semibold text-slate-800">Aktivitas Harian</h2>
               <p className="text-sm text-slate-500">
-                Input total poin harian final per karyawan, subject to approval SPV/HRD.
+                Input pekerjaan harian berbasis katalog poin aktif, subject to approval SPV/HRD.
               </p>
             </div>
             <div className="flex gap-2">
@@ -1383,15 +1419,60 @@ export default function PerformanceCatalogClient({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Total Poin Harian</label>
+              <label className="text-sm font-medium text-slate-700">Divisi Aktual Harian</label>
+              <select
+                value={activityDraft.actualDivisionId}
+                onChange={(event) => {
+                  updateActivityDraft("actualDivisionId", event.target.value);
+                  updateActivityDraft("pointCatalogEntryId", "");
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Pilih divisi aktual</option>
+                {divisionOptions.map((division) => (
+                  <option key={division.id} value={division.id}>
+                    {division.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Qty</label>
               <Input
                 type="number"
                 step="0.01"
                 min="0.01"
-                value={activityDraft.totalPoints}
-                onChange={(event) => updateActivityDraft("totalPoints", event.target.value)}
+                value={activityDraft.quantity}
+                onChange={(event) => updateActivityDraft("quantity", event.target.value)}
               />
             </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium text-slate-700">Pekerjaan Poin</label>
+              <select
+                value={activityDraft.pointCatalogEntryId}
+                onChange={(event) =>
+                  updateActivityDraft("pointCatalogEntryId", event.target.value)
+                }
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Pilih pekerjaan</option>
+                {filteredCatalogEntries.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.workName} · {entry.pointValue} poin/{entry.unitDescription}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {liveTotal !== null ? (
+              <div className="md:col-span-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+                Total poin: <span className="font-semibold">{liveTotal}</span>
+                {selectedCatalogEntry ? (
+                  <span className="ml-2 text-emerald-600">
+                    ({selectedCatalogEntry.pointValue} × {activityDraft.quantity})
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium text-slate-700">Catatan</label>
               <textarea

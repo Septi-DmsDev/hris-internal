@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/tables/DataTable";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,7 +13,7 @@ import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXls
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
 import { Plus } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFileExport, faFileImport } from "@fortawesome/free-solid-svg-icons";
+import { faEye, faFileExport, faFileImport, faPenToSquare, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { normalizeEmployeeGroup, type EmployeeGroup } from "@/lib/employee-groups";
 
 type Option = { id: string; name: string };
@@ -79,6 +78,35 @@ type EmployeeDraft = {
   isActive: boolean;
 };
 
+const GENDER_OPTIONS = ["LAKI-LAKI", "PEREMPUAN"] as const;
+const RELIGION_OPTIONS = ["Islam", "Kristen", "Katolik", "Hindu", "Buddha", "Khonghucu"] as const;
+const MARITAL_STATUS_OPTIONS = ["MENIKAH", "BELUM MENIKAH"] as const;
+
+function normalizeGender(value: string | null | undefined) {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === "LAKI-LAKI" || normalized === "LAKI LAKI" || normalized === "LAKI") return "LAKI-LAKI";
+  if (normalized === "PEREMPUAN") return "PEREMPUAN";
+  return "";
+}
+
+function normalizeReligion(value: string | null | undefined) {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "islam") return "Islam";
+  if (normalized === "kristen") return "Kristen";
+  if (normalized === "katolik") return "Katolik";
+  if (normalized === "hindu") return "Hindu";
+  if (normalized === "buddha") return "Buddha";
+  if (normalized === "khonghucu") return "Khonghucu";
+  return "";
+}
+
+function normalizeMaritalStatus(value: string | null | undefined) {
+  const normalized = (value ?? "").trim().toUpperCase();
+  if (normalized === "MENIKAH") return "MENIKAH";
+  if (normalized === "BELUM MENIKAH" || normalized === "BELUMMENIKAH" || normalized === "SINGLE") return "BELUM MENIKAH";
+  return "";
+}
+
 type EmployeeDetailResult = Awaited<ReturnType<typeof getEmployeeById>>;
 
 function toLoginEmail(username: string, fallbackEmail: string) {
@@ -137,9 +165,9 @@ function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>, logi
     branchId: employee.branchId,
     birthPlace: employee.birthPlace ?? "",
     birthDate: employee.birthDate ? new Date(employee.birthDate).toISOString().slice(0, 10) : "",
-    gender: employee.gender ?? "",
-    religion: employee.religion ?? "",
-    maritalStatus: employee.maritalStatus ?? "",
+    gender: normalizeGender(employee.gender),
+    religion: normalizeReligion(employee.religion),
+    maritalStatus: normalizeMaritalStatus(employee.maritalStatus),
     address: employee.address ?? "",
     phoneNumber: employee.phoneNumber ?? "",
     startDate: new Date(employee.startDate).toISOString().slice(0, 10),
@@ -207,9 +235,24 @@ function EmployeePersonalForm({ draft, onChange, options }: { draft: EmployeeDra
       <Field label="Konfirmasi Password"><Input type="password" value={draft.confirmPassword} onChange={(e) => onChange("confirmPassword", e.target.value)} /></Field>
       <Field label="TEMPAT LAHIR"><Input value={draft.birthPlace} onChange={(e) => onChange("birthPlace", e.target.value)} /></Field>
       <Field label="TGL LAHIR"><Input type="date" value={draft.birthDate} onChange={(e) => onChange("birthDate", e.target.value)} /></Field>
-      <Field label="JENIS KELAMIN"><Input value={draft.gender} onChange={(e) => onChange("gender", e.target.value)} /></Field>
-      <Field label="AGAMA"><Input value={draft.religion} onChange={(e) => onChange("religion", e.target.value)} /></Field>
-      <Field label="STATUS"><Input value={draft.maritalStatus} onChange={(e) => onChange("maritalStatus", e.target.value)} /></Field>
+      <Field label="JENIS KELAMIN">
+        <select value={draft.gender} onChange={(e) => onChange("gender", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <option value="">Pilih jenis kelamin</option>
+          {GENDER_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </Field>
+      <Field label="AGAMA">
+        <select value={draft.religion} onChange={(e) => onChange("religion", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <option value="">Pilih agama</option>
+          {RELIGION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </Field>
+      <Field label="STATUS">
+        <select value={draft.maritalStatus} onChange={(e) => onChange("maritalStatus", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+          <option value="">Pilih status</option>
+          {MARITAL_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </Field>
       <Field label="NO TELP"><Input value={draft.phoneNumber} onChange={(e) => onChange("phoneNumber", e.target.value)} /></Field>
       <Field label="MASUK KERJA"><Input type="date" value={draft.startDate} onChange={(e) => onChange("startDate", e.target.value)} /></Field>
       <Field label="LOLOS TRAINING"><Input type="date" value={draft.trainingGraduationDate} onChange={(e) => onChange("trainingGraduationDate", e.target.value)} /></Field>
@@ -370,27 +413,40 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
     { header: "NO TELP", accessorKey: "phoneNumber" },
     { header: "MASUK KERJA", accessorKey: "startDate" },
     {
-      header: "STATUS",
-      accessorKey: "employmentStatus",
-      cell: ({ row }) => {
-        const status = row.original.employmentStatus;
-        const statusClass =
-          status === "REGULER"
-            ? "bg-blue-100 text-blue-700 hover:bg-blue-100"
-            : status === "TRAINING"
-              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
-              : row.original.isActive
-                ? ""
-                : "bg-slate-100 text-slate-600 hover:bg-slate-100";
-
-        return (
-          <Badge variant="secondary" className={statusClass}>
-            {status}
-          </Badge>
-        );
-      },
+      header: "Aksi",
+      id: "actions",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5">
+          <Button asChild variant="outline" size="icon" title="Detail" aria-label="Detail">
+            <Link href={`/employees/${row.original.id}`}>
+              <FontAwesomeIcon icon={faEye} className="h-4 w-4" />
+            </Link>
+          </Button>
+          {options.canManage ? (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                title="Edit"
+                aria-label="Edit"
+                onClick={() => void openEdit(row.original)}
+              >
+                <FontAwesomeIcon icon={faPenToSquare} className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="destructive"
+                size="icon"
+                title="Hapus"
+                aria-label="Hapus"
+                onClick={() => setDeletingRow(row.original)}
+              >
+                <FontAwesomeIcon icon={faTrash} className="h-4 w-4" />
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ),
     },
-    { header: "Aksi", id: "actions", cell: ({ row }) => <div className="flex gap-2"><Button asChild variant="outline" size="sm"><Link href={`/employees/${row.original.id}`}>Detail</Link></Button>{options.canManage ? <><Button variant="outline" size="sm" onClick={() => void openEdit(row.original)}>Edit</Button><Button variant="destructive" size="sm" onClick={() => setDeletingRow(row.original)}>Hapus</Button></> : null}</div> },
   ], [options.canManage]);
 
   return (

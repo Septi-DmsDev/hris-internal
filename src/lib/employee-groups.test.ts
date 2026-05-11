@@ -3,7 +3,9 @@ import {
   isKpiEmployeeGroup,
   isPointBasedEmployeeGroup,
   normalizeEmployeeGroup,
+  resolveEmployeeGroupFromTrainingDate,
   resolveEmployeeGroupLabel,
+  resolveEmployeeGroupSearchText,
 } from "./employee-groups";
 
 describe("employee group helper", () => {
@@ -29,5 +31,16 @@ describe("employee group helper", () => {
     expect(normalizeEmployeeGroup("MANAGERIAL")).toBe("KARYAWAN_TETAP");
     expect(normalizeEmployeeGroup("TEAMWORK")).toBe("MITRA_KERJA");
     expect(normalizeEmployeeGroup("BORONGAN")).toBe("BORONGAN");
+  });
+
+  it("builds searchable text for employee group labels", () => {
+    expect(resolveEmployeeGroupSearchText("MANAGERIAL")).toContain("Karyawan Tetap");
+    expect(resolveEmployeeGroupSearchText("MANAGERIAL")).toContain("MANAGERIAL");
+    expect(resolveEmployeeGroupSearchText("TRAINING")).toContain("Training");
+  });
+
+  it("maps missing training graduation date to Training", () => {
+    expect(resolveEmployeeGroupFromTrainingDate(undefined)).toBe("TRAINING");
+    expect(resolveEmployeeGroupFromTrainingDate(new Date("2026-04-01"))).toBe("MITRA_KERJA");
   });
 });

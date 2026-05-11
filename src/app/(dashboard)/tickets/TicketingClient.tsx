@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cancelTicket, createTicket } from "@/server/actions/tickets";
-import { submitAttendanceFallbackRequest } from "@/server/actions/attendance";
 import type { UserRole } from "@/types";
 
 type TicketRow = {
@@ -41,18 +40,6 @@ type Props = {
   role: UserRole;
   hasEmployeeLink: boolean;
   tickets: TicketRow[];
-  fallbackRequests: {
-    id: string;
-    attendanceDate: string;
-    photoUrl: string;
-    distanceMeters: number | null;
-    radiusMetersSnapshot: number | null;
-    geofenceMatched: boolean;
-    fingerprintFailureReason: string;
-    status: string;
-    reviewNotes: string;
-    createdAt: string;
-  }[];
 };
 
 type TicketDraft = {
@@ -134,7 +121,6 @@ export default function TicketingClient({
   role,
   hasEmployeeLink,
   tickets,
-  fallbackRequests,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -142,12 +128,6 @@ export default function TicketingClient({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [fallbackDate, setFallbackDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fallbackPhotoUrl, setFallbackPhotoUrl] = useState("");
-  const [fallbackReason, setFallbackReason] = useState("");
-  const [fallbackLatitude, setFallbackLatitude] = useState("");
-  const [fallbackLongitude, setFallbackLongitude] = useState("");
-  const [fallbackDevModeOff, setFallbackDevModeOff] = useState(false);
 
   const needsAttachment =
     draft.ticketType === "SAKIT" &&
@@ -332,75 +312,6 @@ export default function TicketingClient({
           Akun belum terhubung ke data karyawan, jadi belum bisa mengajukan tiket pribadi.
         </div>
       )}
-
-      <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-slate-900">Fallback Ceklok Sidik Jari</h3>
-        <p className="text-xs text-slate-500">
-          Jika gagal ceklok mesin, upload foto depan mesin + lokasi GPS. HRD akan review dari menu Absensi.
-        </p>
-        <div className="grid gap-3 md:grid-cols-3">
-          <Input type="date" value={fallbackDate} onChange={(e) => setFallbackDate(e.target.value)} />
-          <Input placeholder="Latitude" value={fallbackLatitude} onChange={(e) => setFallbackLatitude(e.target.value)} />
-          <Input placeholder="Longitude" value={fallbackLongitude} onChange={(e) => setFallbackLongitude(e.target.value)} />
-        </div>
-        <Input
-          type="url"
-          placeholder="URL foto bukti depan mesin ceklok"
-          value={fallbackPhotoUrl}
-          onChange={(e) => setFallbackPhotoUrl(e.target.value)}
-        />
-        <Input
-          placeholder="Alasan gagal sidik jari"
-          value={fallbackReason}
-          onChange={(e) => setFallbackReason(e.target.value)}
-        />
-        <label className="flex items-center gap-2 text-xs text-slate-600">
-          <input type="checkbox" checked={fallbackDevModeOff} onChange={(e) => setFallbackDevModeOff(e.target.checked)} />
-          Saya memastikan opsi pengembang/fake GPS dinonaktifkan di perangkat.
-        </label>
-        <div className="flex justify-end">
-          <Button
-            disabled={pending || !hasEmployeeLink}
-            onClick={async () => {
-              setPending(true);
-              setError(null);
-              try {
-                const result = await submitAttendanceFallbackRequest({
-                  attendanceDate: fallbackDate,
-                  photoUrl: fallbackPhotoUrl,
-                  latitude: Number(fallbackLatitude),
-                  longitude: Number(fallbackLongitude),
-                  fingerprintFailureReason: fallbackReason,
-                  developerModeDisabledConfirmed: fallbackDevModeOff,
-                });
-                if (result && "error" in result) {
-                  setError(result.error ?? "Gagal kirim fallback absensi.");
-                  return;
-                }
-                setSuccess("Fallback absensi berhasil diajukan.");
-                setFallbackPhotoUrl("");
-                setFallbackReason("");
-                router.refresh();
-              } finally {
-                setPending(false);
-              }
-            }}
-          >
-            Ajukan Fallback Absensi
-          </Button>
-        </div>
-        {fallbackRequests.length > 0 && (
-          <div className="space-y-2 pt-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Riwayat Fallback</p>
-            {fallbackRequests.slice(0, 5).map((row) => (
-              <div key={row.id} className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-                <p className="font-semibold text-slate-800">{row.attendanceDate} - {row.status}</p>
-                <p className="text-slate-600">{row.fingerprintFailureReason}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       <DataTable
         data={tickets}

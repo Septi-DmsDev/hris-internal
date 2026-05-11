@@ -47,7 +47,7 @@ Menjelaskan semua schema Drizzle yang benar-benar ada di repo:
 
 | Enum | Nilai | Dipakai oleh |
 |---|---|---|
-| `employee_group` | `MANAGERIAL`, `TEAMWORK` | position, employee, payroll snapshot |
+| `employee_group` | `MANAGERIAL`, `TEAMWORK`, `KARYAWAN_TETAP`, `MITRA_KERJA`, `BORONGAN`, `TRAINING` | position, employee, payroll snapshot |
 
 ### Tabel
 
@@ -91,6 +91,7 @@ Menjelaskan semua schema Drizzle yang benar-benar ada di repo:
 - `employees.supervisor_employee_id` → `employees.id`
 - semua history table → `employees.id`
 - `employee_schedule_assignments.schedule_id` → `work_schedules.id`
+- `employee_group` di UI dan search `/positioning` dinormalisasi ke label baru; karyawan point-based tanpa `training_graduation_date` disimpan sebagai `TRAINING`
 
 ## 6. Schema `point.ts`
 

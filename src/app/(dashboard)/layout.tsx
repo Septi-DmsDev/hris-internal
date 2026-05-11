@@ -76,9 +76,8 @@ export default async function DashboardLayout({
         })
       : false;
 
-    const isProfilePath = pathname.startsWith("/me/profile");
-    if (!complete && !isProfilePath) {
-      redirect("/me/profile?complete_profile=1");
+    if (!complete && pathname !== "/dashboard") {
+      redirect("/dashboard?complete_profile=1");
     }
   }
 

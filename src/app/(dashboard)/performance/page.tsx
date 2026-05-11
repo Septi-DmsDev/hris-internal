@@ -15,7 +15,6 @@ import PerformanceCatalogClient, {
   type PerformanceEmployeeOption,
   type PerformanceMonthlyRow,
   type PerformanceVersionRow,
-  type PerformanceDivisionOption,
 } from "./PerformanceCatalogClient";
 import SPVReviewClient from "./SPVReviewClient";
 import type { SpvActivityRow } from "./SPVReviewClient";
@@ -97,10 +96,6 @@ export default async function PerformancePage() {
     divisionName: string | null;
     employmentStatus: string;
   }>;
-  const divisionOptionRecords = workspace.divisionOptions as Array<{
-    id: string;
-    name: string;
-  }>;
   const managerialOptionRecords = workspace.managerialEmployeeOptions as Array<{
     id: string;
     employeeCode: string;
@@ -178,15 +173,6 @@ export default async function PerformancePage() {
     unitDescription: entry.unitDescription ?? "-",
   }));
 
-  const allCatalogEntries: PerformanceCatalogEntryRow[] = catalogEntryRecords.map((entry) => ({
-    id: entry.id,
-    divisionName: entry.divisionName,
-    externalCode: entry.externalCode ?? "-",
-    workName: entry.workName,
-    pointValue: String(entry.pointValue),
-    unitDescription: entry.unitDescription ?? "-",
-  }));
-
   const employeeOptions: PerformanceEmployeeOption[] = employeeOptionRecords.map((employee) => ({
     id: employee.id,
     employeeCode: employee.employeeCode,
@@ -194,11 +180,6 @@ export default async function PerformancePage() {
     divisionId: employee.divisionId,
     divisionName: employee.divisionName ?? "-",
     employmentStatus: employee.employmentStatus,
-  }));
-
-  const divisionOptions: PerformanceDivisionOption[] = divisionOptionRecords.map((division) => ({
-    id: division.id,
-    name: division.name,
   }));
 
   const managerialEmployeeOptions: PerformanceManagerialEmployeeOption[] = managerialOptionRecords.map((employee) => ({
@@ -263,10 +244,8 @@ export default async function PerformancePage() {
         versions={versionRows}
         divisionTargets={targetRows}
         entries={entryRows}
-        allCatalogEntries={allCatalogEntries}
         employeeOptions={employeeOptions}
         managerialEmployeeOptions={managerialEmployeeOptions}
-        divisionOptions={divisionOptions}
         activityEntries={activityRows}
         monthlyPerformances={monthlyRows}
       />

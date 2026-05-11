@@ -140,8 +140,7 @@ export async function updateMyAccountSettings(formData: FormData) {
   }
 
   revalidatePath("/settings");
-  revalidatePath("/me");
-  revalidatePath("/me/profile");
+  revalidatePath("/dashboard");
 
   if (email !== currentEmail) {
     return { success: "Profil tersimpan. Cek email untuk konfirmasi perubahan alamat email." };

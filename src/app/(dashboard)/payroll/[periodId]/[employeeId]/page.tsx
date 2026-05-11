@@ -51,8 +51,8 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
   }
 
   const { detail, performance, adjustments, tickets, incidents, viewerCanReadPayrollWorkspace } = detailResult;
-  const backHref = viewerCanReadPayrollWorkspace ? `/payroll?periodId=${detail.periodId}` : "/me";
-  const backLabel = viewerCanReadPayrollWorkspace ? "Kembali ke Payroll" : "Kembali ke Saya";
+  const backHref = viewerCanReadPayrollWorkspace ? `/payroll?periodId=${detail.periodId}` : "/dashboard";
+  const backLabel = viewerCanReadPayrollWorkspace ? "Kembali ke Payroll" : "Kembali ke Dashboard";
   const periodStartDate = detail.periodStartDate;
   const periodEndDate = detail.periodEndDate;
   if (!periodStartDate || !periodEndDate) {

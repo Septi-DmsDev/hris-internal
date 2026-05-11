@@ -14,10 +14,7 @@ export const dailyActivityEntrySchema = z.object({
   id: z.string().uuid().optional(),
   employeeId: z.string().uuid("Karyawan tidak valid."),
   workDate: z.coerce.date({ message: "Tanggal kerja wajib diisi." }),
-  actualDivisionId: z.string().uuid("Divisi aktual tidak valid."),
-  pointCatalogEntryId: z.string().uuid("Pekerjaan poin tidak valid."),
-  jobId: z.string().trim().optional().transform((value) => value || undefined),
-  quantity: z.coerce.number().positive("Qty harus lebih besar dari 0."),
+  totalPoints: z.coerce.number().positive("Total poin harus lebih besar dari 0."),
   notes: z.string().trim().optional().transform((value) => value || undefined),
 });
 

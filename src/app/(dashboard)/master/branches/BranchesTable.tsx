@@ -160,23 +160,22 @@ export default function BranchesTable({ data }: BranchesTableProps) {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          onClick={() => {
-            setFormError(null);
-            setCreateOpen(true);
-          }}
-        >
-          Tambah Cabang
-        </Button>
-      </div>
-
       <DataTable
         data={data}
         columns={columns}
         searchKey="name"
         searchPlaceholder="Cari cabang..."
+        toolbarSlot={
+          <Button
+            type="button"
+            onClick={() => {
+              setFormError(null);
+              setCreateOpen(true);
+            }}
+          >
+            Tambah Cabang
+          </Button>
+        }
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

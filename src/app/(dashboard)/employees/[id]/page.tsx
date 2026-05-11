@@ -247,16 +247,6 @@ export default async function EmployeeDetailPage({
         />
       </div>
 
-      <HistoryTable
-        title="Histori Status"
-        headers={["Tanggal Efektif", "Status Kerja", "Status Payroll", "Catatan"]}
-        rows={histories.statuses.map((row) => [
-          formatDate(row.effectiveDate),
-          `${row.previousEmploymentStatus ?? "-"} → ${row.newEmploymentStatus}`,
-          `${row.previousPayrollStatus ?? "-"} → ${row.newPayrollStatus}`,
-          row.notes ?? "-",
-        ])}
-      />
 
       <HistoryTable
         title="Histori Pengajuan Resign"
@@ -272,3 +262,4 @@ export default async function EmployeeDetailPage({
     </div>
   );
 }
+

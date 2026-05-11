@@ -59,9 +59,9 @@ export function buildPersonalQuickActions(role: UserRole): PersonalQuickAction[]
       description: "Ajukan dan lihat riwayat tiket pribadi.",
     },
     {
-      href: "/me/profile",
-      label: "Profil Saya",
-      description: "Lihat detail profil dan data kepegawaian pribadi.",
+      href: "/settings",
+      label: "Pengaturan",
+      description: "Kelola akun dan informasi profil dasar Anda.",
     },
   ];
 
@@ -116,9 +116,9 @@ export function buildPersonalQuickActions(role: UserRole): PersonalQuickAction[]
         description: "Kelola tiket pribadi dan pantau pengajuan.",
       },
       {
-        href: "/me/profile",
-        label: "Profil Saya",
-        description: "Lihat detail profil dan data kepegawaian pribadi.",
+        href: "/settings",
+        label: "Pengaturan",
+        description: "Kelola akun dan informasi profil dasar Anda.",
       },
     ];
   }

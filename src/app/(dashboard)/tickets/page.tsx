@@ -1,7 +1,6 @@
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
 import { getTickets } from "@/server/actions/tickets";
-import { getMyAttendanceFallbackRequests } from "@/server/actions/attendance";
 import TicketingClient from "./TicketingClient";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import type { UserRole } from "@/types";
@@ -17,10 +16,7 @@ export default async function TicketingPage() {
     redirect("/finance");
   }
 
-  const [ticketResult, fallbackRequests] = await Promise.all([
-    getTickets(),
-    getMyAttendanceFallbackRequests(),
-  ]);
+  const ticketResult = await getTickets();
   const { tickets } = ticketResult;
 
   const ticketRows = tickets.map((t) => ({
@@ -43,18 +39,6 @@ export default async function TicketingPage() {
         role={role}
         hasEmployeeLink={Boolean(roleRow.employeeId)}
         tickets={ticketRows}
-        fallbackRequests={fallbackRequests.map((r) => ({
-          id: r.id,
-          attendanceDate: r.attendanceDate instanceof Date ? format(r.attendanceDate, "yyyy-MM-dd") : String(r.attendanceDate),
-          photoUrl: r.photoUrl,
-          distanceMeters: r.distanceMeters,
-          radiusMetersSnapshot: r.radiusMetersSnapshot,
-          geofenceMatched: r.geofenceMatched,
-          fingerprintFailureReason: r.fingerprintFailureReason,
-          status: r.status,
-          reviewNotes: r.reviewNotes ?? "",
-          createdAt: r.createdAt instanceof Date ? format(r.createdAt, "yyyy-MM-dd HH:mm") : String(r.createdAt),
-        }))}
       />
     </div>
   );

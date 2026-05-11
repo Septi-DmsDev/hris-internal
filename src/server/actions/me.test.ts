@@ -36,7 +36,7 @@ describe("buildPersonalQuickActions", () => {
 
     expect(actions[0]?.href).toBe("/performance");
     expect(actions.some((item) => item.href === "/tickets")).toBe(true);
-    expect(actions.some((item) => item.href === "/me/profile")).toBe(true);
+    expect(actions.some((item) => item.href === "/settings")).toBe(true);
   });
 
   it("includes payroll and finance for finance role", () => {

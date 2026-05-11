@@ -7,10 +7,12 @@ import { DataTable } from "@/components/tables/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   NEW_EMPLOYEE_GROUPS,
   normalizeEmployeeGroup,
   resolveEmployeeGroupLabel,
+  resolveEmployeeGroupSearchText,
   type EmployeeGroup,
 } from "@/lib/employee-groups";
 import { bulkUpdateEmployeeOrganization } from "@/server/actions/employees";
@@ -57,6 +59,14 @@ function createDefaultDraft(): BulkDraft {
     effectiveDate: new Date().toISOString().slice(0, 10),
     notes: "",
   };
+}
+
+function employeeGroupBadgeClass(group: EmployeeGroup) {
+  const normalized = normalizeEmployeeGroup(group);
+  if (normalized === "KARYAWAN_TETAP") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (normalized === "MITRA_KERJA") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (normalized === "BORONGAN") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-violet-200 bg-violet-50 text-violet-700";
 }
 
 export default function DivisionManagementTable({ data, options }: { data: DivisionEmployeeRow[]; options: DivisionManagementOptions }) {
@@ -138,9 +148,10 @@ export default function DivisionManagementTable({ data, options }: { data: Divis
     { header: "Grade", accessorKey: "gradeName" },
     {
       header: "Kelompok",
-      accessorKey: "employeeGroup",
+      id: "employeeGroup",
+      accessorFn: (row) => resolveEmployeeGroupSearchText(row.employeeGroup),
       cell: ({ row }) => (
-        <Badge variant={normalizeEmployeeGroup(row.original.employeeGroup) === "KARYAWAN_TETAP" ? "outline" : "secondary"}>
+        <Badge variant="outline" className={cn(employeeGroupBadgeClass(row.original.employeeGroup))}>
           {resolveEmployeeGroupLabel(row.original.employeeGroup)}
         </Badge>
       ),

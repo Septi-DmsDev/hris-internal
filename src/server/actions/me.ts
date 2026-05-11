@@ -3,13 +3,13 @@
 import { db } from "@/lib/db";
 import type { EmployeeGroup } from "@/lib/employee-groups";
 import { getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   employeeDivisionHistories,
   employeeGradeHistories,
   employees,
   employeePositionHistories,
   employeeScheduleAssignments,
-  employeeStatusHistories,
   employeeSupervisorHistories,
   workSchedules,
 } from "@/lib/db/schema/employee";
@@ -116,15 +116,6 @@ type MyHistoryRow = {
   notes: string | null;
 };
 
-type MyStatusHistoryRow = {
-  effectiveDate: Date;
-  previousEmploymentStatus: string | null;
-  newEmploymentStatus: string;
-  previousPayrollStatus: string | null;
-  newPayrollStatus: string;
-  notes: string | null;
-};
-
 export type MyDashboardResult = {
   redirectTo: string | null;
   role: UserRole;
@@ -152,7 +143,6 @@ export type MyProfileResult = {
     positions: MyHistoryRow[];
     grades: MyHistoryRow[];
     supervisors: MyHistoryRow[];
-    statuses: MyStatusHistoryRow[];
   };
   emptyReason: string | null;
   profileCompletionRequired: boolean;
@@ -544,7 +534,7 @@ async function getPersonalHistories(employeeId: string): Promise<MyProfileResult
   const previousSupervisor = aliasedTable(employees, "previous_supervisor");
   const nextSupervisor = aliasedTable(employees, "new_supervisor");
 
-  const [divisionRows, positionRows, gradeRows, supervisorRows, statusRows] =
+  const [divisionRows, positionRows, gradeRows, supervisorRows] =
     await Promise.all([
       db
         .select({
@@ -598,19 +588,6 @@ async function getPersonalHistories(employeeId: string): Promise<MyProfileResult
         .where(eq(employeeSupervisorHistories.employeeId, employeeId))
         .orderBy(desc(employeeSupervisorHistories.effectiveDate))
         .limit(5),
-      db
-        .select({
-          effectiveDate: employeeStatusHistories.effectiveDate,
-          previousEmploymentStatus: employeeStatusHistories.previousEmploymentStatus,
-          newEmploymentStatus: employeeStatusHistories.newEmploymentStatus,
-          previousPayrollStatus: employeeStatusHistories.previousPayrollStatus,
-          newPayrollStatus: employeeStatusHistories.newPayrollStatus,
-          notes: employeeStatusHistories.notes,
-        })
-        .from(employeeStatusHistories)
-        .where(eq(employeeStatusHistories.employeeId, employeeId))
-        .orderBy(desc(employeeStatusHistories.effectiveDate))
-        .limit(5),
     ]);
 
   return {
@@ -618,7 +595,6 @@ async function getPersonalHistories(employeeId: string): Promise<MyProfileResult
     positions: positionRows,
     grades: gradeRows,
     supervisors: supervisorRows,
-    statuses: statusRows,
   };
 }
 
@@ -738,7 +714,6 @@ export async function getMyProfile(): Promise<MyProfileResult> {
         positions: [],
         grades: [],
         supervisors: [],
-        statuses: [],
       },
       emptyReason: null,
       profileCompletionRequired: false,
@@ -757,7 +732,6 @@ export async function getMyProfile(): Promise<MyProfileResult> {
         positions: [],
         grades: [],
         supervisors: [],
-        statuses: [],
       },
       emptyReason: "Akun Anda belum terhubung ke data karyawan. Hubungi HRD.",
       profileCompletionRequired: false,
@@ -777,7 +751,6 @@ export async function getMyProfile(): Promise<MyProfileResult> {
         positions: [],
         grades: [],
         supervisors: [],
-        statuses: [],
       },
       emptyReason: "Data karyawan pribadi tidak ditemukan atau belum aktif.",
       profileCompletionRequired: false,
@@ -817,13 +790,51 @@ const updateMyProfileSchema = z.object({
   nickname: z.string().trim().min(1, "Nama panggilan wajib diisi.").max(100, "Nama panggilan maksimal 100 karakter."),
   birthPlace: z.string().trim().min(1, "Tempat lahir wajib diisi.").max(100, "Tempat lahir maksimal 100 karakter."),
   birthDate: z.coerce.date({ message: "Tanggal lahir wajib diisi." }),
-  gender: z.string().trim().min(1, "Jenis kelamin wajib diisi.").max(20, "Jenis kelamin maksimal 20 karakter."),
-  religion: z.string().trim().min(1, "Agama wajib diisi.").max(50, "Agama maksimal 50 karakter."),
-  maritalStatus: z.string().trim().min(1, "Status wajib diisi.").max(50, "Status maksimal 50 karakter."),
+  gender: z.enum(["LAKI-LAKI", "PEREMPUAN"], { message: "Jenis kelamin tidak valid." }),
+  religion: z.enum(["Islam", "Kristen", "Katolik", "Hindu", "Buddha", "Khonghucu"], {
+    message: "Agama tidak valid.",
+  }),
+  maritalStatus: z.enum(["MENIKAH", "BELUM MENIKAH"], { message: "Status tidak valid." }),
   phoneNumber: z.string().trim().min(1, "Nomor HP wajib diisi.").max(30, "Nomor HP maksimal 30 karakter."),
   address: z.string().trim().min(1, "Alamat wajib diisi."),
-  photoUrl: z.string().trim().url("URL foto profil tidak valid."),
+  existingPhotoUrl: z.string().trim().url("URL foto profil lama tidak valid.").optional().or(z.literal("")),
 });
+
+const PROFILE_PHOTO_BUCKET = "employee-profile-photos";
+const PROFILE_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+let profilePhotoBucketChecked = false;
+
+function resolveProfilePhotoExtension(fileName: string, mimeType: string) {
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") || mimeType === "image/jpeg") return "jpg";
+  if (lowerName.endsWith(".png") || mimeType === "image/png") return "png";
+  if (lowerName.endsWith(".webp") || mimeType === "image/webp") return "webp";
+  return null;
+}
+
+async function ensureProfilePhotoBucket() {
+  if (profilePhotoBucketChecked) return;
+
+  const admin = createAdminClient();
+  const bucketsResult = await admin.storage.listBuckets();
+  if (bucketsResult.error) {
+    throw new Error(`Gagal memeriksa bucket foto profil: ${bucketsResult.error.message}`);
+  }
+
+  const exists = bucketsResult.data.some((bucket) => bucket.name === PROFILE_PHOTO_BUCKET);
+  if (!exists) {
+    const createResult = await admin.storage.createBucket(PROFILE_PHOTO_BUCKET, {
+      public: true,
+      fileSizeLimit: `${PROFILE_PHOTO_MAX_BYTES}`,
+      allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+    });
+    if (createResult.error) {
+      throw new Error(`Gagal membuat bucket foto profil: ${createResult.error.message}`);
+    }
+  }
+
+  profilePhotoBucketChecked = true;
+}
 
 export async function updateMyPersonalProfile(formData: FormData) {
   await requireAuth();
@@ -843,7 +854,7 @@ export async function updateMyPersonalProfile(formData: FormData) {
     maritalStatus: formData.get("maritalStatus"),
     phoneNumber: formData.get("phoneNumber"),
     address: formData.get("address"),
-    photoUrl: formData.get("photoUrl"),
+    existingPhotoUrl: formData.get("existingPhotoUrl"),
   });
 
   if (!parsed.success) {
@@ -876,6 +887,48 @@ export async function updateMyPersonalProfile(formData: FormData) {
     return { error: "NIK sudah digunakan karyawan lain." };
   }
 
+  const uploadedPhoto = formData.get("photoFile");
+  let nextPhotoUrl = parsed.data.existingPhotoUrl || "";
+
+  if (uploadedPhoto instanceof File && uploadedPhoto.size > 0) {
+    if (!uploadedPhoto.type.startsWith("image/")) {
+      return { error: "File foto profil harus berupa gambar." };
+    }
+    if (uploadedPhoto.size > PROFILE_PHOTO_MAX_BYTES) {
+      return { error: "Ukuran foto profil maksimal 2MB." };
+    }
+
+    const fileExtension = resolveProfilePhotoExtension(uploadedPhoto.name, uploadedPhoto.type);
+    if (!fileExtension) {
+      return { error: "Format foto profil harus jpg, png, atau webp." };
+    }
+
+    try {
+      await ensureProfilePhotoBucket();
+      const admin = createAdminClient();
+      const photoPath = `${roleRow.employeeId}/${Date.now()}-${crypto.randomUUID()}.${fileExtension}`;
+      const fileBuffer = Buffer.from(await uploadedPhoto.arrayBuffer());
+
+      const uploadResult = await admin.storage.from(PROFILE_PHOTO_BUCKET).upload(photoPath, fileBuffer, {
+        contentType: uploadedPhoto.type,
+        upsert: true,
+      });
+
+      if (uploadResult.error) {
+        return { error: `Gagal upload foto profil: ${uploadResult.error.message}` };
+      }
+
+      const publicUrlResult = admin.storage.from(PROFILE_PHOTO_BUCKET).getPublicUrl(photoPath);
+      nextPhotoUrl = publicUrlResult.data.publicUrl;
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Gagal memproses upload foto profil." };
+    }
+  }
+
+  if (!nextPhotoUrl) {
+    return { error: "Foto profil wajib diunggah." };
+  }
+
   await db
     .update(employees)
     .set({
@@ -888,13 +941,12 @@ export async function updateMyPersonalProfile(formData: FormData) {
       maritalStatus: parsed.data.maritalStatus,
       phoneNumber: parsed.data.phoneNumber,
       address: parsed.data.address,
-      photoUrl: parsed.data.photoUrl,
+      photoUrl: nextPhotoUrl,
       updatedAt: new Date(),
     })
     .where(eq(employees.id, roleRow.employeeId));
 
-  revalidatePath("/me");
-  revalidatePath("/me/profile");
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard");
   return { success: "Profil pribadi berhasil diperbarui." };
 }

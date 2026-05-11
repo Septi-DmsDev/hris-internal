@@ -28,6 +28,7 @@ import {
   KPI_EMPLOYEE_GROUPS,
   POINT_EMPLOYEE_GROUPS,
   isKpiEmployeeGroup,
+  type EmployeeGroup,
 } from "@/lib/employee-groups";
 import {
   batchSubmitDraftSchema,
@@ -75,6 +76,7 @@ const MUTABLE_ACTIVITY_STATUSES = ["DRAFT", "DITOLAK_SPV", "REVISI_TW"] as const
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 let hasJobIdSnapshotColumnPromise: Promise<boolean> | null = null;
 let hasMonthlyInputSourceColumnPromise: Promise<boolean> | null = null;
+let employeeGroupEnumValuesPromise: Promise<Set<EmployeeGroup>> | null = null;
 
 const dailyActivityEntriesLegacy = pgTable("daily_activity_entries", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -109,6 +111,30 @@ function toNumber(value: string | number | null | undefined) {
 
 function ensurePerformanceReadRole(role: UserRole) {
   return ["SUPER_ADMIN", "HRD", "KABAG", "SPV", "TEAMWORK", "MANAGERIAL"].includes(role);
+}
+
+async function getSupportedEmployeeGroupValues() {
+  if (!employeeGroupEnumValuesPromise) {
+    employeeGroupEnumValuesPromise = db
+      .execute(
+        sql<{ enumlabel: string }>`select enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'employee_group'`
+      )
+      .then((rows) => new Set(rows.map((row) => row.enumlabel as EmployeeGroup)))
+      .catch(() => new Set<EmployeeGroup>());
+  }
+
+  return employeeGroupEnumValuesPromise;
+}
+
+async function resolveQueryEmployeeGroups(preferred: readonly EmployeeGroup[], fallback: readonly EmployeeGroup[]) {
+  const supported = await getSupportedEmployeeGroupValues();
+  const preferredGroups = preferred.filter((group) => supported.has(group));
+  if (preferredGroups.length > 0) return preferredGroups;
+
+  const fallbackGroups = fallback.filter((group) => supported.has(group));
+  if (fallbackGroups.length > 0) return fallbackGroups;
+
+  return [...fallback];
 }
 
 async function hasJobIdSnapshotColumn() {
@@ -152,6 +178,8 @@ async function hasMonthlyInputSourceColumn() {
 }
 
 async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[]) {
+  const employeeGroups = await resolveQueryEmployeeGroups(POINT_EMPLOYEE_GROUPS, ["TEAMWORK"]);
+
   if (DIV_SCOPED_ROLES.includes(role) && divisionIds.length > 0) {
     return db
       .select({
@@ -168,7 +196,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[])
       .leftJoin(divisions, eq(employees.divisionId, divisions.id))
       .where(
         and(
-          inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS),
+          inArray(employees.employeeGroup, employeeGroups),
           eq(employees.isActive, true),
           inArray(employees.divisionId, divisionIds)
         )
@@ -189,7 +217,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[])
     })
     .from(employees)
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(and(inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS), eq(employees.isActive, true)))
+    .where(and(inArray(employees.employeeGroup, employeeGroups), eq(employees.isActive, true)))
     .orderBy(asc(employees.fullName));
 }
 
@@ -197,6 +225,8 @@ async function getManagerialEmployeeOptions(role: UserRole) {
   if (!PERFORMANCE_MANAGERIAL_INPUT_ROLES.includes(role)) {
     return [];
   }
+
+  const employeeGroups = await resolveQueryEmployeeGroups(KPI_EMPLOYEE_GROUPS, ["MANAGERIAL"]);
 
   return db
     .select({
@@ -210,7 +240,7 @@ async function getManagerialEmployeeOptions(role: UserRole) {
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
     .where(
       and(
-        inArray(employees.employeeGroup, KPI_EMPLOYEE_GROUPS),
+        inArray(employees.employeeGroup, employeeGroups),
         eq(employees.isActive, true)
       )
     )
@@ -520,50 +550,53 @@ export async function saveDailyActivityEntry(input: unknown) {
   }
   const hasSnapshotColumn = await hasJobIdSnapshotColumn();
 
-  const [catalogEntry, actualDivision] = await Promise.all([
-    db
-      .select()
-      .from(pointCatalogEntries)
-      .where(
-        and(
-          eq(pointCatalogEntries.id, parsed.data.pointCatalogEntryId),
-          eq(pointCatalogEntries.versionId, activeVersion.id),
-          eq(pointCatalogEntries.isActive, true)
-        )
+  const [employeeRow] = await db
+    .select({
+      divisionId: employees.divisionId,
+      divisionName: divisions.name,
+    })
+    .from(employees)
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+    .where(eq(employees.id, parsed.data.employeeId))
+    .limit(1);
+
+  if (!employeeRow?.divisionId || !employeeRow?.divisionName) {
+    return { error: "Divisi karyawan tidak ditemukan." };
+  }
+  const employeeDivisionName = employeeRow.divisionName;
+
+  const catalogEntries = await db
+    .select()
+    .from(pointCatalogEntries)
+    .where(
+      and(
+        eq(pointCatalogEntries.versionId, activeVersion.id),
+        eq(pointCatalogEntries.isActive, true)
       )
-      .limit(1),
-    db
-      .select({ id: divisions.id, name: divisions.name })
-      .from(divisions)
-      .where(eq(divisions.id, parsed.data.actualDivisionId))
-      .limit(1),
-  ]);
+    )
+    .orderBy(asc(pointCatalogEntries.createdAt));
 
-  const entry = catalogEntry[0];
-  const division = actualDivision[0];
-  if (!entry || !division) {
-    return { error: "Pekerjaan poin atau divisi aktual tidak ditemukan." };
-  }
-  if (entry.divisionName.toUpperCase() !== division.name.toUpperCase()) {
-    return { error: "Pekerjaan poin harus sesuai dengan divisi aktual harian." };
+  const entry = catalogEntries.find(
+    (item) => item.divisionName.toUpperCase() === employeeDivisionName.toUpperCase()
+  );
+  if (!entry) {
+    return { error: `Belum ada katalog poin aktif untuk divisi ${employeeDivisionName}.` };
   }
 
-  const pointValue = toNumber(entry.pointValue);
-  const totalPoints = Number((pointValue * parsed.data.quantity).toFixed(2));
-  const snapshotValue = parsed.data.jobId ?? entry.externalCode ?? null;
+  const totalPoints = Number(parsed.data.totalPoints.toFixed(2));
   const values = {
     employeeId: parsed.data.employeeId,
     workDate: parsed.data.workDate,
-    actualDivisionId: parsed.data.actualDivisionId,
+    actualDivisionId: employeeRow.divisionId,
     pointCatalogEntryId: entry.id,
     pointCatalogVersionId: activeVersion.id,
     pointCatalogDivisionName: entry.divisionName,
-    workNameSnapshot: entry.workName,
-    unitDescriptionSnapshot: entry.unitDescription,
-    pointValueSnapshot: pointValue.toFixed(2),
-    quantity: parsed.data.quantity.toFixed(2),
+    workNameSnapshot: "INPUT TOTAL HARIAN",
+    unitDescriptionSnapshot: "poin",
+    pointValueSnapshot: totalPoints.toFixed(2),
+    quantity: "1.00",
     totalPoints: totalPoints.toFixed(2),
-    notes: hasSnapshotColumn ? (parsed.data.notes ?? null) : encodeLegacyNotes(snapshotValue, parsed.data.notes),
+    notes: hasSnapshotColumn ? (parsed.data.notes ?? null) : encodeLegacyNotes(null, parsed.data.notes),
     updatedByUserId: user?.id ?? null,
   };
 
@@ -584,7 +617,7 @@ export async function saveDailyActivityEntry(input: unknown) {
         .update(dailyActivityEntries)
         .set({
           ...values,
-          ...(hasSnapshotColumn ? { jobIdSnapshot: snapshotValue } : {}),
+          ...(hasSnapshotColumn ? { jobIdSnapshot: null } : {}),
           status: existingEntry.status === "DRAFT" ? "DRAFT" : "REVISI_TW",
           updatedAt: new Date(),
         })
@@ -592,7 +625,7 @@ export async function saveDailyActivityEntry(input: unknown) {
     } else {
       await db.insert(dailyActivityEntries).values({
         ...values,
-        ...(hasSnapshotColumn ? { jobIdSnapshot: snapshotValue } : {}),
+        ...(hasSnapshotColumn ? { jobIdSnapshot: null } : {}),
         createdByUserId: user?.id ?? parsed.data.employeeId,
         status: "DRAFT",
       });

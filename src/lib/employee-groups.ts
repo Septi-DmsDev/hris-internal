@@ -34,6 +34,16 @@ export function normalizeEmployeeGroup(group: EmployeeGroup) {
   return group;
 }
 
+export function resolveEmployeeGroupFromTrainingDate(trainingGraduationDate: Date | string | null | undefined): EmployeeGroup {
+  return trainingGraduationDate ? "MITRA_KERJA" : "TRAINING";
+}
+
+export function resolveEmployeeGroupSearchText(group: EmployeeGroup) {
+  const label = resolveEmployeeGroupLabel(group);
+  const normalized = normalizeEmployeeGroup(group);
+  return `${label} ${group} ${normalized}`;
+}
+
 export function isKpiEmployeeGroup(group: EmployeeGroup) {
   return group === "MANAGERIAL" || group === "KARYAWAN_TETAP";
 }

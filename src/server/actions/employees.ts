@@ -26,6 +26,7 @@ import { payrollEmployeeSnapshots, payrollResults } from "@/lib/db/schema/payrol
 import {
   isKpiEmployeeGroup,
   isPointBasedEmployeeGroup,
+  resolveEmployeeGroupFromTrainingDate,
   type EmployeeGroup,
 } from "@/lib/employee-groups";
 import {
@@ -114,6 +115,7 @@ type EmployeeListRow = {
   payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
   supervisorEmployeeId: string | null;
   supervisorName: string | null;
+  trainingGraduationDate: Date | null;
   isActive: boolean;
 };
 
@@ -179,6 +181,14 @@ type EmployeePersistInput = Omit<EmployeeInput, "supervisorEmployeeId"> & {
   supervisorEmployeeId?: string | null;
 };
 
+function resolvePersistedEmployeeGroup(input: EmployeePersistInput): EmployeeGroup {
+  if (!isPointBasedEmployeeGroup(input.employeeGroup)) {
+    return input.employeeGroup;
+  }
+
+  return resolveEmployeeGroupFromTrainingDate(input.trainingGraduationDate);
+}
+
 function toEmployeeRecord(input: EmployeePersistInput) {
   return {
     employeeCode: input.employeeCode,
@@ -199,7 +209,7 @@ function toEmployeeRecord(input: EmployeePersistInput) {
     positionId: input.positionId,
     jobdesk: input.jobdesk,
     gradeId: input.gradeId,
-    employeeGroup: input.employeeGroup,
+    employeeGroup: resolvePersistedEmployeeGroup(input),
     employmentStatus: input.employmentStatus,
     payrollStatus: input.payrollStatus,
     supervisorEmployeeId: input.supervisorEmployeeId ?? undefined,
@@ -382,6 +392,7 @@ export async function getEmployees() {
       payrollStatus: employees.payrollStatus,
       supervisorEmployeeId: employees.supervisorEmployeeId,
       supervisorName: supervisor.fullName,
+      trainingGraduationDate: employees.trainingGraduationDate,
       isActive: employees.isActive,
     })
     .from(employees)
@@ -393,12 +404,24 @@ export async function getEmployees() {
 
   if (DIV_SCOPED_ROLES.includes(role)) {
     if (roleRow.divisionIds.length === 0) return [];
-    return (await baseQuery
+    const rows = (await baseQuery
       .where(inArray(employees.divisionId, roleRow.divisionIds))
       .orderBy(asc(employees.startDate), asc(employees.fullName))) as EmployeeListRow[];
+    return rows.map((row) => ({
+      ...row,
+      employeeGroup: isPointBasedEmployeeGroup(row.employeeGroup)
+        ? resolveEmployeeGroupFromTrainingDate(row.trainingGraduationDate)
+        : row.employeeGroup,
+    }));
   }
 
-  return (await baseQuery.orderBy(asc(employees.startDate), asc(employees.fullName))) as EmployeeListRow[];
+  const rows = (await baseQuery.orderBy(asc(employees.startDate), asc(employees.fullName))) as EmployeeListRow[];
+  return rows.map((row) => ({
+    ...row,
+    employeeGroup: isPointBasedEmployeeGroup(row.employeeGroup)
+      ? resolveEmployeeGroupFromTrainingDate(row.trainingGraduationDate)
+      : row.employeeGroup,
+  }));
 }
 
 export async function getEmployeeFormOptions() {
@@ -946,6 +969,8 @@ export async function importEmployeesFromXlsx(formData: FormData) {
       isActive: true,
       notes: undefined,
     };
+    const persistedEmployeeGroup = resolvePersistedEmployeeGroup(employeeInput);
+    const loginRole: UserRole = isKpiEmployeeGroup(persistedEmployeeGroup) ? "MANAGERIAL" : "TEAMWORK";
 
     // Check for upsert match by fullName + birthDate
     const birthDateForMatch = tglLahirIdx >= 0 ? parseImportDate(row[tglLahirIdx]) : undefined;
@@ -1020,7 +1045,7 @@ export async function importEmployeesFromXlsx(formData: FormData) {
         employeeId,
         email: loginEmail,
         password: password || undefined,
-        role: importEmployeeGroup,
+        role: loginRole,
       });
       if (loginResult && "error" in loginResult) {
         outcomes.push({
@@ -1222,6 +1247,7 @@ export async function bulkUpdateEmployeeOrganization(input: unknown) {
           positionId: employees.positionId,
           gradeId: employees.gradeId,
           employeeGroup: employees.employeeGroup,
+          trainingGraduationDate: employees.trainingGraduationDate,
         })
         .from(employees)
         .where(eq(employees.id, employeeId))
@@ -1234,6 +1260,9 @@ export async function bulkUpdateEmployeeOrganization(input: unknown) {
       const nextPositionId = payload.positionId ?? existingEmployee.positionId;
       const nextGradeId = payload.gradeId ?? existingEmployee.gradeId;
       const nextEmployeeGroup = payload.employeeGroup ?? existingEmployee.employeeGroup;
+      const persistedEmployeeGroup = isPointBasedEmployeeGroup(nextEmployeeGroup)
+        ? resolveEmployeeGroupFromTrainingDate(existingEmployee.trainingGraduationDate)
+        : nextEmployeeGroup;
 
       await tx
         .update(employees)
@@ -1242,7 +1271,7 @@ export async function bulkUpdateEmployeeOrganization(input: unknown) {
           divisionId: nextDivisionId,
           positionId: nextPositionId,
           gradeId: nextGradeId,
-          employeeGroup: nextEmployeeGroup,
+          employeeGroup: persistedEmployeeGroup,
           updatedAt: new Date(),
         })
         .where(eq(employees.id, employeeId));
@@ -1574,7 +1603,7 @@ export async function regenerateEmployeeUidsAndResetLogins() {
   revalidatePath("/employees");
   revalidatePath("/users");
   revalidatePath("/settings");
-  revalidatePath("/me");
+  revalidatePath("/dashboard");
 
   return {
     success: true,

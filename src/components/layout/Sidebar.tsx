@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  User,
   BarChart3,
   ListChecks,
   Ticket,
@@ -37,13 +36,6 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  {
-    label: "Saya",
-    href: "/me",
-    icon: User,
-    roles: ["KABAG", "PAYROLL_VIEWER"],
-    group: "main",
-  },
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -158,7 +150,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Master Data",
-    href: "/master/branches",
+    href: "/master",
     icon: Database,
     roles: ["SUPER_ADMIN", "HRD"],
     group: "admin",

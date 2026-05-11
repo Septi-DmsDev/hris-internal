@@ -1,5 +1,4 @@
 import { format } from "date-fns";
-import { getPointCatalogOverview } from "@/server/actions/point-catalog";
 import {
   getPerformanceWorkspace,
   getSpvPendingActivities,
@@ -9,12 +8,9 @@ import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import TwPerformanceClient from "./TwPerformanceClient";
 import PerformanceCatalogClient, {
   type PerformanceActivityRow,
-  type PerformanceCatalogEntryRow,
-  type PerformanceDivisionTargetRow,
   type PerformanceManagerialEmployeeOption,
   type PerformanceEmployeeOption,
   type PerformanceMonthlyRow,
-  type PerformanceVersionRow,
 } from "./PerformanceCatalogClient";
 import SPVReviewClient from "./SPVReviewClient";
 import type { SpvActivityRow } from "./SPVReviewClient";
@@ -76,18 +72,7 @@ export default async function PerformancePage() {
       </div>
     );
   }
-  const [overview, workspace] = await Promise.all([
-    getPointCatalogOverview(),
-    getPerformanceWorkspace(),
-  ]);
-  const catalogEntryRecords = workspace.catalogEntries as Array<{
-    id: string;
-    divisionName: string;
-    externalCode: string | null;
-    workName: string;
-    pointValue: string | number;
-    unitDescription: string | null;
-  }>;
+  const workspace = await getPerformanceWorkspace();
   const employeeOptionRecords = workspace.employeeOptions as Array<{
     id: string;
     employeeCode: string;
@@ -145,33 +130,6 @@ export default async function PerformancePage() {
     status: PerformanceMonthlyRow["status"];
     calculatedAt: Date;
   }>;
-
-  const versionRows: PerformanceVersionRow[] = overview.versions.map((version) => ({
-    id: version.id,
-    code: version.code,
-    status: version.status,
-    sourceFileName: version.sourceFileName ?? "-",
-    effectiveStartDate: format(version.effectiveStartDate, "yyyy-MM-dd"),
-    effectiveEndDate: version.effectiveEndDate
-      ? format(version.effectiveEndDate, "yyyy-MM-dd")
-      : "-",
-    importedAt: format(version.importedAt, "yyyy-MM-dd HH:mm"),
-  }));
-
-  const targetRows: PerformanceDivisionTargetRow[] = overview.resolvedTargets.map((rule) => ({
-    divisionName: rule.divisionName,
-    targetPoints: rule.targetPoints,
-    source: rule.source,
-  }));
-
-  const entryRows: PerformanceCatalogEntryRow[] = overview.latestEntries.map((entry) => ({
-    id: entry.id,
-    divisionName: entry.divisionName,
-    externalCode: entry.externalCode ?? "-",
-    workName: entry.workName,
-    pointValue: entry.pointValue,
-    unitDescription: entry.unitDescription ?? "-",
-  }));
 
   const employeeOptions: PerformanceEmployeeOption[] = employeeOptionRecords.map((employee) => ({
     id: employee.id,
@@ -238,12 +196,8 @@ export default async function PerformancePage() {
     <div className="space-y-4">
       <PerformanceCatalogClient
         role={workspace.role}
-        canManageCatalog={overview.canManageCatalog}
         canManageActivities={workspace.canManageActivities}
         canGenerateMonthly={workspace.canGenerateMonthly}
-        versions={versionRows}
-        divisionTargets={targetRows}
-        entries={entryRows}
         employeeOptions={employeeOptions}
         managerialEmployeeOptions={managerialEmployeeOptions}
         activityEntries={activityRows}

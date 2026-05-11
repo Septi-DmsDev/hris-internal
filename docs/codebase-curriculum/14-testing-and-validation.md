@@ -37,7 +37,6 @@ Catatan:
 | `src/lib/permissions/index.test.ts` | permission matrix per role |
 | `src/lib/validations/employee.test.ts` | validasi employee dan work schedule |
 | `src/lib/validations/payroll.test.ts` | validasi salary config dan KPI managerial |
-| `src/server/actions/me.test.ts` | helper/state personal dashboard |
 | `src/server/actions/payroll.helpers.test.ts` | personal payroll detail access |
 | `src/server/point-engine/parse-master-point-workbook.test.ts` | parser workbook poin |
 | `src/server/point-engine/count-target-days-for-period.test.ts` | hitung target days |
@@ -81,7 +80,7 @@ Catatan:
 
 - permission matrix role;
 - access detail payroll pribadi;
-- personal dashboard access state;
+- employee-linked payroll detail access state;
 - reviewer employee id helper;
 - leave quota quarter eligibility;
 - attendance eligibility untuk bonus fulltime/disiplin;

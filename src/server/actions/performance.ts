@@ -584,6 +584,7 @@ export async function saveDailyActivityEntry(input: unknown) {
   }
 
   const totalPoints = Number(parsed.data.totalPoints.toFixed(2));
+  const manualJobIdSnapshot = entry.externalCode?.trim() || "MANUAL_TOTAL";
   const values = {
     employeeId: parsed.data.employeeId,
     workDate: parsed.data.workDate,
@@ -596,43 +597,78 @@ export async function saveDailyActivityEntry(input: unknown) {
     pointValueSnapshot: totalPoints.toFixed(2),
     quantity: "1.00",
     totalPoints: totalPoints.toFixed(2),
-    notes: hasSnapshotColumn ? (parsed.data.notes ?? null) : encodeLegacyNotes(null, parsed.data.notes),
+    notes: hasSnapshotColumn
+      ? (parsed.data.notes ?? null)
+      : encodeLegacyNotes(manualJobIdSnapshot, parsed.data.notes),
     updatedByUserId: user?.id ?? null,
   };
 
   try {
     if (parsed.data.id) {
-      const [existingEntry] = await db
-        .select()
-        .from(dailyActivityEntries)
-        .where(eq(dailyActivityEntries.id, parsed.data.id))
-        .limit(1);
+      const [existingEntry] = hasSnapshotColumn
+        ? await db
+            .select()
+            .from(dailyActivityEntries)
+            .where(eq(dailyActivityEntries.id, parsed.data.id))
+            .limit(1)
+        : await db
+            .select()
+            .from(dailyActivityEntriesLegacy)
+            .where(eq(dailyActivityEntriesLegacy.id, parsed.data.id))
+            .limit(1);
 
       if (!existingEntry) return { error: "Aktivitas tidak ditemukan." };
       if (!MUTABLE_ACTIVITY_STATUSES.includes(existingEntry.status as (typeof MUTABLE_ACTIVITY_STATUSES)[number])) {
         return { error: "Aktivitas yang sudah diajukan atau disetujui tidak bisa diedit." };
       }
 
-      await db
-        .update(dailyActivityEntries)
-        .set({
-          ...values,
-          ...(hasSnapshotColumn ? { jobIdSnapshot: null } : {}),
-          status: existingEntry.status === "DRAFT" ? "DRAFT" : "REVISI_TW",
-          updatedAt: new Date(),
-        })
-        .where(eq(dailyActivityEntries.id, parsed.data.id));
+      if (hasSnapshotColumn) {
+        await db
+          .update(dailyActivityEntries)
+          .set({
+            ...values,
+            jobIdSnapshot: manualJobIdSnapshot,
+            status: existingEntry.status === "DRAFT" ? "DRAFT" : "REVISI_TW",
+            updatedAt: new Date(),
+          })
+          .where(eq(dailyActivityEntries.id, parsed.data.id));
+      } else {
+        await db
+          .update(dailyActivityEntriesLegacy)
+          .set({
+            ...values,
+            status: existingEntry.status === "DRAFT" ? "DRAFT" : "REVISI_TW",
+            updatedAt: new Date(),
+          })
+          .where(eq(dailyActivityEntriesLegacy.id, parsed.data.id));
+      }
     } else {
-      await db.insert(dailyActivityEntries).values({
-        ...values,
-        ...(hasSnapshotColumn ? { jobIdSnapshot: null } : {}),
-        createdByUserId: user?.id ?? parsed.data.employeeId,
-        status: "DRAFT",
-      });
+      if (hasSnapshotColumn) {
+        await db.insert(dailyActivityEntries).values({
+          ...values,
+          jobIdSnapshot: manualJobIdSnapshot,
+          createdByUserId: user?.id ?? parsed.data.employeeId,
+          status: "DRAFT",
+        });
+      } else {
+        await db.insert(dailyActivityEntriesLegacy).values({
+          ...values,
+          createdByUserId: user?.id ?? parsed.data.employeeId,
+          status: "DRAFT",
+        });
+      }
     }
   } catch (error) {
-    const code = (error as { code?: string }).code;
+    const dbError = error as {
+      code?: string;
+      message?: string;
+      detail?: string;
+      cause?: { code?: string; message?: string; detail?: string };
+    };
+    const code = dbError.code ?? dbError.cause?.code;
     if (code === "23503") return { error: "Relasi aktivitas tidak valid." };
+    if (code === "23502") return { error: "Data aktivitas belum lengkap. Cek field wajib pada konfigurasi database." };
+    if (code === "22P02") return { error: "Format nilai aktivitas tidak valid." };
     throw error;
   }
 
@@ -1150,6 +1186,55 @@ export async function deleteMonthlyPerformance(input: unknown) {
   revalidatePath("/payroll");
   revalidatePath("/finance");
   return { success: true };
+}
+
+export async function deleteMonthlyPerformanceByPeriod(input: unknown) {
+  const authError = await checkRole(["SUPER_ADMIN", "HRD"]);
+  if (authError) return authError;
+
+  const parsed = z
+    .object({
+      periodStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal awal tidak valid."),
+      periodEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal akhir tidak valid."),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Input tidak valid." };
+
+  const periodStartDate = new Date(`${parsed.data.periodStartDate}T00:00:00`);
+  const periodEndDate = new Date(`${parsed.data.periodEndDate}T00:00:00`);
+
+  const rows = await db
+    .select({ id: monthlyPointPerformances.id, status: monthlyPointPerformances.status })
+    .from(monthlyPointPerformances)
+    .where(
+      and(
+        eq(monthlyPointPerformances.periodStartDate, periodStartDate),
+        eq(monthlyPointPerformances.periodEndDate, periodEndDate)
+      )
+    );
+
+  if (rows.length === 0) {
+    return { error: "Data performa bulanan untuk periode tersebut tidak ditemukan." };
+  }
+
+  const lockedCount = rows.filter((row) => row.status === "LOCKED").length;
+  if (lockedCount > 0) {
+    return { error: `Periode mengandung ${lockedCount} data LOCKED dan tidak bisa dihapus massal.` };
+  }
+
+  await db
+    .delete(monthlyPointPerformances)
+    .where(
+      and(
+        eq(monthlyPointPerformances.periodStartDate, periodStartDate),
+        eq(monthlyPointPerformances.periodEndDate, periodEndDate)
+      )
+    );
+
+  revalidatePath("/performance");
+  revalidatePath("/payroll");
+  revalidatePath("/finance");
+  return { success: true, deletedCount: rows.length };
 }
 
 export type TwActivityItem = {

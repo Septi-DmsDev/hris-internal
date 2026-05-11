@@ -69,7 +69,6 @@ src/
 | `src/app/(dashboard)/reviews/*` | review + incident |
 | `src/app/(dashboard)/payroll/*` | workspace payroll, detail, export, payslip |
 | `src/app/(dashboard)/finance/*` | finance dashboard |
-| `src/app/(dashboard)/me/*` | personal dashboard dan profile |
 | `src/app/(dashboard)/settings/*` | account settings user aktif |
 | `src/app/(dashboard)/schedule/*` | jadwal personal/tim |
 | `src/app/(dashboard)/scheduler/*` | scheduler operational view |
@@ -82,6 +81,7 @@ Route handler aktif:
 | `src/app/(dashboard)/payroll/[periodId]/export.xlsx/route.ts` | export payroll XLSX |
 | `src/app/(dashboard)/payroll/[periodId]/[employeeId]/payslip.pdf/route.ts` | payslip PDF |
 | `src/app/(dashboard)/employees/export.xlsx/route.ts` | export data karyawan XLSX |
+| `src/app/api/integrations/adms/attendance/route.ts` | ingest sinkronisasi absensi dari mesin ADMS/fingerprint |
 
 ## 5. Struktur `src/lib`
 
@@ -119,7 +119,6 @@ dashboard.ts
 divisions.ts
 employees.ts
 grades.ts
-me.ts / me.helpers.ts
 payroll.ts / payroll.helpers.ts
 performance.ts
 point-catalog.ts

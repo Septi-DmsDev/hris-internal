@@ -18,7 +18,6 @@ HRD Dashboard internal berbasis Next.js App Router untuk mengelola:
 - review dan incident
 - payroll preview/finalize/paid/locked
 - finance summary
-- personal self-service pages (`/me`, `/me/profile`)
 
 Arsitektur utama:
 - Next.js 16 App Router
@@ -54,8 +53,6 @@ Catatan phase 3 saat ini:
 ## Status Git Terbaru
 
 Recent commits terpenting di `main`:
-- `502ee30` `feat(self-service): enrich me dashboard and header`
-- `1951833` `feat(self-service): add personal dashboard and profile`
 - `d6c4a15` `fix(hr): add quarter leave quota and reviewer auto-fill`
 - `aaf6827` `feat(auth): finish KABAG role system foundation`
 
@@ -66,7 +63,7 @@ Status kerja saat handover ini ditulis:
 Update dokumentasi 2026-05-04:
 - `AGENTS.md`, `CLAUDE.md`, dan `agent-startup-prompt.md` sudah mengikuti alur code aktual.
 - `README.md` sudah diganti dari template Next.js menjadi README project.
-- `docs/onboarding-curriculum.md` dan `docs/codebase-curriculum/*` inti sudah diperbarui untuk self-service, users, settings, schedule/scheduler, KABAG/SPV division scope, master shift, payroll PDF/XLSX, dan test aktual.
+- `docs/onboarding-curriculum.md` dan `docs/codebase-curriculum/*` inti sudah diperbarui untuk users, settings, schedule/scheduler, KABAG/SPV division scope, master shift, payroll PDF/XLSX, dan test aktual.
 - `references/implementation-playbook.md` dan `references/tech-stack.md` diberi catatan penyelarasan code.
 
 ---
@@ -135,7 +132,7 @@ Layout utama saat ini:
 - sidebar grouped navigation
 - role badge di sidebar/header
 - dynamic header title per route
-- self-service route `Saya` untuk user employee-linked
+- route settings/schedule untuk user employee-linked
 
 ---
 
@@ -243,20 +240,6 @@ Server-side payroll entry points penting:
 - `markPayrollPaid()`
 - `lockPayrollPeriod()`
 
-### Self-Service Personal Pages
-Sudah ada:
-- `/me`
-- `/me/profile`
-
-Fungsi utama:
-- personal dashboard untuk semua role employee-linked
-- profile read-only pribadi
-- TEAMWORK melihat summary aktivitas pribadi 30 hari terakhir
-- personal link ke slip gaji/detail payroll sendiri
-- dynamic header title per route
-
----
-
 ## Route Status Saat Ini
 
 | Route | Status | Catatan |
@@ -280,8 +263,6 @@ Fungsi utama:
 | `/payroll/[periodId]/[employeeId]/payslip.pdf` | Active | Payslip PDF |
 | `/payroll/[periodId]/export.xlsx` | Active | Payroll export |
 | `/finance` | Active | Finance summary |
-| `/me` | Active | Personal dashboard |
-| `/me/profile` | Active | Personal profile |
 
 ---
 
@@ -342,11 +323,10 @@ Perubahan payroll/performance penting:
 - setelah `PAID`/`LOCKED`, koreksi via adjustment periode berikutnya
 - payslip/detail payroll pribadi hanya boleh diakses owner atau payroll roles
 
-### Self-Service
+### Employee-Linked Access
 - `SUPER_ADMIN` tanpa employee link diarahkan ke `/dashboard`
-- role employee-linked bisa membuka `/me` dan `/me/profile`
 - non-payroll roles tidak otomatis dapat akses workspace payroll umum
-- tetapi user bisa membaca detail payroll miliknya sendiri bila tersedia
+- user employee-linked tetap bisa membaca detail payroll miliknya sendiri bila tersedia
 
 ---
 
@@ -357,11 +337,7 @@ Perubahan payroll/performance penting:
 - `src/lib/db/schema/auth.ts`
 - `src/lib/permissions/index.ts`
 
-### Self-service
-- `src/server/actions/me.ts`
-- `src/server/actions/me.helpers.ts`
-- `src/app/(dashboard)/me/page.tsx`
-- `src/app/(dashboard)/me/profile/page.tsx`
+### Layout dan Header
 - `src/components/layout/Header.tsx`
 - `src/components/layout/HeaderTitle.tsx`
 - `src/components/layout/header-title.ts`
@@ -396,8 +372,6 @@ State terakhir yang sudah terbukti hijau di repo:
 - `pnpm build`
 
 Terakhir diverifikasi setelah batch:
-- personal dashboard/profile
-- TEAMWORK self-service enrichment
 - personal payroll detail access
 - dynamic header title
 
@@ -410,13 +384,11 @@ Jika sesi berikutnya mulai dari branch yang sama, baseline ini bisa dipakai seba
 Prioritas QA yang paling masuk akal dari state sekarang:
 1. role-based access QA
    - `KABAG`, `SPV`, `TEAMWORK`, `FINANCE`, `PAYROLL_VIEWER`, `SUPER_ADMIN`
-2. self-service QA
-   - `/me`, `/me/profile`, slip gaji personal
-3. payroll lifecycle QA
+2. payroll lifecycle QA
    - preview -> finalize -> paid -> lock
-4. point activity QA
+3. point activity QA
    - draft -> submit -> approve/reject -> override -> monthly generation
-5. ticket and leave quota QA
+4. ticket and leave quota QA
    - monthly/annual/quarter logic
 
 ---
@@ -425,7 +397,6 @@ Prioritas QA yang paling masuk akal dari state sekarang:
 
 Belum berarti bug, tapi area lanjutan yang masih mungkin dikerjakan setelah QA:
 - hardening enterprise untuk payroll dan finance reporting
-- route khusus self-service payslip bila ingin UX lebih eksplisit
 - audit/reporting tambahan
 - manual QA matrix per role
 - penerapan migration ke target DB bila ada perubahan schema yang belum diaplikasikan di environment tertentu
@@ -442,4 +413,3 @@ Jika melanjutkan dari nol di PC/sesi lain:
 5. jalankan `pnpm lint`
 6. jalankan `pnpm vitest run`
 7. jalankan `pnpm build`
-8. mulai QA dari route `/login` -> `/dashboard` -> `/me` -> modul-modul utama

@@ -1440,7 +1440,7 @@ export default function PerformanceCatalogClient({
               <label className="text-sm font-medium text-slate-700">Qty</label>
               <Input
                 type="number"
-                step="0.01"
+                step="0.1"
                 min="0.01"
                 value={activityDraft.quantity}
                 onChange={(event) => updateActivityDraft("quantity", event.target.value)}
@@ -1684,11 +1684,11 @@ export default function PerformanceCatalogClient({
                 <label className="text-sm font-medium text-slate-700">Poin</label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="0.1"
                   min="0.01"
                   value={entryDraft.pointValue}
                   onChange={(e) => setEntryDraft((d) => ({ ...d, pointValue: e.target.value }))}
-                  placeholder="0.00"
+                  placeholder="0.0"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1850,7 +1850,7 @@ export default function PerformanceCatalogClient({
                 type="number"
                 min="0"
                 max="200"
-                step="0.01"
+                step="0.1"
                 value={managerialMonthlyDraft.performancePercent}
                 onChange={(event) => updateManagerialMonthlyDraft("performancePercent", event.target.value)}
               />

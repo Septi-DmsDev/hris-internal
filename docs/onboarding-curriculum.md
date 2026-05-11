@@ -73,7 +73,6 @@ Rule penting:
 | `src/app/(dashboard)/reviews/*` | Review dan incident. |
 | `src/app/(dashboard)/payroll/*` | Payroll workspace, detail, PDF payslip, export XLSX. |
 | `src/app/(dashboard)/finance/*` | Finance summary dari payroll result. |
-| `src/app/(dashboard)/me/*` | Self-service dashboard dan profil pribadi. |
 | `src/app/(dashboard)/settings/*` | Settings akun login aktif. |
 | `src/app/(dashboard)/schedule/*` | Jadwal pribadi/tim. |
 | `src/app/(dashboard)/scheduler/*` | Scheduler operational view. |
@@ -118,7 +117,7 @@ Rule penting:
 
 Catatan:
 
-- `user_roles.employee_id` dipakai untuk self-service.
+- `user_roles.employee_id` dipakai untuk akses berbasis relasi employee-linked.
 - `user_role_divisions` dipakai untuk SPV/KABAG multi-division scope.
 - `user_roles.division_id` masih ada sebagai deprecated compatibility field.
 
@@ -136,7 +135,7 @@ Catatan:
 |---|---|
 | `src/config/constants.ts` | Target 13.000, OFFSET 39.000, gaji default, bonus level. |
 | `src/lib/db/schema/point.ts` | Katalog poin, aktivitas, approval log, monthly performance. |
-| `src/server/actions/performance.ts` | Workspace, save/submit/approve/reject, self-service TW, batch approval, monthly generate. |
+| `src/server/actions/performance.ts` | Workspace, save/submit/approve/reject, batch approval, monthly generate. |
 | `src/server/actions/point-catalog.ts` | Import/sync/update/delete katalog poin. |
 | `src/server/point-engine/*` | Rule perhitungan yang sudah punya test. |
 
@@ -166,7 +165,6 @@ Catatan:
 |---|---|
 | Constants/permissions | `src/config/constants.test.ts`, `src/lib/permissions/index.test.ts` |
 | Validations | `src/lib/validations/*.test.ts` |
-| Personal access | `src/server/actions/me.test.ts`, `src/server/actions/payroll.helpers.test.ts` |
 | Point engine | `src/server/point-engine/*.test.ts` |
 | Ticket/review helper | `src/server/ticketing-engine/*.test.ts`, `src/server/review-engine/*.test.ts` |
 | Attendance helper | `src/server/attendance-engine/*.test.ts` |
@@ -188,9 +186,6 @@ Contoh:
   `PerformanceCatalogClient.tsx -> generateMonthlyPerformance() -> countTargetDaysForPeriod() + calculateMonthlyPointPerformance() -> monthlyPointPerformances`
 - Payroll auto-preview:
   `/payroll/page.tsx -> generatePayrollPreview() -> resolveAttendancePayrollEligibility() -> calculateTeamworkPayroll()/calculateManagerialPayroll() -> payrollEmployeeSnapshots + payrollResults`
-- Self-service:
-  `/me -> getMyDashboard() -> user_roles.employee_id -> employee/payroll/performance/ticket/review summaries`
-
 ## 8. Known Risks
 
 - RLS policy tidak terlihat jelas di migration repo; proteksi yang terlihat saat ini ada di server action.

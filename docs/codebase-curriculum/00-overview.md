@@ -31,7 +31,7 @@ Fungsi bisnis yang sudah muncul di code:
 
 - login dan session Supabase;
 - user role management, employee login link, dan division scope;
-- personal dashboard, personal profile, account settings, dan schedule;
+- account settings dan schedule;
 - master data cabang/divisi/jabatan/grade/shift/jadwal kerja;
 - profiling karyawan dan histori perubahan;
 - mutasi massal penempatan (cabang/divisi/jabatan/grade/kelompok karyawan);
@@ -67,7 +67,6 @@ User Browser
 
 | Area | File | Peran |
 |---|---|---|
-| Auth gate request | `src/proxy.ts` | redirect user ke `/login`, `/dashboard`, atau `/me` sesuai session |
 | Auth helper server-side | `src/lib/auth/session.ts` | `getUser`, `requireAuth`, `checkRole`, `getCurrentUserRoleRow`, `getCurrentUserRole` |
 | Permission matrix | `src/lib/permissions/index.ts` | permission helper dan test matrix |
 | User management | `src/server/actions/users.ts` | invite/update/remove access dan employee login link |
@@ -96,7 +95,7 @@ Performance + Attendance + Ticketing + Review + KPI + Adjustment
   -> Payslip + Export + Finance Dashboard
 
 Employee Link
-  -> /me + /me/profile + /settings + /schedule + personal payroll detail
+  -> account settings + schedule + personal payroll detail
 ```
 
 ## 6. Status Implementasi Aktual
@@ -108,9 +107,8 @@ Employee Link
 | Master data | ada | branch, division, position, grade, work schedule, shift master |
 | Employee profiling | ada | create, update, delete, histori, detail page |
 | Employee placement | ada | `/positioning` untuk mutasi massal; `/divisi` dipertahankan sebagai redirect kompatibilitas |
-| Self-service | ada | `/me`, `/me/profile`, `/settings`, `/schedule` |
 | Performance point | ada, perlu hardening | self-service poin-based ada; input massal managerial ada; deadline H+1/H+2 masih perlu enforcement lengkap |
-| Attendance | ada, manual | `/absensi`, dipakai payroll untuk fulltime/disiplin; integrasi fingerprint/ADMS belum ada |
+| Attendance | ada, manual + ingest API ADMS | `/absensi` untuk input manual, `/api/integrations/adms/attendance` untuk sinkronisasi mesin; dipakai payroll untuk fulltime/disiplin |
 | Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
 | Ticket approval queue | ada | `/ticketingapproval` dipakai role approver untuk antrian dan histori approval tiket |
 | Review & incident | ada | review score 5 aspek, validate review, create incident |

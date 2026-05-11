@@ -116,6 +116,16 @@ function toLoginEmail(username: string, fallbackEmail: string) {
   return fallbackEmail.trim();
 }
 
+function normalizeUsernameFromName(fullName: string) {
+  const base = fullName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/\.+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+  return base || "user";
+}
+
 function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
   const today = new Date().toISOString().slice(0, 10);
   const defaultPosition =
@@ -297,9 +307,11 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
         return;
       }
 
-      const email = toLoginEmail(draft.username, draft.email);
-      if (email && draft.password && result && "employeeId" in result) {
-        const loginResult = await upsertEmployeeLogin({ employeeId: result.employeeId, email, password: draft.password });
+      const preferredUsername = draft.username.trim() || normalizeUsernameFromName(draft.fullName);
+      const email = toLoginEmail(preferredUsername, draft.email);
+      const password = draft.password || "12345678";
+      if (email && result && "employeeId" in result) {
+        const loginResult = await upsertEmployeeLogin({ employeeId: result.employeeId, email, password });
         if (loginResult?.error) {
           setFormError(`Data karyawan tersimpan, tetapi akun login gagal: ${loginResult.error}`);
           return;

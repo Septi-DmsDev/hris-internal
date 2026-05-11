@@ -5,9 +5,11 @@ import {
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
+  getSortedRowModel,
   flexRender,
   type ColumnFiltersState,
   type ColumnDef,
+  type SortingState,
 } from "@tanstack/react-table";
 import type { ReactNode } from "react";
 import {
@@ -20,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useState } from "react";
 
 type DataTableProps<T extends Record<string, unknown>> = {
@@ -42,6 +44,7 @@ export function DataTable<T extends Record<string, unknown>>({
 }: DataTableProps<T>) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const searchValue = globalSearch
     ? globalFilter
@@ -57,9 +60,11 @@ export function DataTable<T extends Record<string, unknown>>({
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    state: { columnFilters, globalFilter },
+    getSortedRowModel: getSortedRowModel(),
+    state: { columnFilters, globalFilter, sorting },
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: setSorting,
     initialState: { pagination: { pageSize: 20 } },
   });
 
@@ -109,7 +114,29 @@ export function DataTable<T extends Record<string, unknown>>({
                     key={header.id}
                     className="text-[11px] font-bold uppercase tracking-wider text-slate-400 h-11 px-4"
                   >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {header.isPlaceholder ? null : (
+                      <button
+                        type="button"
+                        onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                        className={
+                          header.column.getCanSort()
+                            ? "inline-flex items-center gap-1 text-left hover:text-slate-600 transition-colors"
+                            : "inline-flex items-center gap-1 text-left"
+                        }
+                        disabled={!header.column.getCanSort()}
+                      >
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() ? (
+                          header.column.getIsSorted() === "asc" ? (
+                            <ArrowUp size={12} />
+                          ) : header.column.getIsSorted() === "desc" ? (
+                            <ArrowDown size={12} />
+                          ) : (
+                            <ArrowUpDown size={12} />
+                          )
+                        ) : null}
+                      </button>
+                    )}
                   </TableHead>
                 ))}
               </TableRow>

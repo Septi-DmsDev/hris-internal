@@ -16,6 +16,7 @@ import {
 import { Camera, ChevronDown, ScanSearch, Trash2 } from "lucide-react";
 import { batchSubmitDraft } from "@/server/actions/performance";
 import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
+import { formatOneDecimal } from "@/lib/format/number";
 import type { TwCatalogEntry, TwActivityItem } from "@/server/actions/performance";
 
 type DraftItem = {
@@ -753,7 +754,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                             <td className="px-3 py-1.5 text-slate-800">{line.workName}</td>
                             <td className="px-3 py-1.5 text-right tabular-nums">{line.qty}</td>
                             <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
-                              {(line.pointValue * line.qty).toFixed(2)}
+                              {formatOneDecimal(line.pointValue * line.qty)}
                             </td>
                             <td className="px-3 py-1.5 text-right">
                               <button
@@ -772,7 +773,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                             Subtotal
                           </td>
                           <td className="px-3 py-1.5 text-right text-xs font-semibold text-teal-600 tabular-nums">
-                            {currentJobLineTotal.toFixed(2)}
+                            {formatOneDecimal(currentJobLineTotal)}
                           </td>
                           <td />
                         </tr>
@@ -807,7 +808,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                                 Job ID: {jobId}
                               </td>
                               <td className="px-4 py-2 text-right tabular-nums text-xs font-medium text-slate-600">
-                                {groupTotal.toFixed(2)}
+                                {formatOneDecimal(groupTotal)}
                               </td>
                               <td className="px-4 py-2 text-right">
                                 <div className="flex items-center justify-end gap-2">
@@ -836,7 +837,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                                 <td className="px-4 py-2 pl-8 text-slate-700">{item.workName}</td>
                                 <td className="px-4 py-2 text-right tabular-nums text-slate-600">{item.qty}</td>
                                 <td className="px-4 py-2 text-right tabular-nums font-medium text-slate-800">
-                                  {(item.pointValue * item.qty).toFixed(2)}
+                                  {formatOneDecimal(item.pointValue * item.qty)}
                                 </td>
                                 <td className="px-4 py-2 text-right">
                                   <button
@@ -859,7 +860,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                           Total Poin
                         </td>
                         <td className="px-4 py-2.5 text-right font-bold text-teal-600 tabular-nums">
-                          {draftTotal.toFixed(2)}
+                          {formatOneDecimal(draftTotal)}
                         </td>
                         <td />
                       </tr>
@@ -923,7 +924,7 @@ export default function TwPerformanceClient({ catalogEntries, activities, divisi
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-900">
                         {["approved", "locked"].includes(group.statusType)
-                          ? group.totalPoints.toFixed(2)
+                          ? formatOneDecimal(group.totalPoints)
                           : "—"}
                       </td>
                       <td className="px-4 py-3">

@@ -6,7 +6,7 @@ Menjelaskan alur autentikasi dan otorisasi yang dipakai code saat ini, termasuk:
 
 - helper auth utama;
 - role yang tersedia;
-- employee-linked self-service;
+- employee-linked access;
 - division scope SPV/KABAG;
 - server action yang sensitif;
 - risiko jika role check terlewat.
@@ -88,27 +88,25 @@ Role berasal dari enum `user_role` di `src/lib/db/schema/auth.ts` dan `USER_ROLE
 | `KABAG` | scoped division access untuk performance/review/ticket/employee read |
 | `SPV` | scoped division access untuk performance/review/ticket/employee read |
 | `FINANCE` | payroll/finance dan employee read |
-| `TEAMWORK` | self-service performance/ticket/profile/schedule bila linked ke employee |
-| `MANAGERIAL` | self-service ticket/profile/schedule/payroll detail bila linked ke employee, KPI source untuk payroll |
+| `TEAMWORK` | akses performance/ticket terhubung employee bila linked ke employee |
+| `MANAGERIAL` | akses ticket/schedule/payroll detail terhubung employee bila linked ke employee, KPI source untuk payroll |
 | `PAYROLL_VIEWER` | payroll read |
 
 ## 6. Data Scope Penting
 
-### Employee-Linked Self-Service
+### Employee-Linked Access
 
 `user_roles.employee_id` menghubungkan akun Supabase dengan record `employees`.
 
 Dipakai oleh:
 
-- `/me`
-- `/me/profile`
 - `/settings`
 - `/schedule`
 - personal payroll detail
 - TEAMWORK personal performance helpers
 - ticket create untuk role employee-linked
 
-Jika `employeeId` kosong, self-service harus menolak atau menampilkan state "akun belum terhubung".
+Jika `employeeId` kosong, fitur employee-linked harus menolak atau menampilkan state "akun belum terhubung".
 
 ### Division Scope SPV/KABAG
 

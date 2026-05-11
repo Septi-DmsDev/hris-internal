@@ -4,7 +4,7 @@ Use this file as the root instruction for Codex or any coding agent working in t
 
 ## Project Identity
 
-This is an internal HRIS/HRD Dashboard built with Next.js App Router, TypeScript, Drizzle ORM, Supabase Auth, and PostgreSQL. The codebase currently covers employee profiling, placement/mutation helpers, master data, role access, performance points, manual attendance, employee review, ticketing for leave/sick/permission, ticket approval queue, training evaluation, payroll lifecycle, finance summary, exports (employee/payroll XLSX + payslip PDF), and personal self-service pages.
+This is an internal HRIS/HRD Dashboard built with Next.js App Router, TypeScript, Drizzle ORM, Supabase Auth, and PostgreSQL. The codebase currently covers employee profiling, placement/mutation helpers, master data, role access, performance points, manual attendance, employee review, ticketing for leave/sick/permission, ticket approval queue, training evaluation, payroll lifecycle, finance summary, and exports (employee/payroll XLSX + payslip PDF).
 
 ## Required Reading
 
@@ -55,7 +55,7 @@ Primary boundaries:
 - Use audit logs for approval, override, payroll lifecycle, and adjustment where the schema supports it.
 - Keep payroll finalization idempotent.
 - Use server-side role/scope checks even when UI hides a feature.
-- Respect `user_roles.employee_id` for self-service access and `user_role_divisions` for SPV/KABAG division scope.
+- Respect `user_roles.employee_id` for employee-linked access and `user_role_divisions` for SPV/KABAG division scope.
 - Do not change business rules silently. If code differs from the business document, call it out as an implementation gap or request confirmation.
 
 ## Tech Stack in This Repo
@@ -77,7 +77,6 @@ Primary boundaries:
 ## Implemented Product Areas
 
 - Auth and user role management: `/login`, `/users`
-- Personal self-service: `/me`, `/me/profile`, `/settings`, `/schedule`
 - Operational dashboard: `/dashboard`
 - Employee profiling: `/employees`, `/employees/[id]`
 - Master data: `/master/branches`, `/master/divisions`, `/master/positions`, `/master/grades`, `/master/work-schedules`

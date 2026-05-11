@@ -15,6 +15,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faCheck,
+  faPaperPlane,
+  faPenToSquare,
+  faRotateLeft,
+  faTrash,
+  faXmark,
+} from "@fortawesome/free-solid-svg-icons";
 import {
   clearAllCatalogData,
   upsertCatalogEntry,
@@ -25,6 +34,7 @@ import {
   approveDailyActivityEntry,
   batchDecideDraftActivities,
   deleteActivityEntry,
+  deleteMonthlyPerformanceByPeriod,
   deleteMonthlyPerformance,
   generateMonthlyPerformance,
   inputEmployeeMonthlyPerformance,
@@ -270,12 +280,12 @@ function formatOneDecimal(value: string | number) {
 
 type PerformanceCatalogClientProps = {
   role: UserRole;
-  canManageCatalog: boolean;
+  canManageCatalog?: boolean;
   canManageActivities: boolean;
   canGenerateMonthly: boolean;
-  versions: PerformanceVersionRow[];
-  divisionTargets: PerformanceDivisionTargetRow[];
-  entries: PerformanceCatalogEntryRow[];
+  versions?: PerformanceVersionRow[];
+  divisionTargets?: PerformanceDivisionTargetRow[];
+  entries?: PerformanceCatalogEntryRow[];
   employeeOptions: PerformanceEmployeeOption[];
   managerialEmployeeOptions: PerformanceManagerialEmployeeOption[];
   activityEntries: PerformanceActivityRow[];
@@ -368,12 +378,12 @@ function EmployeeSearchPicker({
 
 export default function PerformanceCatalogClient({
   role,
-  canManageCatalog,
+  canManageCatalog = false,
   canManageActivities,
   canGenerateMonthly,
-  versions,
-  divisionTargets,
-  entries,
+  versions = [],
+  divisionTargets = [],
+  entries = [],
   employeeOptions,
   managerialEmployeeOptions,
   activityEntries,
@@ -408,6 +418,8 @@ export default function PerformanceCatalogClient({
   const [entryDraft, setEntryDraft] = useState<EntryDraft>(createEntryDraft());
   const [deleteCatalogId, setDeleteCatalogId] = useState<string | null>(null);
   const [deleteMonthlyId, setDeleteMonthlyId] = useState<string | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeletePeriodKey, setBulkDeletePeriodKey] = useState("");
 
   // Xlsx import state
   const [xlsxOpen, setXlsxOpen] = useState(false);
@@ -709,6 +721,47 @@ export default function PerformanceCatalogClient({
     } finally { setPending(false); }
   }
 
+  const monthlyPeriodOptions = useMemo(() => {
+    const map = new Map<string, { periodStartDate: string; periodEndDate: string; count: number }>();
+    for (const row of monthlyPerformances) {
+      const key = `${row.periodStartDate}|${row.periodEndDate}`;
+      const current = map.get(key);
+      if (current) current.count += 1;
+      else map.set(key, { periodStartDate: row.periodStartDate, periodEndDate: row.periodEndDate, count: 1 });
+    }
+    return Array.from(map.entries())
+      .map(([key, value]) => ({ key, ...value }))
+      .sort((a, b) => b.periodStartDate.localeCompare(a.periodStartDate));
+  }, [monthlyPerformances]);
+
+  async function handleBulkDeleteMonthlyPerformance() {
+    if (!bulkDeletePeriodKey) {
+      setFormError("Pilih periode yang akan dihapus.");
+      return;
+    }
+    const [periodStartDate, periodEndDate] = bulkDeletePeriodKey.split("|");
+    if (!periodStartDate || !periodEndDate) {
+      setFormError("Periode tidak valid.");
+      return;
+    }
+
+    setPending(true);
+    resetMessages();
+    try {
+      const result = await deleteMonthlyPerformanceByPeriod({ periodStartDate, periodEndDate });
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      setBulkDeleteOpen(false);
+      setBulkDeletePeriodKey("");
+      setLastResult(`Hapus massal berhasil. ${result.deletedCount} data performa bulanan dihapus.`);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function handleXlsxImport() {
     if (!xlsxFile) { setFormError("Pilih file xlsx terlebih dahulu."); return; }
     setPending(true);
@@ -879,9 +932,20 @@ export default function PerformanceCatalogClient({
         header: "Status",
         accessorKey: "status",
         cell: ({ row }) => (
-          <Badge variant={ACTIVITY_STATUS_VARIANT[row.original.status]}>
-            {ACTIVITY_STATUS_LABEL[row.original.status]}
-          </Badge>
+          <span
+            className="inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium"
+            title={ACTIVITY_STATUS_LABEL[row.original.status]}
+          >
+            {row.original.status === "DRAFT" ? (
+              <FontAwesomeIcon icon={faPenToSquare} className="h-3.5 w-3.5" />
+            ) : row.original.status === "DIAJUKAN" || row.original.status === "DIAJUKAN_ULANG" ? (
+              <FontAwesomeIcon icon={faPaperPlane} className="h-3.5 w-3.5" />
+            ) : row.original.status === "DITOLAK_SPV" || row.original.status === "REVISI_TW" ? (
+              <FontAwesomeIcon icon={faRotateLeft} className="h-3.5 w-3.5" />
+            ) : (
+              <FontAwesomeIcon icon={faCheck} className="h-3.5 w-3.5" />
+            )}
+          </span>
         ),
       },
       {
@@ -901,7 +965,9 @@ export default function PerformanceCatalogClient({
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    title="Edit"
+                    aria-label="Edit"
                     onClick={() => {
                       setFormError(null);
                       setActivityDraft({
@@ -914,12 +980,14 @@ export default function PerformanceCatalogClient({
                       setActivityOpen(true);
                     }}
                   >
-                    Edit
+                    <FontAwesomeIcon icon={faPenToSquare} className="h-4 w-4" />
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    title="Ajukan"
+                    aria-label="Ajukan"
                     onClick={() =>
                       setDecisionState({
                         action: "submit",
@@ -929,16 +997,18 @@ export default function PerformanceCatalogClient({
                       })
                     }
                   >
-                    Ajukan
+                    <FontAwesomeIcon icon={faPaperPlane} className="h-4 w-4" />
                   </Button>
                   {entry.status === "DRAFT" ? (
                     <Button
                       type="button"
                       variant="destructive"
-                      size="sm"
+                      size="icon"
+                      title="Hapus"
+                      aria-label="Hapus"
                       onClick={() => setDeleteTargetId(entry.id)}
                     >
-                      Hapus
+                      <FontAwesomeIcon icon={faTrash} className="h-4 w-4" />
                     </Button>
                   ) : null}
                 </>
@@ -947,7 +1017,9 @@ export default function PerformanceCatalogClient({
                 <>
                   <Button
                     type="button"
-                    size="sm"
+                    size="icon"
+                    title={role === "SPV" || role === "KABAG" ? "Setujui" : "Override"}
+                    aria-label={role === "SPV" || role === "KABAG" ? "Setujui" : "Override"}
                     onClick={() =>
                       setDecisionState({
                         action: "approve",
@@ -957,12 +1029,14 @@ export default function PerformanceCatalogClient({
                       })
                     }
                   >
-                    {role === "SPV" || role === "KABAG" ? "Setujui" : "Override"}
+                    <FontAwesomeIcon icon={faCheck} className="h-4 w-4" />
                   </Button>
                   <Button
                     type="button"
                     variant="destructive"
-                    size="sm"
+                    size="icon"
+                    title="Tolak"
+                    aria-label="Tolak"
                     onClick={() =>
                       setDecisionState({
                         action: "reject",
@@ -972,7 +1046,7 @@ export default function PerformanceCatalogClient({
                       })
                     }
                   >
-                    Tolak
+                    <FontAwesomeIcon icon={faXmark} className="h-4 w-4" />
                   </Button>
                 </>
               ) : null}
@@ -1083,7 +1157,6 @@ export default function PerformanceCatalogClient({
         <TabsList>
           <TabsTrigger value="activities">Aktivitas Harian</TabsTrigger>
           <TabsTrigger value="monthly">Performa Bulanan</TabsTrigger>
-          <TabsTrigger value="catalog">Katalog Poin</TabsTrigger>
         </TabsList>
 
         <TabsContent value="activities" className="space-y-3">
@@ -1219,17 +1292,30 @@ export default function PerformanceCatalogClient({
               </p>
             </div>
             {canGenerateMonthly ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  resetMessages();
-                  setManagerialMonthlyDraft(createManagerialMonthlyInputDraft());
-                  setManagerialMonthlyOpen(true);
-                }}
-              >
-                Input Performa Karyawan
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => {
+                    resetMessages();
+                    setBulkDeletePeriodKey(monthlyPeriodOptions[0]?.key ?? "");
+                    setBulkDeleteOpen(true);
+                  }}
+                >
+                  Hapus Massal
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    resetMessages();
+                    setManagerialMonthlyDraft(createManagerialMonthlyInputDraft());
+                    setManagerialMonthlyOpen(true);
+                  }}
+                >
+                  Input Performa Karyawan
+                </Button>
+              </div>
             ) : null}
           </div>
           <DataTable
@@ -1240,91 +1326,6 @@ export default function PerformanceCatalogClient({
           />
         </TabsContent>
 
-        <TabsContent value="catalog" className="space-y-6">
-          {/* Header */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-slate-800">Katalog Poin</h2>
-              <p className="text-sm text-slate-500">
-                {canManageCatalog
-                  ? "Tambah, ubah, atau hapus entry katalog langsung dari platform, atau import via .xlsx."
-                  : "Role ini hanya memiliki akses baca untuk katalog poin."}
-              </p>
-            </div>
-            {canManageCatalog ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  onClick={() => {
-                    resetMessages();
-                    setEntryDraft(createEntryDraft());
-                    setEntryOpen(true);
-                  }}
-                >
-                  + Tambah Entry
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    resetMessages();
-                    setXlsxFile(null);
-                    setXlsxOpen(true);
-                  }}
-                >
-                  Import .xlsx
-                </Button>
-                {role === "SUPER_ADMIN" ? (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => {
-                      resetMessages();
-                      setClearCatalogOpen(true);
-                    }}
-                  >
-                    Hapus Semua Katalog
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-700">
-              Katalog Aktif ({entries.length} entry)
-            </h3>
-            <DataTable
-              data={entries}
-              columns={entryColumns}
-              searchKey="workName"
-              searchPlaceholder="Cari nama pekerjaan..."
-            />
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-700">Rule Target Divisi</h3>
-            <p className="text-xs text-slate-500">
-              Target poin harian mengikuti divisi payroll snapshot, bukan divisi kerja aktual harian.
-            </p>
-            <DataTable
-              data={divisionTargets}
-              columns={targetColumns}
-              searchKey="divisionName"
-              searchPlaceholder="Cari divisi..."
-            />
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-700">Riwayat Versi</h3>
-            <DataTable
-              data={versions}
-              columns={versionColumns}
-              searchKey="code"
-              searchPlaceholder="Cari kode versi..."
-            />
-          </section>
-        </TabsContent>
       </Tabs>
 
       {/* Clear All Catalog Confirm Dialog */}
@@ -1386,7 +1387,7 @@ export default function PerformanceCatalogClient({
               <label className="text-sm font-medium text-slate-700">Total Poin Harian</label>
               <Input
                 type="number"
-                step="0.01"
+                step="0.1"
                 min="0.01"
                 value={activityDraft.totalPoints}
                 onChange={(event) => updateActivityDraft("totalPoints", event.target.value)}
@@ -1603,11 +1604,11 @@ export default function PerformanceCatalogClient({
                 <label className="text-sm font-medium text-slate-700">Poin</label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="0.1"
                   min="0.01"
                   value={entryDraft.pointValue}
                   onChange={(e) => setEntryDraft((d) => ({ ...d, pointValue: e.target.value }))}
-                  placeholder="0.00"
+                  placeholder="0.0"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1743,6 +1744,51 @@ export default function PerformanceCatalogClient({
         </DialogContent>
       </Dialog>
 
+      {/* Bulk Delete Monthly Performance Confirm */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hapus Massal Performa Bulanan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Pilih periode yang akan dihapus. Data berstatus LOCKED tidak dapat dihapus.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Periode</label>
+              <select
+                value={bulkDeletePeriodKey}
+                onChange={(event) => setBulkDeletePeriodKey(event.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {monthlyPeriodOptions.length === 0 ? (
+                  <option value="">Tidak ada periode</option>
+                ) : (
+                  monthlyPeriodOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.periodStartDate} s/d {option.periodEndDate} ({option.count} data)
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={pending}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleBulkDeleteMonthlyPerformance()}
+              disabled={pending || monthlyPeriodOptions.length === 0}
+            >
+              {pending ? "Menghapus..." : "Hapus Massal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Input Managerial Monthly Dialog */}
       <Dialog open={managerialMonthlyOpen} onOpenChange={setManagerialMonthlyOpen}>
         <DialogContent className="sm:max-w-xl">
@@ -1769,7 +1815,7 @@ export default function PerformanceCatalogClient({
                 type="number"
                 min="0"
                 max="200"
-                step="0.01"
+                step="0.1"
                 value={managerialMonthlyDraft.performancePercent}
                 onChange={(event) => updateManagerialMonthlyDraft("performancePercent", event.target.value)}
               />

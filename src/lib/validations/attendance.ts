@@ -48,6 +48,40 @@ export const attendanceFallbackDecisionSchema = z.object({
   reviewNotes: z.string().trim().max(300).optional().transform((value) => value || undefined),
 });
 
+const admsTime = z
+  .string()
+  .trim()
+  .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Format jam ADMS harus HH:mm atau HH:mm:ss.")
+  .transform((value) => value.slice(0, 5));
+
+export const admsAttendanceRecordSchema = z.object({
+  employeeCode: z.string().trim().min(1, "employeeCode wajib diisi."),
+  attendanceDate: z.coerce.date({ message: "attendanceDate wajib diisi." }),
+  attendanceStatus: z.enum(ATTENDANCE_STATUSES).default("HADIR"),
+  checkInTime: admsTime.optional(),
+  checkOutTime: admsTime.optional(),
+  punctualityStatus: z.enum(ATTENDANCE_PUNCTUALITY_STATUSES).optional(),
+  notes: z.string().trim().max(300).optional(),
+  externalUserCode: z.string().trim().max(120).optional(),
+  externalEventId: z.string().trim().max(120).optional(),
+  rawPayload: z.record(z.string(), z.unknown()).optional(),
+}).superRefine((value, ctx) => {
+  if (value.attendanceStatus === "HADIR" && !value.punctualityStatus) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["punctualityStatus"],
+      message: "punctualityStatus wajib untuk attendanceStatus HADIR.",
+    });
+  }
+});
+
+export const admsAttendanceIngestSchema = z.object({
+  deviceId: z.string().trim().min(1, "deviceId wajib diisi.").max(120),
+  records: z.array(admsAttendanceRecordSchema).min(1, "records minimal 1 data."),
+});
+
 export type AttendanceRecordInput = z.infer<typeof attendanceRecordSchema>;
 export type AttendanceFallbackRequestInput = z.infer<typeof attendanceFallbackRequestSchema>;
 export type AttendanceFallbackDecisionInput = z.infer<typeof attendanceFallbackDecisionSchema>;
+export type AdmsAttendanceRecordInput = z.infer<typeof admsAttendanceRecordSchema>;
+export type AdmsAttendanceIngestInput = z.infer<typeof admsAttendanceIngestSchema>;

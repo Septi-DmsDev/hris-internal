@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { resolveEmployeeGroupLabel } from "@/lib/employee-groups";
 import type { HrdScheduleOverview } from "@/server/actions/schedule";
 
 function getGroupChipClass(kind: "SHIFT" | "TICKET"): string {
@@ -97,8 +98,8 @@ export default function HrdScheduleOverviewClient({ overview }: { overview: HrdS
                             <p className="text-[11px] text-slate-500">{employee.employeeCode}</p>
                           </div>
                           <span className="text-[10px] font-semibold rounded-md bg-slate-100 px-2 py-0.5 text-slate-600 shrink-0">
-                            {employee.employeeGroup === "MANAGERIAL" ? "MANAGERIAL" : "TEAMWORK"}
-                          </span>
+                          {resolveEmployeeGroupLabel(employee.employeeGroup)}
+                        </span>
                         </div>
                         <p className="mt-1 text-[11px] text-slate-500 truncate">
                           {employee.divisionName} · {employee.positionName}

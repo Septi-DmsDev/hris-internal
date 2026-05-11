@@ -48,6 +48,7 @@ import { resolvePayrollStatusTransition } from "@/server/payroll-engine/resolve-
 import { resolveSpPerformancePenalty } from "@/server/payroll-engine/resolve-sp-performance-penalty";
 import { resolveTenureAllowanceAmount } from "@/server/payroll-engine/resolve-tenure-allowance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
+import { isKpiEmployeeGroup, isPointBasedEmployeeGroup } from "@/lib/employee-groups";
 import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { PayrollPeriodStatus, UserRole } from "@/types";
@@ -655,7 +656,7 @@ export async function upsertManagerialKpiSummary(input: unknown) {
 
   const parsed = managerialKpiSummarySchema.safeParse(input);
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Input KPI managerial tidak valid." };
+    return { error: parsed.error.issues[0]?.message ?? "Input KPI karyawan tetap tidak valid." };
   }
 
   const user = await getUser();
@@ -688,7 +689,7 @@ export async function upsertManagerialKpiSummary(input: unknown) {
   if (!employee) return { error: "Karyawan tidak ditemukan." };
   if (!employee.isActive) return { error: "Karyawan nonaktif tidak dapat diset KPI payroll." };
   if (employee.employeeGroup !== "MANAGERIAL") {
-    return { error: "KPI managerial hanya berlaku untuk kelompok MANAGERIAL." };
+    return { error: "KPI hanya berlaku untuk kelompok karyawan tetap." };
   }
 
   const [existing] = await db
@@ -825,8 +826,8 @@ export async function addPayrollAdjustment(input: unknown) {
   if (!employee) return { error: "Karyawan tidak ditemukan." };
 
   // Business rule: GANTI_RUGI_TEAM — managerial only
-  if (category === "GANTI_RUGI_TEAM" && employee.employeeGroup !== "MANAGERIAL") {
-    return { error: "Ganti Rugi Team hanya berlaku untuk karyawan Managerial." };
+  if (category === "GANTI_RUGI_TEAM" && !isKpiEmployeeGroup(employee.employeeGroup)) {
+    return { error: "Ganti Rugi Team hanya berlaku untuk karyawan tetap." };
   }
 
   // Business rule: GANTI_RUGI_PERSONAL / GANTI_RUGI_TEAM — max once per employee per period
@@ -1495,13 +1496,15 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     const teamworkPerformancePercent = performance
       ? toNumber(performance.performancePercent)
       : 0;
-    // MANAGERIAL: utamakan managerialKpiSummaries (validated finance), fallback ke
+    // Karyawan tetap: utamakan managerialKpiSummaries (validated finance), fallback ke
     // monthly_point_performances (input HRD) agar tidak 0 ketika period dibuat setelah input.
     const managerialPerformancePercent = managerialKpi
       ? toNumber(managerialKpi.performancePercent)
       : toNumber(performance?.performancePercent);
+    const isKpiEmployee = isKpiEmployeeGroup(employee.employeeGroup);
+    const isPointEmployee = isPointBasedEmployeeGroup(employee.employeeGroup);
     const rawPerformancePercent =
-      employee.employeeGroup === "MANAGERIAL"
+      isKpiEmployee
         ? managerialPerformancePercent
         : teamworkPerformancePercent;
     const spPerformancePenalty = resolveSpPerformancePenalty(rawPerformancePercent, incidentTypes);
@@ -1546,12 +1549,12 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       hasLateIncident,
     });
 
-    if (employee.employeeGroup === "MANAGERIAL" && !managerialKpi) {
+    if (isKpiEmployee && !managerialKpi) {
       missingManagerialKpi.push(employee.fullName);
       // Lanjutkan komputasi dengan performancePercent = 0 (bonus kinerja/disiplin/tim = 0)
     }
 
-    const payrollCalc = employee.employeeGroup === "MANAGERIAL"
+    const payrollCalc = isKpiEmployee
       ? calculateManagerialPayroll({
           baseSalaryAmount,
           periodDayCount,
@@ -1644,13 +1647,13 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         periodId: parsed.data.periodId,
         employeeId: employee.id,
         snapshotId: "" as string,
-        monthlyPerformanceId: employee.employeeGroup === "TEAMWORK" ? (performance?.id ?? null) : null,
-        managerialKpiSummaryId: employee.employeeGroup === "MANAGERIAL" ? (managerialKpi?.id ?? null) : null,
+        monthlyPerformanceId: isPointEmployee ? (performance?.id ?? null) : null,
+        managerialKpiSummaryId: isKpiEmployee ? (managerialKpi?.id ?? null) : null,
         performancePercent: performancePercent.toFixed(2),
         totalApprovedPoints:
-          employee.employeeGroup === "TEAMWORK" ? toNumber(performance?.totalApprovedPoints).toFixed(2) : "0.00",
+          isPointEmployee ? toNumber(performance?.totalApprovedPoints).toFixed(2) : "0.00",
         totalTargetPoints:
-          employee.employeeGroup === "TEAMWORK" ? toNumber(performance?.totalTargetPoints).toFixed(2) : "0.00",
+          isPointEmployee ? toNumber(performance?.totalTargetPoints).toFixed(2) : "0.00",
         approvedUnpaidLeaveDays,
         approvedPaidLeaveDays,
         incidentDeductionAmount: payrollCalc.incidentDeductionAmount.toFixed(2),
@@ -1692,8 +1695,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           adjustedPerformancePercent: performancePercent,
           spPerformancePenaltyType: spPerformancePenalty.penaltyType,
           spPerformancePenaltyPercent: spPerformancePenalty.penaltyPercent,
-          performanceSource:
-            employee.employeeGroup === "MANAGERIAL" ? "MANAGERIAL_KPI" : "MONTHLY_POINT_PERFORMANCE",
+          performanceSource: isKpiEmployee ? "MANAGERIAL_KPI" : "MONTHLY_POINT_PERFORMANCE",
         },
         status: "DRAFT" satisfies PayrollPeriodStatus,
       },

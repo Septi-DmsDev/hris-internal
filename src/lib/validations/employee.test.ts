@@ -35,6 +35,16 @@ describe("employeeSchema", () => {
     }
   });
 
+  it("memaksa supervisor untuk karyawan training", () => {
+    const parsed = employeeSchema.safeParse({
+      ...validEmployeeInput,
+      employeeGroup: "TRAINING",
+      supervisorEmployeeId: undefined,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
   it("mengubah string tanggal menjadi Date untuk input valid", () => {
     const parsed = employeeSchema.safeParse(validEmployeeInput);
 

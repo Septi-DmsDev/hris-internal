@@ -8,6 +8,7 @@ import { checkRole, getCurrentUserRoleRow, requireAuth } from "@/lib/auth/sessio
 import { asc, desc, eq, and, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
+import { TRAINING_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 
 const TRAINING_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD", "KABAG", "SPV"];
 
@@ -42,7 +43,7 @@ export async function getTrainingEvaluations() {
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
     .where(
       and(
-        eq(employees.employeeGroup, "TEAMWORK"),
+        inArray(employees.employeeGroup, TRAINING_EMPLOYEE_GROUPS),
         eq(employees.employmentStatus, "TRAINING"),
         eq(employees.isActive, true),
         ["SPV", "KABAG"].includes(role) && roleRow.divisionIds.length > 0

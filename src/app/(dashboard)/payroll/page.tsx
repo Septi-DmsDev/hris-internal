@@ -77,7 +77,7 @@ export default async function PayrollPage({ searchParams }: PageProps) {
     divisionName: row.divisionName ?? "-",
     positionName: row.positionName ?? "-",
     gradeName: row.gradeName ?? "-",
-    employeeGroup: row.employeeGroup ?? "TEAMWORK",
+    employeeGroup: row.employeeGroup ?? "MITRA_KERJA",
     payrollStatus: row.payrollStatus ?? "-",
     performancePercent: Number(row.performancePercent),
     approvedUnpaidLeaveDays: row.approvedUnpaidLeaveDays,

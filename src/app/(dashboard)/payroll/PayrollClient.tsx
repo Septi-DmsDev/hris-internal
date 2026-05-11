@@ -46,7 +46,7 @@ export type PayrollResultRow = {
   divisionName: string;
   positionName: string;
   gradeName: string;
-  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+  employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
   payrollStatus: string;
   performancePercent: number;
   approvedUnpaidLeaveDays: number;
@@ -85,7 +85,7 @@ export type PayrollSalaryConfigRow = {
   employeeName: string;
   positionName: string;
   divisionName: string;
-  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+  employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
   payrollStatus: string;
   baseSalaryAmount: number | null;
   gradeAllowanceAmount: number | null;

@@ -11,6 +11,7 @@ import {
   employeeSupervisorHistories,
   workSchedules,
 } from "@/lib/db/schema/employee";
+import { attendanceTickets } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import { upsertEmployeeLogin } from "@/server/actions/users";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,6 +23,11 @@ import {
 } from "@/lib/auth/session";
 import { userRoles } from "@/lib/db/schema/auth";
 import { payrollEmployeeSnapshots, payrollResults } from "@/lib/db/schema/payroll";
+import {
+  isKpiEmployeeGroup,
+  isPointBasedEmployeeGroup,
+  type EmployeeGroup,
+} from "@/lib/employee-groups";
 import {
   employeeOrganizationBulkUpdateSchema,
   employeeSchema,
@@ -63,7 +69,7 @@ type EmployeeDetailRow = {
   jobdesk: string | null;
   gradeId: string;
   gradeName: string | null;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   employmentStatus:
     | "TRAINING"
     | "REGULER"
@@ -97,7 +103,7 @@ type EmployeeListRow = {
   positionName: string | null;
   gradeId: string;
   gradeName: string | null;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   employmentStatus:
     | "TRAINING"
     | "REGULER"
@@ -129,6 +135,44 @@ function oneDayBefore(date: Date) {
   const previousDay = startOfDay(date);
   previousDay.setDate(previousDay.getDate() - 1);
   return previousDay;
+}
+
+const BRANCH_EMPLOYEE_CODE_PREFIX: Record<string, string> = {
+  TEKNOS: "TKN",
+  WPI: "WPI",
+  MAHARATU: "MHR",
+};
+
+function resolveEmployeeCodePrefix(branchName: string | null | undefined) {
+  const normalized = branchName?.trim().toUpperCase();
+  if (!normalized) return "EMP";
+  return BRANCH_EMPLOYEE_CODE_PREFIX[normalized] ?? (normalized.replace(/[^A-Z]/g, "").slice(0, 3) || "EMP");
+}
+
+async function getNextGeneratedEmployeeCode(branchId: string) {
+  const [branch] = await db
+    .select({ name: branches.name })
+    .from(branches)
+    .where(eq(branches.id, branchId))
+    .limit(1);
+
+  const prefix = resolveEmployeeCodePrefix(branch?.name);
+  const rows = await db
+    .select({ employeeCode: employees.employeeCode })
+    .from(employees)
+    .where(eq(employees.branchId, branchId));
+
+  let maxSequence = 0;
+  for (const row of rows) {
+    const value = row.employeeCode?.trim() ?? "";
+    if (!value.startsWith(`${prefix}-`)) continue;
+    const sequence = Number.parseInt(value.slice(prefix.length + 1), 10);
+    if (Number.isFinite(sequence) && sequence > maxSequence) {
+      maxSequence = sequence;
+    }
+  }
+
+  return `${prefix}-${String(maxSequence + 1).padStart(4, "0")}`;
 }
 
 type EmployeePersistInput = Omit<EmployeeInput, "supervisorEmployeeId"> & {
@@ -355,24 +399,6 @@ export async function getEmployees() {
   }
 
   return (await baseQuery.orderBy(asc(employees.startDate), asc(employees.fullName))) as EmployeeListRow[];
-}
-
-async function getNextGeneratedUid() {
-  const rows = await db
-    .select({ employeeCode: employees.employeeCode })
-    .from(employees);
-
-  let maxUid = 0;
-  for (const row of rows) {
-    const code = row.employeeCode?.trim() ?? "";
-    if (!/^\d{4}$/.test(code)) continue;
-    const value = Number.parseInt(code, 10);
-    if (Number.isFinite(value) && value > maxUid) {
-      maxUid = value;
-    }
-  }
-
-  return String(maxUid + 1).padStart(4, "0");
 }
 
 export async function getEmployeeFormOptions() {
@@ -702,7 +728,8 @@ export async function createEmployee(input: unknown) {
   const rawInput = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const nextUid = await getNextGeneratedUid();
+    const branchId = typeof rawInput.branchId === "string" ? rawInput.branchId : "";
+    const nextUid = branchId ? await getNextGeneratedEmployeeCode(branchId) : "EMP-0001";
     const parsed = employeeSchema.safeParse({
       ...rawInput,
       employeeCode: nextUid,
@@ -827,11 +854,11 @@ export async function importEmployeesFromXlsx(formData: FormData) {
   );
   const fallbackDivisionId = divisionRows[0]?.id ?? null;
   const fallbackPosition =
-    positionRows.find((position) => position.employeeGroup === "TEAMWORK") ?? positionRows[0] ?? null;
+    positionRows.find((position) => isPointBasedEmployeeGroup(position.employeeGroup)) ?? positionRows[0] ?? null;
   const fallbackGradeId = gradeRows[0]?.id ?? null;
   const fallbackSupervisorEmployeeId =
-    supervisorRows.find((employee) => employee.employeeGroup === "MANAGERIAL")?.id ?? null;
-  const importEmployeeGroup = "TEAMWORK" as const;
+    supervisorRows.find((employee) => isKpiEmployeeGroup(employee.employeeGroup))?.id ?? null;
+  const importEmployeeGroup = "MITRA_KERJA" as const;
 
   if (!fallbackDivisionId || !fallbackPosition || !fallbackGradeId) {
     return {
@@ -890,6 +917,7 @@ export async function importEmployeesFromXlsx(formData: FormData) {
     const divisionId = divisionByBranchId.get(branchId) ?? fallbackDivisionId;
     const employeeInput: EmployeePersistInput = {
       employeeCode,
+      nik: nikIdx >= 0 ? (String(row[nikIdx] ?? "").trim() || undefined) : undefined,
       fullName,
       nickname: undefined,
       photoUrl: undefined,
@@ -1352,7 +1380,7 @@ export async function createMissingEmployeeAccounts(defaultPassword: string) {
   for (const emp of employeesWithoutAccount) {
     const username = emp.fullName.trim().toLowerCase().replace(/\s+/g, ".");
     const email = `${username}@hris.internal`;
-    const role: UserRole = emp.employeeGroup === "MANAGERIAL" ? "MANAGERIAL" : "TEAMWORK";
+    const role: UserRole = isKpiEmployeeGroup(emp.employeeGroup) ? "MANAGERIAL" : "TEAMWORK";
 
     const result = await upsertEmployeeLogin({
       employeeId: emp.id,
@@ -1484,7 +1512,7 @@ export async function regenerateEmployeeUidsAndResetLogins() {
     const nextEmail = resolveUniqueLoginEmail(preferredUsername, usedEmails);
     const nextRole: UserRole = row.userRole
       ? (row.userRole as UserRole)
-      : row.employeeGroup === "MANAGERIAL"
+      : isKpiEmployeeGroup(row.employeeGroup)
         ? "MANAGERIAL"
         : "TEAMWORK";
 

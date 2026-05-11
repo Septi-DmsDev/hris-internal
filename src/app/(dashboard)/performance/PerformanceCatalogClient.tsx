@@ -179,7 +179,7 @@ type MonthlyEmployeePickerOption = {
   employeeCode: string;
   fullName: string;
   divisionName: string;
-  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+  employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
 };
 
 type DecisionAction = "submit" | "approve" | "reject";
@@ -468,14 +468,14 @@ export default function PerformanceCatalogClient({
       employeeCode: employee.employeeCode,
       fullName: employee.fullName,
       divisionName: employee.divisionName,
-      employeeGroup: "TEAMWORK" as const,
+      employeeGroup: "MITRA_KERJA" as const,
     }));
     const managerial: MonthlyEmployeePickerOption[] = managerialEmployeeOptions.map((employee) => ({
       id: employee.id,
       employeeCode: employee.employeeCode,
       fullName: employee.fullName,
       divisionName: employee.divisionName,
-      employeeGroup: "MANAGERIAL" as const,
+      employeeGroup: "KARYAWAN_TETAP" as const,
     }));
     const byId = new Map<string, MonthlyEmployeePickerOption>();
     for (const item of [...teamwork, ...managerial]) {
@@ -687,7 +687,7 @@ export default function PerformanceCatalogClient({
       setManagerialMonthlyOpen(false);
       setManagerialMonthlyDraft(createManagerialMonthlyInputDraft());
       const syncNote =
-        result.employeeGroup === "MANAGERIAL" && !result.payrollPeriodReady
+        result.employeeGroup === "KARYAWAN_TETAP" && !result.payrollPeriodReady
           ? " KPI payroll managerial akan otomatis tersinkron saat periode payroll dibuat."
           : "";
       setLastResult(
@@ -1766,7 +1766,7 @@ export default function PerformanceCatalogClient({
             <DialogTitle>Generate Monthly Performance</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-500">
-            Menghitung ulang performa bulanan untuk semua karyawan TEAMWORK aktif pada periode yang
+            Menghitung ulang performa bulanan untuk semua karyawan poin-based aktif pada periode yang
             dipilih. Data sebelumnya untuk periode yang sama akan ditimpa.
           </p>
           <div className="grid gap-4 md:grid-cols-2">

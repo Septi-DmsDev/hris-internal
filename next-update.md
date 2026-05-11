@@ -170,6 +170,12 @@ Group:
 - KPI BASED
 - POIN BASED
 
+Kelompok karyawan:
+- KARYAWAN_TETAP (legacy MANAGERIAL)
+- MITRA_KERJA (legacy TEAMWORK)
+- BORONGAN
+- TRAINING
+
 Posisi:
 - FINANCE
 - HRD

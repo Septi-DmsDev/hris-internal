@@ -7,12 +7,14 @@ Dokumen ini merangkum aturan bisnis yang wajib dijaga saat membangun HRD Dashboa
 
 ## Kelompok Karyawan
 
-| Kelompok | Contoh role | Metode penilaian |
+| Kelompok baru | Alias legacy | Metode penilaian |
 |---|---|---|
-| MANAGERIAL | Kabag, SPV, TL, Staff | KPI bulanan |
-| TEAMWORK | TW, Operator | Poin kerja harian |
+| KARYAWAN_TETAP | MANAGERIAL | KPI bulanan |
+| MITRA_KERJA | TEAMWORK | Poin kerja harian |
+| BORONGAN | - | Poin kerja harian |
+| TRAINING | - | Evaluasi poin training |
 
-TEAMWORK memiliki status:
+Kelompok poin-based memiliki status:
 - Training
 - Reguler
 - Dialihkan Training
@@ -29,7 +31,7 @@ Tanggal 26 bulan sebelumnya sampai tanggal 25 bulan berjalan
 
 Payroll harus memakai snapshot awal periode untuk divisi payroll, jabatan, grade, gaji, status, dan kelompok karyawan.
 
-## Poin Kinerja TEAMWORK
+## Poin Kinerja MITRA_KERJA / BORONGAN / TRAINING
 
 Target harian:
 
@@ -57,7 +59,7 @@ Status hari:
 | Izin approved | Tidak | 0 | 0 |
 | Off/libur jadwal | Tidak | 0 | 0 |
 
-## Bonus Kinerja TEAMWORK
+## Bonus Kinerja MITRA_KERJA / BORONGAN
 
 Tidak ada pembulatan level bonus. Nominal bonus kinerja pada master grade dibayar langsung sesuai tier yang tercapai; nominal tier 80/90/100 tidak dikalikan lagi dengan 80%, 90%, atau 100%.
 
@@ -72,7 +74,7 @@ Tidak ada pembulatan level bonus. Nominal bonus kinerja pada master grade dibaya
 
 Jika mencapai 165%, bonus prestasi yang didapat hanya 165%, bukan 140% + 165%.
 
-Untuk MANAGERIAL/KPI, rentang bonus kinerja memakai aturan nominal yang sama: 80% = performa 80-89.99%, 90% = 90-99.99%, dan 100% = minimal 100%.
+Untuk KARYAWAN_TETAP/KPI, rentang bonus kinerja memakai aturan nominal yang sama: 80% = performa 80-89.99%, 90% = 90-99.99%, dan 100% = minimal 100%.
 
 ## Input dan Approval Aktivitas
 
@@ -156,7 +158,7 @@ Default:
 - bonus fulltime tidak didapat;
 - target poin tidak dihitung jika ticket approved.
 
-Untuk form TEAMWORK:
+Untuk form poin-based:
 - field yang ditampilkan cukup jenis tiket, rentang tanggal/durasi, alasan/catatan, dan bukti bila memang diwajibkan;
 - akun self-service memakai `user_roles.employee_id` sebagai karyawan tujuan;
 - sakit lebih dari 1 hari wajib melampirkan surat dokter atau bukti pendukung lain yang valid.
@@ -254,8 +256,8 @@ Payroll finalization:
 |---|---|---|
 | BPJS | Semua karyawan | Recurring setiap bulan selama masih aktif bekerja |
 | Kasbon | Semua karyawan | Maksimum **Rp 300.000** per karyawan per periode payroll |
-| Ganti Rugi Personal | Semua karyawan (MANAGERIAL & TEAMWORK) | Satu kali per karyawan per periode; tidak bisa duplikat |
-| Ganti Rugi Team | **Karyawan MANAGERIAL only** | Satu kali per karyawan per periode; tidak bisa duplikat |
+| Ganti Rugi Personal | Semua karyawan | Satu kali per karyawan per periode; tidak bisa duplikat |
+| Ganti Rugi Team | **Karyawan KARYAWAN_TETAP only** | Satu kali per karyawan per periode; tidak bisa duplikat |
 | Cicilan | Karyawan tertentu yang punya pinjaman | Recurring setiap bulan; wajib isi sisa tenor (bulan); tenor dicatat bukan otomatis didekrementasi — finance input manual tiap periode sampai tenor habis |
 
 Catatan implementasi:

@@ -24,6 +24,7 @@ import {
   filterAdjustmentEmployeeOptions,
   getEligibleAdjustmentEmployeeOptions,
 } from "./employee-search";
+import { isKpiEmployeeGroup } from "@/lib/employee-groups";
 import type {
   PayrollAdjustmentRow,
   PayrollGradeCompensationRow,
@@ -776,7 +777,7 @@ export default function FinanceDashboardClient({
                               </span>
                               <span className="block truncate text-xs text-slate-500">
                                 {row.employeeCode} - {row.divisionName} - {row.positionName}
-                                {row.employeeGroup === "MANAGERIAL" ? " [M]" : ""}
+                                {isKpiEmployeeGroup(row.employeeGroup) ? " [TETAP]" : ""}
                               </span>
                             </span>
                           </button>
@@ -799,13 +800,13 @@ export default function FinanceDashboardClient({
                 {salaryConfigs
                   .filter((row) =>
                     adjustmentDraft.category === "GANTI_RUGI_TEAM"
-                      ? row.employeeGroup === "MANAGERIAL"
+                      ? isKpiEmployeeGroup(row.employeeGroup)
                       : true
                   )
                   .map((row) => (
                     <option key={row.employeeId} value={row.employeeId}>
                       {row.employeeName} · {row.employeeCode}
-                      {row.employeeGroup === "MANAGERIAL" ? " [M]" : ""}
+                      {isKpiEmployeeGroup(row.employeeGroup) ? " [TETAP]" : ""}
                     </option>
                   ))}
               </select>

@@ -17,6 +17,7 @@ import { and, asc, desc, eq, inArray, isNull, lte, gte, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { UserRole } from "@/types";
+import type { EmployeeGroup } from "@/lib/employee-groups";
 
 type ScheduleTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -67,7 +68,7 @@ export type TeamMember = {
   divisionName: string;
   positionId: string | null;
   positionName: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   scheduleName: string | null;
   scheduleCode: string | null;
   scheduleId: string | null;
@@ -95,7 +96,7 @@ export type HrdScheduleOverviewEmployee = {
   branchName: string;
   divisionName: string;
   positionName: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
 };
 
 export type HrdScheduleOverviewDayGroup = {

@@ -1,4 +1,6 @@
-export type EmployeeGroup = "MANAGERIAL" | "TEAMWORK";
+import type { EmployeeGroup as EmployeeGroupValue } from "@/lib/employee-groups";
+
+export type EmployeeGroup = EmployeeGroupValue;
 
 export type EmploymentStatus =
   | "TRAINING"

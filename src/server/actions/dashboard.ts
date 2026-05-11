@@ -10,6 +10,13 @@ import type { UserRole } from "@/types";
 
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 
+function isMissingAlphaTableError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+  const code = err.code ?? err.cause?.code;
+  const message = `${err.message ?? ""} ${err.cause?.message ?? ""}`.toLowerCase();
+  return code === "42P01" || (message.includes("attendance_alpha_events") && message.includes("does not exist"));
+}
+
 export type DashboardStats = {
   role: UserRole;
   employees: {
@@ -75,11 +82,17 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     .leftJoin(employees, eq(employeeReviews.employeeId, employees.id))
     .where(and(eq(employeeReviews.status, "SUBMITTED"), divScope));
 
-  const [alphaPending] = await db
-    .select({ cnt: count() })
-    .from(attendanceAlphaEvents)
-    .leftJoin(employees, eq(attendanceAlphaEvents.employeeId, employees.id))
-    .where(and(sql`${attendanceAlphaEvents.status} <> 'SP1_ISSUED'`, divScope));
+  let alphaPendingCount = 0;
+  try {
+    const [alphaPending] = await db
+      .select({ cnt: count() })
+      .from(attendanceAlphaEvents)
+      .leftJoin(employees, eq(attendanceAlphaEvents.employeeId, employees.id))
+      .where(and(sql`${attendanceAlphaEvents.status} <> 'SP1_ISSUED'`, divScope));
+    alphaPendingCount = Number(alphaPending?.cnt ?? 0);
+  } catch (error) {
+    if (!isMissingAlphaTableError(error)) throw error;
+  }
 
   const actStatusRows = await db
     .select({ status: dailyActivityEntries.status, jumlah: count() })
@@ -119,7 +132,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       tickets: Number(ticketPending?.cnt ?? 0),
       activities: Number(activityPending?.cnt ?? 0),
       reviews: Number(reviewPending?.cnt ?? 0),
-      alpha: Number(alphaPending?.cnt ?? 0),
+      alpha: alphaPendingCount,
     },
     activityByStatus: actStatusRows.map((r) => ({ status: r.status, jumlah: Number(r.jumlah) })),
     divisionPerformance: divPerfRows.map((r) => ({

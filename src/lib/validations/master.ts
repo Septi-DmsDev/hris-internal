@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ALL_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 
 export const branchSchema = z.object({
   name: z.string().min(1, "Nama cabang wajib diisi").max(100),
@@ -30,7 +31,7 @@ export const divisionSchema = z.object({
 export const positionSchema = z.object({
   name: z.string().min(1, "Nama jabatan wajib diisi").max(100),
   code: z.string().min(1, "Kode wajib diisi").max(20).toUpperCase(),
-  employeeGroup: z.enum(["MANAGERIAL", "TEAMWORK"]),
+  employeeGroup: z.enum([...ALL_EMPLOYEE_GROUPS]),
   isActive: z.boolean().default(true),
 });
 

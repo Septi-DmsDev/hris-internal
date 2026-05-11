@@ -36,7 +36,7 @@ Fungsi bisnis yang sudah muncul di code:
 - profiling karyawan dan histori perubahan;
 - mutasi massal penempatan (cabang/divisi/jabatan/grade/kelompok karyawan);
 - katalog poin, import workbook, dan entry catalog manual;
-- aktivitas harian TEAMWORK, batch submit, approval SPV/KABAG, HRD flow;
+- aktivitas harian poin-based (Mitra Kerja, Borongan, Training), batch submit, approval SPV/KABAG, HRD flow;
 - generate performa bulanan;
 - input massal persentase performa managerial per periode oleh HRD/SUPER_ADMIN;
 - ticketing izin/sakit/cuti dan leave quota;
@@ -109,7 +109,7 @@ Employee Link
 | Employee profiling | ada | create, update, delete, histori, detail page |
 | Employee placement | ada | `/positioning` untuk mutasi massal; `/divisi` dipertahankan sebagai redirect kompatibilitas |
 | Self-service | ada | `/me`, `/me/profile`, `/settings`, `/schedule` |
-| Performance point | ada, perlu hardening | self-service TEAMWORK ada; input massal managerial ada; deadline H+1/H+2 masih perlu enforcement lengkap |
+| Performance point | ada, perlu hardening | self-service poin-based ada; input massal managerial ada; deadline H+1/H+2 masih perlu enforcement lengkap |
 | Attendance | ada, manual | `/absensi`, dipakai payroll untuk fulltime/disiplin; integrasi fingerprint/ADMS belum ada |
 | Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
 | Ticket approval queue | ada | `/ticketingapproval` dipakai role approver untuk antrian dan histori approval tiket |

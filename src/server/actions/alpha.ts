@@ -7,10 +7,18 @@ import { getCurrentUserRoleRow, getUser, requireAuth, checkRole } from "@/lib/au
 import { employeeScheduleAssignments, employees, workScheduleDays, workSchedules } from "@/lib/db/schema/employee";
 import { attendanceAlphaEvents, attendanceTickets, employeeAlerts, employeeAttendanceRecords, incidentLogs } from "@/lib/db/schema/hr";
 import { divisions } from "@/lib/db/schema/master";
+import { POINT_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 import { alphaActionSchema } from "@/lib/validations/hr";
 import type { UserRole } from "@/types";
 
 const ALPHA_MANAGE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
+
+function isMissingAlphaTableError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+  const code = err.code ?? err.cause?.code;
+  const message = `${err.message ?? ""} ${err.cause?.message ?? ""}`.toLowerCase();
+  return code === "42P01" || (message.includes("attendance_alpha_events") && message.includes("does not exist"));
+}
 
 function toYmd(date: Date): string {
   const y = date.getFullYear();
@@ -74,7 +82,7 @@ export async function detectAlphaAbsences(targetDateInput?: string) {
     .where(
       and(
         eq(employees.isActive, true),
-        eq(employees.employeeGroup, "TEAMWORK"),
+        inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS),
         lte(employeeScheduleAssignments.effectiveStartDate, targetDate),
         sql`${employeeScheduleAssignments.effectiveEndDate} is null or ${employeeScheduleAssignments.effectiveEndDate} >= ${targetDate}`
       )
@@ -168,26 +176,45 @@ export async function getAlphaMonitoringWorkspace() {
     return { role, alphaEvents: [], pendingCount: 0 };
   }
 
-  const rows = await db
-    .select({
-      id: attendanceAlphaEvents.id,
-      employeeId: attendanceAlphaEvents.employeeId,
-      employeeName: employees.fullName,
-      employeeCode: employees.employeeCode,
-      divisionName: divisions.name,
-      alphaDate: attendanceAlphaEvents.alphaDate,
-      alphaCount: attendanceAlphaEvents.alphaCount,
-      status: attendanceAlphaEvents.status,
-      callSentAt: attendanceAlphaEvents.callSentAt,
-      sp1IssuedAt: attendanceAlphaEvents.sp1IssuedAt,
-      notes: attendanceAlphaEvents.notes,
-      createdAt: attendanceAlphaEvents.createdAt,
-    })
-    .from(attendanceAlphaEvents)
-    .innerJoin(employees, eq(attendanceAlphaEvents.employeeId, employees.id))
-    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(eq(employees.isActive, true))
-    .orderBy(desc(attendanceAlphaEvents.alphaDate), desc(attendanceAlphaEvents.createdAt));
+  let rows: Array<{
+    id: string;
+    employeeId: string;
+    employeeName: string | null;
+    employeeCode: string | null;
+    divisionName: string | null;
+    alphaDate: Date;
+    alphaCount: number;
+    status: string;
+    callSentAt: Date | null;
+    sp1IssuedAt: Date | null;
+    notes: string | null;
+    createdAt: Date;
+  }> = [];
+
+  try {
+    rows = await db
+      .select({
+        id: attendanceAlphaEvents.id,
+        employeeId: attendanceAlphaEvents.employeeId,
+        employeeName: employees.fullName,
+        employeeCode: employees.employeeCode,
+        divisionName: divisions.name,
+        alphaDate: attendanceAlphaEvents.alphaDate,
+        alphaCount: attendanceAlphaEvents.alphaCount,
+        status: attendanceAlphaEvents.status,
+        callSentAt: attendanceAlphaEvents.callSentAt,
+        sp1IssuedAt: attendanceAlphaEvents.sp1IssuedAt,
+        notes: attendanceAlphaEvents.notes,
+        createdAt: attendanceAlphaEvents.createdAt,
+      })
+      .from(attendanceAlphaEvents)
+      .innerJoin(employees, eq(attendanceAlphaEvents.employeeId, employees.id))
+      .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+      .where(eq(employees.isActive, true))
+      .orderBy(desc(attendanceAlphaEvents.alphaDate), desc(attendanceAlphaEvents.createdAt));
+  } catch (error) {
+    if (!isMissingAlphaTableError(error)) throw error;
+  }
 
   return {
     role,

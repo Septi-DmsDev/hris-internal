@@ -25,6 +25,11 @@ import {
   requireAuth,
 } from "@/lib/auth/session";
 import {
+  KPI_EMPLOYEE_GROUPS,
+  POINT_EMPLOYEE_GROUPS,
+  isKpiEmployeeGroup,
+} from "@/lib/employee-groups";
+import {
   batchSubmitDraftSchema,
   dailyActivityDecisionSchema,
   dailyActivityEntrySchema,
@@ -163,7 +168,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[])
       .leftJoin(divisions, eq(employees.divisionId, divisions.id))
       .where(
         and(
-          eq(employees.employeeGroup, "TEAMWORK"),
+          inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS),
           eq(employees.isActive, true),
           inArray(employees.divisionId, divisionIds)
         )
@@ -184,7 +189,7 @@ async function getScopedTeamworkEmployees(role: UserRole, divisionIds: string[])
     })
     .from(employees)
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .where(and(eq(employees.employeeGroup, "TEAMWORK"), eq(employees.isActive, true)))
+    .where(and(inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS), eq(employees.isActive, true)))
     .orderBy(asc(employees.fullName));
 }
 
@@ -205,7 +210,7 @@ async function getManagerialEmployeeOptions(role: UserRole) {
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
     .where(
       and(
-        eq(employees.employeeGroup, "MANAGERIAL"),
+        inArray(employees.employeeGroup, KPI_EMPLOYEE_GROUPS),
         eq(employees.isActive, true)
       )
     )
@@ -788,7 +793,7 @@ export async function generateMonthlyPerformance(input: unknown) {
       employeeCode: employees.employeeCode,
     })
     .from(employees)
-    .where(and(eq(employees.employeeGroup, "TEAMWORK"), eq(employees.isActive, true)))
+    .where(and(inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS), eq(employees.isActive, true)))
     .orderBy(asc(employees.fullName));
 
   const periodStartDate = parsed.data.periodStartDate;
@@ -919,7 +924,7 @@ export async function generateMonthlyPerformance(input: unknown) {
         totalTargetPoints: calculated.totalTargetPoints,
         totalApprovedPoints: calculated.totalApprovedPoints.toFixed(2),
         performancePercent: calculated.performancePercent.toFixed(2),
-        status: "FINALIZED",
+        status: "FINALIZED" as const,
       };
 
       await tx.insert(monthlyPointPerformances).values(
@@ -1030,7 +1035,7 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
       totalTargetPoints,
       totalApprovedPoints: totalApprovedPoints.toFixed(2),
       performancePercent: parsed.data.performancePercent.toFixed(2),
-      status: "FINALIZED",
+      status: "FINALIZED" as const,
     };
 
     await tx.insert(monthlyPointPerformances).values(
@@ -1039,7 +1044,7 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
         : monthlyPayload
     );
 
-    if (employee.employeeGroup === "MANAGERIAL" && period) {
+    if (isKpiEmployeeGroup(employee.employeeGroup) && period) {
       const [existing] = await tx
         .select({ id: managerialKpiSummaries.id })
         .from(managerialKpiSummaries)
@@ -1490,11 +1495,11 @@ export async function getTeamPerformanceWorkspace() {
     .where(
       scopedDivisionIds
         ? and(
-            eq(employees.employeeGroup, "TEAMWORK"),
+            inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS),
             eq(employees.isActive, true),
             inArray(employees.divisionId, scopedDivisionIds)
           )
-        : and(eq(employees.employeeGroup, "TEAMWORK"), eq(employees.isActive, true))
+        : and(inArray(employees.employeeGroup, POINT_EMPLOYEE_GROUPS), eq(employees.isActive, true))
     )
     .orderBy(asc(employees.fullName));
   if (employeeRows.length === 0) {

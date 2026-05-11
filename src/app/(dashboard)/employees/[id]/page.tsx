@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEmployeeById } from "@/server/actions/employees";
+import { resolveEmployeeGroupLabel } from "@/lib/employee-groups";
 
 const EMPLOYMENT_STATUS_LABEL: Record<string, string> = {
   TRAINING: "Training",
@@ -117,7 +118,7 @@ export default async function EmployeeDetailPage({
             <Badge variant={employee.isActive ? "default" : "secondary"}>
               {employee.isActive ? "Aktif" : "Nonaktif"}
             </Badge>
-            <Badge variant="outline">{employee.employeeGroup}</Badge>
+            <Badge variant="outline">{resolveEmployeeGroupLabel(employee.employeeGroup)}</Badge>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">

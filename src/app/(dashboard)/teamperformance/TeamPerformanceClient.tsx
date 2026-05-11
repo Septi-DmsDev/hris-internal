@@ -109,12 +109,12 @@ export default function TeamPerformanceClient({
           <div className="rounded-lg border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">
-                Daftar Karyawan TEAMWORK ({divisionEmployees.length})
+                Daftar Karyawan Poin-Based ({divisionEmployees.length})
               </h2>
             </div>
             {divisionEmployees.length === 0 ? (
               <div className="px-4 py-8 text-sm text-slate-500">
-                Tidak ada karyawan TEAMWORK pada divisi ini.
+                Tidak ada karyawan poin-based pada divisi ini.
               </div>
             ) : (
               <div className="divide-y divide-slate-100">

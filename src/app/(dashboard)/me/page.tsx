@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getMyDashboard } from "@/server/actions/me";
+import { isPointBasedEmployeeGroup, resolveEmployeeGroupLabel } from "@/lib/employee-groups";
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -110,7 +111,7 @@ export default async function MePage() {
             <Badge variant={employee.isActive ? "default" : "secondary"}>
               {employee.isActive ? "Aktif" : "Nonaktif"}
             </Badge>
-            <Badge variant="outline">{employee.employeeGroup}</Badge>
+            <Badge variant="outline">{resolveEmployeeGroupLabel(employee.employeeGroup)}</Badge>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{employee.fullName}</h1>
@@ -176,7 +177,7 @@ export default async function MePage() {
         />
       </section>
 
-      {employee.employeeGroup === "TEAMWORK" && teamworkActivitySummary ? (
+      {isPointBasedEmployeeGroup(employee.employeeGroup) && teamworkActivitySummary ? (
         <section className="space-y-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">

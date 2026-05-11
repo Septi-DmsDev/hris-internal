@@ -10,6 +10,7 @@ import { divisions } from "@/lib/db/schema/master";
 import { pointCatalogEntries } from "@/lib/db/schema/point";
 import { resolvePayrollPeriod } from "@/server/payroll-engine/resolve-payroll-period";
 import { getActivePointCatalogVersion } from "@/server/services/point-catalog-service";
+import { KPI_EMPLOYEE_GROUPS, POINT_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 import {
   overtimeDecisionSchema,
   overtimeRequestSchema,
@@ -18,6 +19,7 @@ import {
   spvSelfOvertimeRequestSchema,
 } from "@/lib/validations/overtime";
 import type { UserRole } from "@/types";
+import type { EmployeeGroup } from "@/lib/employee-groups";
 
 const OVERTIME_APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "SPV"];
 const OVERTIME_SUBMITTER_ROLES: UserRole[] = ["TEAMWORK"];
@@ -123,7 +125,7 @@ type ScopedEmployeeOption = {
   employeeCode: string;
   fullName: string;
   divisionName: string | null;
-  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+  employeeGroup: EmployeeGroup;
 };
 
 type OvertimeCatalogEntry = {
@@ -282,7 +284,7 @@ export async function getOvertimeWorkspace() {
         .where(
           and(
             inArray(employees.divisionId, roleRow.divisionIds),
-            inArray(employees.employeeGroup, ["TEAMWORK", "MANAGERIAL"]),
+            inArray(employees.employeeGroup, [...POINT_EMPLOYEE_GROUPS, ...KPI_EMPLOYEE_GROUPS]),
             eq(employees.isActive, true),
           )
         )
@@ -568,8 +570,8 @@ export async function scheduleDivisionOvertime(input: unknown) {
   if (!roleRow.divisionIds.includes(targetEmployee.divisionId)) {
     return { error: "Karyawan tujuan di luar scope divisi SPV." };
   }
-  if (!["TEAMWORK", "MANAGERIAL"].includes(targetEmployee.employeeGroup)) {
-    return { error: "Atur lembur hanya untuk TEAMWORK dan MANAGERIAL." };
+  if (![...POINT_EMPLOYEE_GROUPS, ...KPI_EMPLOYEE_GROUPS].includes(targetEmployee.employeeGroup as (typeof POINT_EMPLOYEE_GROUPS)[number] | (typeof KPI_EMPLOYEE_GROUPS)[number])) {
+    return { error: "Atur lembur hanya untuk karyawan aktif yang relevan." };
   }
 
   await db.insert(overtimeRequests).values(

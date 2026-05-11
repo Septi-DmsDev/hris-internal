@@ -16,7 +16,7 @@ const rows = [
     employeeName: "Rendy Saputra",
     positionName: "Managerial",
     divisionName: "Finance",
-    employeeGroup: "MANAGERIAL" as const,
+    employeeGroup: "KARYAWAN_TETAP" as const,
   },
 ];
 
@@ -39,6 +39,6 @@ describe("filterAdjustmentEmployeeOptions", () => {
     const result = filterAdjustmentEmployeeOptions(rows, "GANTI_RUGI_TEAM", "");
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.employeeGroup).toBe("MANAGERIAL");
+    expect(result[0]?.employeeGroup).toBe("KARYAWAN_TETAP");
   });
 });

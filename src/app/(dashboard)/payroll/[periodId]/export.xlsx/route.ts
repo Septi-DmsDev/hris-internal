@@ -29,7 +29,7 @@ export async function GET(_: Request, context: RouteContext) {
     results: workspace.results.map((row) => ({
       employeeCode: row.employeeCode ?? "-",
       employeeName: row.employeeName ?? "-",
-      employeeGroup: row.employeeGroup ?? "TEAMWORK",
+      employeeGroup: row.employeeGroup ?? "MITRA_KERJA",
       divisionName: row.divisionName ?? "-",
       positionName: row.positionName ?? "-",
       payrollStatus: row.payrollStatus ?? "-",

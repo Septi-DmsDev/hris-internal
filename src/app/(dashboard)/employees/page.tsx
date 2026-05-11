@@ -23,7 +23,7 @@ export default async function EmployeesPage() {
     phoneNumber: string | null;
     divisionName: string | null;
     positionName: string | null;
-    employeeGroup: "MANAGERIAL" | "TEAMWORK";
+    employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
     employmentStatus:
       | "TRAINING"
       | "REGULER"

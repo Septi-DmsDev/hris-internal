@@ -20,6 +20,11 @@ import { CalendarCog, CalendarDays, CheckCircle2, Clock, Filter, Loader2, Users 
 import type { MyScheduleResult } from "@/server/actions/schedule";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowsRotate } from "@fortawesome/free-solid-svg-icons";
+import {
+  NEW_EMPLOYEE_GROUPS,
+  normalizeEmployeeGroup,
+  resolveEmployeeGroupLabel,
+} from "@/lib/employee-groups";
 
 type TeamMember = {
   employeeId: string;
@@ -31,7 +36,7 @@ type TeamMember = {
   divisionName: string;
   positionId: string | null;
   positionName: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
   scheduleName: string | null;
   scheduleCode: string | null;
   scheduleId: string | null;
@@ -192,7 +197,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
         const positionMatch = positionFilter
           ? (member.positionId ?? member.positionName) === positionFilter
           : true;
-        const groupMatch = groupFilter ? member.employeeGroup === groupFilter : true;
+        const groupMatch = groupFilter ? normalizeEmployeeGroup(member.employeeGroup) === groupFilter : true;
         return branchMatch && divisionMatch && positionMatch && groupMatch;
       }),
     [branchFilter, divisionFilter, groupFilter, positionFilter, teamMembers]
@@ -565,8 +570,11 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
                   className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700"
                 >
                   <option value="">Semua kelompok</option>
-                  <option value="TEAMWORK">TEAMWORK</option>
-                  <option value="MANAGERIAL">MANAGERIAL</option>
+                  {NEW_EMPLOYEE_GROUPS.map((group) => (
+                    <option key={group} value={group}>
+                      {resolveEmployeeGroupLabel(group)}
+                    </option>
+                  ))}
                 </select>
 
                 <div className="flex items-center gap-2">

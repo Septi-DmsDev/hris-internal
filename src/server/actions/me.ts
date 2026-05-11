@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/db";
+import type { EmployeeGroup } from "@/lib/employee-groups";
 import { getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import {
   employeeDivisionHistories,
@@ -50,7 +51,7 @@ type MyEmployeeCore = {
   divisionName: string | null;
   positionName: string | null;
   gradeName: string | null;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   employmentStatus: string;
   payrollStatus: string;
   supervisorName: string | null;

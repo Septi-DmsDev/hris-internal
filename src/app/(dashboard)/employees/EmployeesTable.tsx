@@ -15,9 +15,10 @@ import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/user
 import { Plus } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileExport, faFileImport } from "@fortawesome/free-solid-svg-icons";
+import { normalizeEmployeeGroup, type EmployeeGroup } from "@/lib/employee-groups";
 
 type Option = { id: string; name: string };
-type PositionOption = Option & { employeeGroup: "MANAGERIAL" | "TEAMWORK" };
+type PositionOption = Option & { employeeGroup: EmployeeGroup };
 type ScheduleOption = Option & { code: string };
 
 export type EmployeeFormOptions = {
@@ -40,7 +41,7 @@ export type EmployeeRow = {
   phoneNumber: string;
   divisionName: string;
   positionName: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   employmentStatus: "TRAINING" | "REGULER" | "DIALIHKAN_TRAINING" | "TIDAK_LOLOS" | "NONAKTIF" | "RESIGN";
   payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
   supervisorName: string;
@@ -69,7 +70,7 @@ type EmployeeDraft = {
   divisionId: string;
   positionId: string;
   gradeId: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   employmentStatus: "TRAINING" | "REGULER" | "DIALIHKAN_TRAINING" | "TIDAK_LOLOS" | "NONAKTIF" | "RESIGN";
   payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
   supervisorEmployeeId: string;
@@ -89,7 +90,9 @@ function toLoginEmail(username: string, fallbackEmail: string) {
 
 function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
   const today = new Date().toISOString().slice(0, 10);
-  const defaultPosition = options.positions.find((position) => position.employeeGroup === "TEAMWORK") ?? options.positions[0];
+  const defaultPosition =
+    options.positions.find((position) => normalizeEmployeeGroup(position.employeeGroup) === "MITRA_KERJA") ??
+    options.positions[0];
   const defaultSupervisor = options.supervisors[0];
 
   return {
@@ -113,7 +116,7 @@ function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
     divisionId: options.divisions[0]?.id ?? "",
     positionId: defaultPosition?.id ?? "",
     gradeId: options.grades[0]?.id ?? "",
-    employeeGroup: defaultPosition?.employeeGroup ?? "TEAMWORK",
+    employeeGroup: normalizeEmployeeGroup(defaultPosition?.employeeGroup ?? "MITRA_KERJA"),
     employmentStatus: "TRAINING",
     payrollStatus: "TRAINING",
     supervisorEmployeeId: defaultSupervisor?.id ?? "",
@@ -148,7 +151,7 @@ function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>, logi
     divisionId: employee.divisionId,
     positionId: employee.positionId,
     gradeId: employee.gradeId,
-    employeeGroup: employee.employeeGroup,
+    employeeGroup: normalizeEmployeeGroup(employee.employeeGroup),
     employmentStatus: employee.employmentStatus,
     payrollStatus: employee.payrollStatus,
     supervisorEmployeeId: employee.supervisorEmployeeId ?? "",

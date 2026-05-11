@@ -8,6 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  NEW_EMPLOYEE_GROUPS,
+  normalizeEmployeeGroup,
+  resolveEmployeeGroupLabel,
+  type EmployeeGroup,
+} from "@/lib/employee-groups";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -34,13 +40,8 @@ export type PositionRow = {
   id: string;
   name: string;
   code: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   isActive: boolean;
-};
-
-const GROUP_LABEL: Record<PositionRow["employeeGroup"], string> = {
-  MANAGERIAL: "Managerial",
-  TEAMWORK: "Teamwork",
 };
 
 type PositionsTableProps = {
@@ -113,8 +114,8 @@ export default function PositionsTable({ data }: PositionsTableProps) {
         header: "Kelompok",
         accessorKey: "employeeGroup",
         cell: ({ row }) => (
-          <Badge variant={row.original.employeeGroup === "MANAGERIAL" ? "outline" : "secondary"}>
-            {GROUP_LABEL[row.original.employeeGroup]}
+          <Badge variant={normalizeEmployeeGroup(row.original.employeeGroup) === "KARYAWAN_TETAP" ? "outline" : "secondary"}>
+            {resolveEmployeeGroupLabel(row.original.employeeGroup)}
           </Badge>
         ),
       },
@@ -207,11 +208,14 @@ export default function PositionsTable({ data }: PositionsTableProps) {
               <select
                 id="position-create-group"
                 name="employeeGroup"
-                defaultValue="TEAMWORK"
+                defaultValue="MITRA_KERJA"
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="TEAMWORK">Teamwork</option>
-                <option value="MANAGERIAL">Managerial</option>
+                {NEW_EMPLOYEE_GROUPS.map((group) => (
+                  <option key={group} value={group}>
+                    {resolveEmployeeGroupLabel(group)}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
@@ -284,11 +288,14 @@ export default function PositionsTable({ data }: PositionsTableProps) {
                 <select
                   id="position-edit-group"
                   name="employeeGroup"
-                  defaultValue={editingRow.employeeGroup}
+                  defaultValue={normalizeEmployeeGroup(editingRow.employeeGroup)}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="TEAMWORK">Teamwork</option>
-                  <option value="MANAGERIAL">Managerial</option>
+                  {NEW_EMPLOYEE_GROUPS.map((group) => (
+                    <option key={group} value={group}>
+                      {resolveEmployeeGroupLabel(group)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-2">

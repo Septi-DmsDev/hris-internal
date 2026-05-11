@@ -1,4 +1,5 @@
 import { POINT_TARGET_HARIAN } from "@/config/constants";
+import { ALL_EMPLOYEE_GROUPS, isPointBasedEmployeeGroup } from "@/lib/employee-groups";
 import { z } from "zod";
 
 const optionalText = z.string().trim().optional().transform((value) => value || undefined);
@@ -37,7 +38,7 @@ export const employeeSchema = z
       .optional()
       .or(z.literal(""))
       .transform((value) => value || undefined),
-    employeeGroup: z.enum(["MANAGERIAL", "TEAMWORK"]),
+    employeeGroup: z.enum([...ALL_EMPLOYEE_GROUPS]),
     employmentStatus: z.enum([
       "TRAINING",
       "REGULER",
@@ -61,11 +62,11 @@ export const employeeSchema = z
     notes: optionalText,
   })
   .superRefine((value, ctx) => {
-    if (value.employeeGroup === "TEAMWORK" && !value.supervisorEmployeeId) {
+    if (isPointBasedEmployeeGroup(value.employeeGroup) && !value.supervisorEmployeeId) {
       ctx.addIssue({
         code: "custom",
         path: ["supervisorEmployeeId"],
-        message: "Supervisor wajib dipilih untuk karyawan TEAMWORK.",
+        message: "Supervisor wajib dipilih untuk karyawan poin-based.",
       });
     }
 
@@ -117,7 +118,7 @@ export const employeeOrganizationBulkUpdateSchema = z
     divisionId: z.string().uuid("Divisi tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
     positionId: z.string().uuid("Jabatan tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
     gradeId: z.string().uuid("Grade tidak valid").optional().or(z.literal("")).transform((value) => value || undefined),
-    employeeGroup: z.enum(["MANAGERIAL", "TEAMWORK"]).optional(),
+    employeeGroup: z.enum([...ALL_EMPLOYEE_GROUPS]).optional(),
     effectiveDate: z.union([z.coerce.date(), z.literal(""), z.undefined()]).transform((value) => (value === "" ? undefined : value)),
     notes: optionalText,
   })

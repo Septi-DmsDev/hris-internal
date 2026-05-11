@@ -9,11 +9,9 @@ import {
   numeric,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { ALL_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 
-export const employeeGroupEnum = pgEnum("employee_group", [
-  "MANAGERIAL",
-  "TEAMWORK",
-]);
+export const employeeGroupEnum = pgEnum("employee_group", [...ALL_EMPLOYEE_GROUPS]);
 
 export const branches = pgTable("branches", {
   id: uuid("id").defaultRandom().primaryKey(),

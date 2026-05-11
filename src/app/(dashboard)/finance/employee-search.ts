@@ -1,4 +1,5 @@
 import type { AdjustmentCategory } from "@/lib/validations/payroll";
+import { isKpiEmployeeGroup } from "@/lib/employee-groups";
 
 export type AdjustmentEmployeeOption = {
   employeeId: string;
@@ -6,7 +7,7 @@ export type AdjustmentEmployeeOption = {
   employeeName: string;
   positionName: string;
   divisionName: string;
-  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+  employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
 };
 
 function normalizeSearch(value: string) {
@@ -22,7 +23,7 @@ export function getEligibleAdjustmentEmployeeOptions<T extends AdjustmentEmploye
   category: AdjustmentCategory
 ) {
   return rows.filter((row) =>
-    category === "GANTI_RUGI_TEAM" ? row.employeeGroup === "MANAGERIAL" : true
+    category === "GANTI_RUGI_TEAM" ? isKpiEmployeeGroup(row.employeeGroup) : true
   );
 }
 

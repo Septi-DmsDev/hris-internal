@@ -14,6 +14,7 @@ import {
   submitSpvOvertimeRequest,
 } from "@/server/actions/overtime";
 import type { UserRole } from "@/types";
+import { resolveEmployeeGroupLabel } from "@/lib/employee-groups";
 
 export type OvertimeRow = {
   id: string;
@@ -52,7 +53,7 @@ export type ScopedEmployeeOption = {
   employeeCode: string;
   fullName: string;
   divisionName: string | null;
-  employeeGroup: "TEAMWORK" | "MANAGERIAL";
+  employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
 };
 
 export type OvertimeCatalogEntry = {
@@ -549,7 +550,7 @@ export default function OvertimeClient({
       {openTwSubmit ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-4 space-y-3">
-            <h3 className="text-base font-semibold text-slate-900">Ajukan Overtime / Lembur (TEAMWORK)</h3>
+            <h3 className="text-base font-semibold text-slate-900">Ajukan Overtime / Lembur</h3>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Tanggal</label>
@@ -817,7 +818,7 @@ export default function OvertimeClient({
           <div className="w-full max-w-lg rounded-lg bg-white p-4 space-y-3">
             <h3 className="text-base font-semibold text-slate-900">Atur Lembur Terjadwal Divisi</h3>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Karyawan (TEAMWORK / MANAGERIAL)</label>
+              <label className="text-xs font-medium text-slate-600">Karyawan</label>
               <select
                 value={targetEmployeeId}
                 onChange={(e) => setTargetEmployeeId(e.target.value)}
@@ -826,7 +827,7 @@ export default function OvertimeClient({
                 <option value="">Pilih karyawan</option>
                 {scopedEmployees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
-                    {employee.employeeCode} - {employee.fullName} ({employee.employeeGroup})
+                    {employee.employeeCode} - {employee.fullName} ({resolveEmployeeGroupLabel(employee.employeeGroup)})
                   </option>
                 ))}
               </select>

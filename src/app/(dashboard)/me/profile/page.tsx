@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { getMyProfile } from "@/server/actions/me";
+import { resolveEmployeeGroupLabel } from "@/lib/employee-groups";
 import MyPersonalProfileForm from "./MyPersonalProfileForm";
 
 const EMPLOYMENT_STATUS_LABEL: Record<string, string> = {
@@ -128,7 +129,7 @@ export default async function MyProfilePage() {
           <Badge variant={employee.isActive ? "default" : "secondary"}>
             {employee.isActive ? "Aktif" : "Nonaktif"}
           </Badge>
-          <Badge variant="outline">{employee.employeeGroup}</Badge>
+          <Badge variant="outline">{resolveEmployeeGroupLabel(employee.employeeGroup)}</Badge>
         </div>
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{employee.fullName}</h1>

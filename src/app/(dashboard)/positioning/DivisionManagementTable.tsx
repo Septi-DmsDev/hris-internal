@@ -7,10 +7,16 @@ import { DataTable } from "@/components/tables/DataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  NEW_EMPLOYEE_GROUPS,
+  normalizeEmployeeGroup,
+  resolveEmployeeGroupLabel,
+  type EmployeeGroup,
+} from "@/lib/employee-groups";
 import { bulkUpdateEmployeeOrganization } from "@/server/actions/employees";
 
 type Option = { id: string; name: string };
-type PositionOption = Option & { employeeGroup: "MANAGERIAL" | "TEAMWORK" };
+type PositionOption = Option & { employeeGroup: EmployeeGroup };
 
 export type DivisionManagementOptions = {
   branches: Option[];
@@ -27,7 +33,7 @@ export type DivisionEmployeeRow = {
   divisionName: string;
   positionName: string;
   gradeName: string;
-  employeeGroup: "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: EmployeeGroup;
   isActive: boolean;
 };
 
@@ -36,7 +42,7 @@ type BulkDraft = {
   divisionId: string;
   positionId: string;
   gradeId: string;
-  employeeGroup: "" | "MANAGERIAL" | "TEAMWORK";
+  employeeGroup: "" | EmployeeGroup;
   effectiveDate: string;
   notes: string;
 };
@@ -134,8 +140,8 @@ export default function DivisionManagementTable({ data, options }: { data: Divis
       header: "Kelompok",
       accessorKey: "employeeGroup",
       cell: ({ row }) => (
-        <Badge variant={row.original.employeeGroup === "MANAGERIAL" ? "outline" : "secondary"}>
-          {row.original.employeeGroup === "MANAGERIAL" ? "Managerial" : "Teamwork"}
+        <Badge variant={normalizeEmployeeGroup(row.original.employeeGroup) === "KARYAWAN_TETAP" ? "outline" : "secondary"}>
+          {resolveEmployeeGroupLabel(row.original.employeeGroup)}
         </Badge>
       ),
     },
@@ -150,9 +156,9 @@ export default function DivisionManagementTable({ data, options }: { data: Divis
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Cabang Baru</p><select value={draft.branchId} onChange={(event) => setDraft((prev) => ({ ...prev, branchId: event.target.value }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option>{options.branches.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
           <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Divisi Baru</p><select value={draft.divisionId} onChange={(event) => setDraft((prev) => ({ ...prev, divisionId: event.target.value }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option>{options.divisions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></div>
-          <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Jabatan Baru</p><select value={draft.positionId} onChange={(event) => setDraft((prev) => ({ ...prev, positionId: event.target.value }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option>{options.positions.map((option) => <option key={option.id} value={option.id}>{option.name} ({option.employeeGroup})</option>)}</select></div>
+          <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Jabatan Baru</p><select value={draft.positionId} onChange={(event) => setDraft((prev) => ({ ...prev, positionId: event.target.value }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option>{options.positions.map((option) => <option key={option.id} value={option.id}>{option.name} ({resolveEmployeeGroupLabel(option.employeeGroup)})</option>)}</select></div>
           <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Grade Baru</p><select value={draft.gradeId} onChange={(event) => setDraft((prev) => ({ ...prev, gradeId: event.target.value }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option>{options.grades.map((option) => <option key={option.id} value={option.id}>{option.name} ({option.code})</option>)}</select></div>
-          <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Kelompok Karyawan Baru</p><select value={draft.employeeGroup} onChange={(event) => setDraft((prev) => ({ ...prev, employeeGroup: event.target.value as BulkDraft["employeeGroup"] }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option><option value="TEAMWORK">Teamwork</option><option value="MANAGERIAL">Managerial</option></select></div>
+          <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Kelompok Karyawan Baru</p><select value={draft.employeeGroup} onChange={(event) => setDraft((prev) => ({ ...prev, employeeGroup: event.target.value as BulkDraft["employeeGroup"] }))} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Tidak diubah</option>{NEW_EMPLOYEE_GROUPS.map((group) => <option key={group} value={group}>{resolveEmployeeGroupLabel(group)}</option>)}</select></div>
           <div className="space-y-1.5"><p className="text-xs font-medium text-slate-600">Tanggal Efektif</p><Input type="date" value={draft.effectiveDate} onChange={(event) => setDraft((prev) => ({ ...prev, effectiveDate: event.target.value }))} /></div>
         </div>
 

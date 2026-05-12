@@ -50,7 +50,8 @@ export async function proxy(request: NextRequest) {
   const isPublic =
     pathname === "/" ||
     pathname.startsWith("/auth/") ||
-    pathname.startsWith("/_next");
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api/integrations/");
 
   if (!user && !isLoginPage && !isPublic) {
     const redirectResponse = NextResponse.redirect(new URL("/login", request.url));

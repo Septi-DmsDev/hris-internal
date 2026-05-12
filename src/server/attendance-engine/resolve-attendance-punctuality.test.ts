@@ -11,6 +11,8 @@ describe("resolveAttendancePunctuality", () => {
     breakEnd: "13:00",
     breakToleranceMinutes: 5,
     checkInToleranceMinutes: 0,
+    checkOutStart: null,
+    checkOutToleranceMinutes: 5,
   } as const;
 
   it("menganggap check-in terlambat tanpa toleransi", () => {
@@ -90,5 +92,21 @@ describe("resolveAttendancePunctuality", () => {
       scheduleDay,
     });
     expect(result).toBeNull();
+  });
+
+  it("menandai telat jika tap pulang sebelum checkOutStart", () => {
+    expect(resolveAttendancePunctuality({
+      checkInTime: "07:00",
+      checkOutTime: "14:50",
+      scheduleDay: { ...scheduleDay, checkOutStart: "15:00" },
+    })).toBe("TELAT");
+  });
+
+  it("mengizinkan checkout tepat pada checkOutStart", () => {
+    expect(resolveAttendancePunctuality({
+      checkInTime: "07:00",
+      checkOutTime: "15:00",
+      scheduleDay: { ...scheduleDay, checkOutStart: "15:00", endTime: "16:00", checkOutToleranceMinutes: 0 },
+    })).toBe("TEPAT_WAKTU");
   });
 });

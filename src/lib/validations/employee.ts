@@ -90,6 +90,8 @@ export const workScheduleDaySchema = z
     breakEnd: optionalTime,
     breakToleranceMinutes: z.coerce.number().int().min(0).max(60).default(5),
     checkInToleranceMinutes: z.coerce.number().int().min(0).max(60).default(0),
+    checkOutStart: optionalTime,
+    checkOutToleranceMinutes: z.coerce.number().int().min(0).max(60).default(0),
     targetPoints: z.coerce.number().int().min(0).default(POINT_TARGET_HARIAN),
   })
   .superRefine((value, ctx) => {
@@ -169,6 +171,12 @@ export const workShiftMasterSchema = z
     name: z.string().trim().min(1, "Nama shift wajib diisi").max(100),
     startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format jam mulai harus HH:MM"),
     endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Format jam selesai harus HH:MM"),
+    breakStart: optionalTime,
+    breakEnd: optionalTime,
+    checkOutStart: optionalTime,
+    checkInToleranceMinutes: z.coerce.number().int().min(0).max(60).default(0),
+    breakToleranceMinutes: z.coerce.number().int().min(0).max(60).default(5),
+    checkOutToleranceMinutes: z.coerce.number().int().min(0).max(60).default(0),
     isOvernight: z.boolean().default(false),
     applicableDivisionCodes: z.array(z.string().trim().min(1).max(20)).default([]),
     notes: optionalText,
@@ -181,6 +189,13 @@ export const workShiftMasterSchema = z
         code: "custom",
         path: ["endTime"],
         message: "Jam selesai tidak boleh sama dengan jam mulai.",
+      });
+    }
+    if (Boolean(value.breakStart) !== Boolean(value.breakEnd)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["breakStart"],
+        message: "Jam istirahat mulai dan selesai harus diisi berpasangan.",
       });
     }
   });

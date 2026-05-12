@@ -64,6 +64,12 @@ export async function createWorkShiftMaster(input: unknown) {
       name: parsed.data.name,
       startTime: parsed.data.startTime,
       endTime: parsed.data.endTime,
+      breakStart: parsed.data.breakStart ?? null,
+      breakEnd: parsed.data.breakEnd ?? null,
+      checkOutStart: parsed.data.checkOutStart ?? null,
+      checkInToleranceMinutes: parsed.data.checkInToleranceMinutes,
+      breakToleranceMinutes: parsed.data.breakToleranceMinutes,
+      checkOutToleranceMinutes: parsed.data.checkOutToleranceMinutes,
       isOvernight: parsed.data.isOvernight,
       applicableDivisionCodes: parsed.data.applicableDivisionCodes,
       notes: parsed.data.notes,
@@ -97,6 +103,12 @@ export async function updateWorkShiftMaster(id: string, input: unknown) {
         name: parsed.data.name,
         startTime: parsed.data.startTime,
         endTime: parsed.data.endTime,
+        breakStart: parsed.data.breakStart ?? null,
+        breakEnd: parsed.data.breakEnd ?? null,
+        checkOutStart: parsed.data.checkOutStart ?? null,
+        checkInToleranceMinutes: parsed.data.checkInToleranceMinutes,
+        breakToleranceMinutes: parsed.data.breakToleranceMinutes,
+        checkOutToleranceMinutes: parsed.data.checkOutToleranceMinutes,
         isOvernight: parsed.data.isOvernight,
         applicableDivisionCodes: parsed.data.applicableDivisionCodes,
         notes: parsed.data.notes,
@@ -164,6 +176,8 @@ export async function createWorkSchedule(input: unknown) {
           breakEnd: day.breakEnd ?? null,
           breakToleranceMinutes: day.breakToleranceMinutes,
           checkInToleranceMinutes: day.checkInToleranceMinutes,
+          checkOutStart: day.checkOutStart ?? null,
+          checkOutToleranceMinutes: day.checkOutToleranceMinutes,
           targetPoints: day.targetPoints,
         }))
       );
@@ -221,6 +235,8 @@ export async function updateWorkSchedule(id: string, input: unknown) {
           breakEnd: day.breakEnd ?? null,
           breakToleranceMinutes: day.breakToleranceMinutes,
           checkInToleranceMinutes: day.checkInToleranceMinutes,
+          checkOutStart: day.checkOutStart ?? null,
+          checkOutToleranceMinutes: day.checkOutToleranceMinutes,
           targetPoints: day.targetPoints,
         }))
       );

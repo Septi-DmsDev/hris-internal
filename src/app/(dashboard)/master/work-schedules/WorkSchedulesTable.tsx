@@ -55,6 +55,8 @@ type WorkScheduleDayDraft = {
   breakEnd: string;
   breakToleranceMinutes: string;
   checkInToleranceMinutes: string;
+  checkOutStart: string;
+  checkOutToleranceMinutes: string;
   targetPoints: string;
 };
 
@@ -85,6 +87,12 @@ export type WorkShiftRow = {
   name: string;
   startTime: string;
   endTime: string;
+  breakStart: string | null;
+  breakEnd: string | null;
+  checkOutStart: string | null;
+  checkInToleranceMinutes: number;
+  breakToleranceMinutes: number;
+  checkOutToleranceMinutes: number;
   isOvernight: boolean;
   applicableDivisionCodes: string[];
   notes: string;
@@ -97,6 +105,12 @@ type WorkShiftDraft = {
   name: string;
   startTime: string;
   endTime: string;
+  breakStart: string;
+  breakEnd: string;
+  checkOutStart: string;
+  checkInToleranceMinutes: string;
+  breakToleranceMinutes: string;
+  checkOutToleranceMinutes: string;
   isOvernight: boolean;
   applicableDivisionCodes: string;
   notes: string;
@@ -116,6 +130,8 @@ function createDefaultDays() {
     breakEnd: dayOfWeek === 0 ? "" : "13:00",
     breakToleranceMinutes: dayOfWeek === 0 ? "0" : "5",
     checkInToleranceMinutes: "0",
+    checkOutStart: "",
+    checkOutToleranceMinutes: "0",
     targetPoints: dayOfWeek === 0 ? "0" : String(POINT_TARGET_HARIAN),
   })) satisfies WorkScheduleDayDraft[];
 }
@@ -145,6 +161,8 @@ function createDraftFromRow(row: WorkScheduleRow): WorkScheduleDraft {
         breakEnd: day.breakEnd ?? "",
         breakToleranceMinutes: String(day.breakToleranceMinutes ?? 5),
         checkInToleranceMinutes: String(day.checkInToleranceMinutes ?? 0),
+        checkOutStart: day.checkOutStart ?? "",
+        checkOutToleranceMinutes: day.checkOutToleranceMinutes ?? "0",
         targetPoints: String(day.targetPoints),
       })),
   };
@@ -166,6 +184,8 @@ function toActionInput(draft: WorkScheduleDraft) {
         breakEnd: day.breakEnd,
         breakToleranceMinutes: Number(day.breakToleranceMinutes || 0),
         checkInToleranceMinutes: Number(day.checkInToleranceMinutes || 0),
+        checkOutStart: day.checkOutStart,
+        checkOutToleranceMinutes: Number(day.checkOutToleranceMinutes || 0),
         targetPoints: Number(day.targetPoints || 0),
       })),
   };
@@ -177,6 +197,12 @@ function createShiftDraft(): WorkShiftDraft {
     name: "",
     startTime: "08:00",
     endTime: "17:00",
+    breakStart: "12:00",
+    breakEnd: "13:00",
+    checkOutStart: "",
+    checkInToleranceMinutes: "0",
+    breakToleranceMinutes: "5",
+    checkOutToleranceMinutes: "0",
     isOvernight: false,
     applicableDivisionCodes: "",
     notes: "",
@@ -191,6 +217,12 @@ function createShiftDraftFromRow(row: WorkShiftRow): WorkShiftDraft {
     name: row.name,
     startTime: row.startTime,
     endTime: row.endTime,
+    breakStart: row.breakStart ?? "",
+    breakEnd: row.breakEnd ?? "",
+    checkOutStart: row.checkOutStart ?? "",
+    checkInToleranceMinutes: String(row.checkInToleranceMinutes),
+    breakToleranceMinutes: String(row.breakToleranceMinutes),
+    checkOutToleranceMinutes: String(row.checkOutToleranceMinutes),
     isOvernight: row.isOvernight,
     applicableDivisionCodes: row.applicableDivisionCodes.join(", "),
     notes: row.notes,
@@ -205,6 +237,12 @@ function toShiftInput(draft: WorkShiftDraft) {
     name: draft.name,
     startTime: draft.startTime,
     endTime: draft.endTime,
+    breakStart: draft.breakStart,
+    breakEnd: draft.breakEnd,
+    checkOutStart: draft.checkOutStart,
+    checkInToleranceMinutes: Number(draft.checkInToleranceMinutes || 0),
+    breakToleranceMinutes: Number(draft.breakToleranceMinutes || 0),
+    checkOutToleranceMinutes: Number(draft.checkOutToleranceMinutes || 0),
     isOvernight: draft.isOvernight,
     applicableDivisionCodes: draft.applicableDivisionCodes
       .split(",")
@@ -300,6 +338,8 @@ function ScheduleForm({
                   onDayChange(index, "breakEnd", "");
                   onDayChange(index, "breakToleranceMinutes", "0");
                   onDayChange(index, "checkInToleranceMinutes", "0");
+                  onDayChange(index, "checkOutStart", "");
+                  onDayChange(index, "checkOutToleranceMinutes", "0");
                   onDayChange(index, "targetPoints", "0");
                 } else {
                   onDayChange(index, "dayStatus", "KERJA");
@@ -346,6 +386,12 @@ function ScheduleForm({
                   if (shift) {
                     onDayChange(index, "startTime", shift.startTime);
                     onDayChange(index, "endTime", shift.endTime);
+                    if (shift.breakStart) onDayChange(index, "breakStart", shift.breakStart);
+                    if (shift.breakEnd) onDayChange(index, "breakEnd", shift.breakEnd);
+                    if (shift.checkOutStart) onDayChange(index, "checkOutStart", shift.checkOutStart);
+                    onDayChange(index, "checkInToleranceMinutes", String(shift.checkInToleranceMinutes));
+                    onDayChange(index, "breakToleranceMinutes", String(shift.breakToleranceMinutes));
+                    onDayChange(index, "checkOutToleranceMinutes", String(shift.checkOutToleranceMinutes));
                   }
                 }}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -427,6 +473,30 @@ function ScheduleForm({
                 disabled={!day.isWorkingDay}
                 onChange={(event) =>
                   onDayChange(index, "checkInToleranceMinutes", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Awal Tap Pulang</p>
+              <Input
+                type="time"
+                value={day.checkOutStart}
+                disabled={!day.isWorkingDay}
+                onChange={(event) =>
+                  onDayChange(index, "checkOutStart", event.target.value)
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Toleransi Pulang (menit)</p>
+              <Input
+                type="number"
+                min={0}
+                max={60}
+                value={day.checkOutToleranceMinutes}
+                disabled={!day.isWorkingDay}
+                onChange={(event) =>
+                  onDayChange(index, "checkOutToleranceMinutes", event.target.value)
                 }
               />
             </div>
@@ -688,8 +758,38 @@ export default function WorkSchedulesTable({
           <div className="grid gap-3 md:grid-cols-2">
             <Input value={shiftDraft.code} onChange={(event) => setShiftDraft((v) => ({ ...v, code: event.target.value }))} placeholder="Kode shift" />
             <Input value={shiftDraft.name} onChange={(event) => setShiftDraft((v) => ({ ...v, name: event.target.value }))} placeholder="Nama shift" />
-            <Input type="time" value={shiftDraft.startTime} onChange={(event) => setShiftDraft((v) => ({ ...v, startTime: event.target.value }))} />
-            <Input type="time" value={shiftDraft.endTime} onChange={(event) => setShiftDraft((v) => ({ ...v, endTime: event.target.value }))} />
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Jam Masuk</p>
+              <Input type="time" value={shiftDraft.startTime} onChange={(event) => setShiftDraft((v) => ({ ...v, startTime: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Jam Pulang</p>
+              <Input type="time" value={shiftDraft.endTime} onChange={(event) => setShiftDraft((v) => ({ ...v, endTime: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Mulai Istirahat</p>
+              <Input type="time" value={shiftDraft.breakStart} onChange={(event) => setShiftDraft((v) => ({ ...v, breakStart: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Selesai Istirahat</p>
+              <Input type="time" value={shiftDraft.breakEnd} onChange={(event) => setShiftDraft((v) => ({ ...v, breakEnd: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Awal Tap Pulang Valid</p>
+              <Input type="time" value={shiftDraft.checkOutStart} onChange={(event) => setShiftDraft((v) => ({ ...v, checkOutStart: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Toleransi Masuk (menit)</p>
+              <Input type="number" min={0} max={60} value={shiftDraft.checkInToleranceMinutes} onChange={(event) => setShiftDraft((v) => ({ ...v, checkInToleranceMinutes: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Toleransi Istirahat (menit)</p>
+              <Input type="number" min={0} max={60} value={shiftDraft.breakToleranceMinutes} onChange={(event) => setShiftDraft((v) => ({ ...v, breakToleranceMinutes: event.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500">Toleransi Pulang (menit)</p>
+              <Input type="number" min={0} max={60} value={shiftDraft.checkOutToleranceMinutes} onChange={(event) => setShiftDraft((v) => ({ ...v, checkOutToleranceMinutes: event.target.value }))} />
+            </div>
             <Input value={shiftDraft.sortOrder} onChange={(event) => setShiftDraft((v) => ({ ...v, sortOrder: event.target.value }))} type="number" placeholder="Urutan" />
             <select
               value={shiftDraft.isActive ? "true" : "false"}

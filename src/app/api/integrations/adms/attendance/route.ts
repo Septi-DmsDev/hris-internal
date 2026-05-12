@@ -108,6 +108,8 @@ export async function POST(request: NextRequest) {
           breakEnd: workScheduleDays.breakEnd,
           breakToleranceMinutes: workScheduleDays.breakToleranceMinutes,
           checkInToleranceMinutes: workScheduleDays.checkInToleranceMinutes,
+          checkOutStart: workScheduleDays.checkOutStart,
+          checkOutToleranceMinutes: workScheduleDays.checkOutToleranceMinutes,
         })
         .from(workScheduleDays)
         .where(inArray(workScheduleDays.scheduleId, scheduleIds))
@@ -204,6 +206,8 @@ export async function POST(request: NextRequest) {
             breakEnd: scheduleDay.breakEnd,
             breakToleranceMinutes: scheduleDay.breakToleranceMinutes,
             checkInToleranceMinutes: scheduleDay.checkInToleranceMinutes,
+            checkOutStart: scheduleDay.checkOutStart,
+            checkOutToleranceMinutes: scheduleDay.checkOutToleranceMinutes,
           }
         : null,
     });

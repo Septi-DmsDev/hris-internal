@@ -9,6 +9,8 @@ export type AttendanceScheduleDay = {
   breakEnd: string | null;
   breakToleranceMinutes: number;
   checkInToleranceMinutes: number;
+  checkOutStart: string | null;
+  checkOutToleranceMinutes: number;
 };
 
 export type ResolveAttendancePunctualityInput = {
@@ -34,6 +36,14 @@ function isLate(actual: string | null | undefined, expected: string | null, tole
   return actualMinutes > expectedMinutes + toleranceMinutes;
 }
 
+function isTooEarly(actual: string | null | undefined, earliest: string | null): boolean {
+  if (!actual || !earliest) return false;
+  const actualMinutes = parseMinutes(actual);
+  const earliestMinutes = parseMinutes(earliest);
+  if (actualMinutes == null || earliestMinutes == null) return false;
+  return actualMinutes < earliestMinutes;
+}
+
 export function resolveAttendancePunctuality(
   input: ResolveAttendancePunctualityInput
 ): AttendancePunctualityStatus | null {
@@ -53,12 +63,16 @@ export function resolveAttendancePunctuality(
     return "TELAT";
   }
 
-  if (!input.checkOutTime) {
+  // Checkout tap before checkOutStart is treated as invalid (employee left too early).
+  const effectiveCheckOut = isTooEarly(input.checkOutTime, scheduleDay.checkOutStart)
+    ? null
+    : input.checkOutTime;
+
+  if (!effectiveCheckOut) {
     return "TELAT";
   }
 
-  // breakToleranceMinutes covers both break return and checkout per spec ("toleransi istirahat/pulang")
-  if (isLate(input.checkOutTime, scheduleDay.endTime, scheduleDay.breakToleranceMinutes)) {
+  if (isLate(effectiveCheckOut, scheduleDay.endTime, scheduleDay.checkOutToleranceMinutes)) {
     return "TELAT";
   }
 

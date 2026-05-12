@@ -41,12 +41,28 @@ describe("resolveAttendancePunctuality", () => {
     })).toBe("TELAT");
   });
 
-  it("menganggap checkout akhir terlambat", () => {
+  it("mengizinkan checkout dalam toleransi 5 menit (lebih lambat)", () => {
     expect(resolveAttendancePunctuality({
       checkInTime: "07:00",
-      checkOutTime: "16:01",
+      checkOutTime: "16:05",
+      scheduleDay,
+    })).toBe("TEPAT_WAKTU");
+  });
+
+  it("menandai telat jika checkout melebihi toleransi (terlalu lambat)", () => {
+    expect(resolveAttendancePunctuality({
+      checkInTime: "07:00",
+      checkOutTime: "16:06",
       scheduleDay,
     })).toBe("TELAT");
+  });
+
+  it("mengizinkan checkout tepat waktu pada jam end", () => {
+    expect(resolveAttendancePunctuality({
+      checkInTime: "07:00",
+      checkOutTime: "16:00",
+      scheduleDay,
+    })).toBe("TEPAT_WAKTU");
   });
 
   it("menganggap checkout yang hilang sebagai telat", () => {

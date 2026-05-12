@@ -57,7 +57,7 @@ export function resolveAttendancePunctuality(
     return "TELAT";
   }
 
-  if (isLate(input.checkOutTime, scheduleDay.endTime, 0)) {
+  if (isLate(input.checkOutTime, scheduleDay.endTime, scheduleDay.breakToleranceMinutes)) {
     return "TELAT";
   }
 

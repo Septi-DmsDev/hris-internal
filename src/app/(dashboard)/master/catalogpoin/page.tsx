@@ -1,12 +1,13 @@
 import { getPointCatalogOverview } from "@/server/actions/point-catalog";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
+import type { UserRole } from "@/types";
 import CatalogPoinClient, {
   type PerformanceCatalogEntryRow,
 } from "./CatalogPoinClient";
 
 export default async function CatalogPoinPage() {
   const roleRow = await getCurrentUserRoleRow();
-  const role = roleRow.role;
+  const role = roleRow.role as UserRole;
 
   const overview = await getPointCatalogOverview();
 

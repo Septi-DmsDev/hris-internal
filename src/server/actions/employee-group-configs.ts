@@ -3,7 +3,7 @@
 import { checkRole, requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { employeeGroupConfigs } from "@/lib/db/schema/master";
-import { type EmployeeGroup, resolveEmployeeGroupLabel } from "@/lib/employee-groups";
+import { type EmployeeGroup } from "@/lib/employee-groups";
 import { employeeGroupConfigSchema } from "@/lib/validations/master";
 import { asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -141,11 +141,4 @@ export async function updateEmployeeGroupConfig(id: string, formData: FormData) 
   revalidatePath("/master/positions");
   revalidatePath("/employees");
   return { success: true };
-}
-
-export function resolveEmployeeGroupMasterLabel(group: EmployeeGroup) {
-  const defaultLabel = resolveEmployeeGroupLabel(group);
-  if (group === "MANAGERIAL") return `${defaultLabel} (Legacy)`;
-  if (group === "TEAMWORK") return `${defaultLabel} (Legacy)`;
-  return defaultLabel;
 }

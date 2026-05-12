@@ -212,6 +212,19 @@ Sudah ada:
 - tabel disiapkan untuk source `MANUAL` dan `FINGERPRINT_ADMS`
 - payroll preview membaca absensi periode untuk eligibility bonus fulltime/disiplin
 
+### Integrasi BioFinger AT301 (Batch Attendance)
+- Endpoint ingest: `POST /api/integrations/adms/attendance`
+- Auth: Bearer token via env `ADMS_INGEST_TOKEN`
+- Alur: Cloud server kirim rekap per karyawan per tanggal → Dashboard hitung TELAT
+- Mapping: User ID mesin = `employeeCode`
+- Jadwal sync cloud: 09.00, 14.00, 17.00, 21.00
+- Resolver punctuality: `src/server/attendance-engine/resolve-attendance-punctuality.ts`
+- Rule: check-in tanpa toleransi, break/check-out toleransi 5 menit (configurable per jadwal via `breakToleranceMinutes` dan `checkInToleranceMinutes` di `workScheduleDays`)
+- Data kosong tidak auto-ALPA: HRD yang tindak lanjut
+- Manual attendance (source=`MANUAL`) tidak ditimpa oleh ADMS batch
+- Validasi payload: `src/lib/validations/attendance.ts` → `admsAttendanceIngestSchema`
+- Schema DB field baru (migration `0023_attendance_schedule_break_tolerance.sql`): `breakStart`, `breakEnd`, `breakToleranceMinutes`, `checkInToleranceMinutes` di tabel `workScheduleDays`
+
 ### Payroll / Finance
 Sudah ada:
 - payroll periods
@@ -257,6 +270,7 @@ Server-side payroll entry points penting:
 | `/performance/training` | Active | Training evaluation |
 | `/tickets` | Active | Ticketing |
 | `/absensi` | Active | Input manual absensi HRD/Admin |
+| `POST /api/integrations/adms/attendance` | Active | Batch ingest BioFinger AT301 (Bearer token) |
 | `/reviews` | Active | Review + incident |
 | `/payroll` | Active | Payroll workspace |
 | `/payroll/[periodId]/[employeeId]` | Active | Payroll detail / payslip structure |
@@ -309,7 +323,9 @@ Perubahan payroll/performance penting:
 - tanpa data absensi periode, bonus fulltime dan disiplin bernilai `0`
 - fulltime butuh semua hari kerja terjadwal `HADIR`
 - disiplin butuh performa minimal 80%, eligible fulltime, dan tidak ada `TELAT`
-- integrasi fingerprint/ADMS webserver API belum dibangun, tetapi schema sudah menyediakan source dan raw payload
+- integrasi fingerprint BioFinger AT301 sudah dibangun via endpoint batch `POST /api/integrations/adms/attendance`
+- cloud server mengirim rekap absensi; dashboard menghitung punctuality dari jadwal kerja
+- absensi MANUAL tidak ditimpa oleh batch ADMS; data kosong tidak otomatis menjadi ALPA
 
 ### Review
 - review dan incident sudah scoped sesuai role
@@ -374,6 +390,7 @@ State terakhir yang sudah terbukti hijau di repo:
 Terakhir diverifikasi setelah batch:
 - personal payroll detail access
 - dynamic header title
+- integrasi BioFinger AT301 batch attendance (sprint 2026-05-12)
 
 Jika sesi berikutnya mulai dari branch yang sama, baseline ini bisa dipakai sebagai acuan regresi.
 

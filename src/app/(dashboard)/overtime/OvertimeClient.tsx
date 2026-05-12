@@ -13,6 +13,7 @@ import {
   submitOvertimeRequest,
   submitSpvOvertimeRequest,
 } from "@/server/actions/overtime";
+import { formatOneDecimal } from "@/lib/format/number";
 import type { UserRole } from "@/types";
 import { resolveEmployeeGroupLabel } from "@/lib/employee-groups";
 
@@ -523,7 +524,7 @@ export default function OvertimeClient({
                 <td className="px-3 py-2 text-slate-700">{row.requestDate}</td>
                 <td className="px-3 py-2 text-slate-700">{OVERTIME_TYPE_LABEL[row.overtimeType]}</td>
                 <td className="px-3 py-2 text-right font-semibold text-slate-900">{currency(row.totalAmount)}</td>
-                <td className="px-3 py-2 text-right font-semibold text-slate-900">{row.draftTotalPoints.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatOneDecimal(row.draftTotalPoints)}</td>
                 <td className="px-3 py-2">
                   <Badge variant={row.status === "APPROVED" ? "default" : row.status === "REJECTED" ? "destructive" : "secondary"}>
                     {row.status}
@@ -609,7 +610,7 @@ export default function OvertimeClient({
                     >
                       <span className={selectedCatalog ? "text-slate-900 truncate" : "text-slate-400"}>
                         {selectedCatalog
-                          ? `${selectedCatalog.workName}${selectedCatalog.unitDescription ? ` (${selectedCatalog.unitDescription})` : ""} - ${selectedCatalog.pointValue.toFixed(2)} poin`
+                          ? `${selectedCatalog.workName}${selectedCatalog.unitDescription ? ` (${selectedCatalog.unitDescription})` : ""} - ${formatOneDecimal(selectedCatalog.pointValue)} poin`
                           : "Pilih pekerjaan..."}
                       </span>
                     </button>
@@ -638,7 +639,7 @@ export default function OvertimeClient({
                                 {catalog.workName}
                                 {catalog.unitDescription ? <span className="text-slate-400"> ({catalog.unitDescription})</span> : null}
                               </span>
-                              <span className="shrink-0 text-xs text-slate-500 tabular-nums">{catalog.pointValue.toFixed(2)} poin</span>
+                              <span className="shrink-0 text-xs text-slate-500 tabular-nums">{formatOneDecimal(catalog.pointValue)} poin</span>
                             </button>
                           ))}
                         </div>
@@ -674,8 +675,8 @@ export default function OvertimeClient({
                         <tr key={line.key}>
                           <td className="px-3 py-1.5">{line.workName}</td>
                           <td className="px-3 py-1.5 text-right">{line.quantity.toFixed(2)}</td>
-                          <td className="px-3 py-1.5 text-right">{line.pointValue.toFixed(2)}</td>
-                          <td className="px-3 py-1.5 text-right font-medium">{(line.quantity * line.pointValue).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right">{formatOneDecimal(line.pointValue)}</td>
+                          <td className="px-3 py-1.5 text-right font-medium">{formatOneDecimal(line.quantity * line.pointValue)}</td>
                           <td className="px-3 py-1.5 text-right">
                             <Button size="icon" variant="ghost" onClick={() => removeCurrentLine(line.key)} className="text-black hover:text-red-600 focus-visible:text-red-600 active:text-red-700">
                               <Trash2 className="h-4 w-4" />
@@ -718,8 +719,8 @@ export default function OvertimeClient({
                           <td className="px-3 py-2">{item.jobId}</td>
                           <td className="px-3 py-2">{item.workName}</td>
                           <td className="px-3 py-2 text-right">{item.quantity.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right">{item.pointValue.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right font-semibold">{item.totalPoints.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">{formatOneDecimal(item.pointValue)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatOneDecimal(item.totalPoints)}</td>
                           <td className="px-3 py-2 text-right">
                             <Button size="icon" variant="ghost" onClick={() => removeDraftItem(item.key)} className="text-black hover:text-red-600 focus-visible:text-red-600 active:text-red-700">
                               <Trash2 className="h-4 w-4" />
@@ -760,8 +761,8 @@ export default function OvertimeClient({
                       <td className="px-3 py-2">{item.jobId}</td>
                       <td className="px-3 py-2">{item.workName}</td>
                       <td className="px-3 py-2 text-right">{item.quantity.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-right">{item.pointValue.toFixed(2)}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{item.totalPoints.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right">{formatOneDecimal(item.pointValue)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{formatOneDecimal(item.totalPoints)}</td>
                     </tr>
                   ))}
                 </tbody>

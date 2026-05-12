@@ -23,10 +23,10 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
   if (authError) return [];
 
   const normalizedLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 5000) : 1000;
-
-  const rows = await db.execute<SystemHistoryRow>(sql`
-    with history_union as (
-      select
+  const segmentQueries: Array<{ label: string; query: ReturnType<typeof sql> }> = [
+    {
+      label: "attendance_ticket_audit_logs",
+      query: sql`select
         atl.id::text as id,
         'TICKETING'::text as module,
         atl.action::text as "eventType",
@@ -38,10 +38,12 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         atl.payload as payload,
         atl.created_at as "occurredAt"
       from attendance_ticket_audit_logs atl
-
-      union all
-
-      select
+      order by atl.created_at desc
+      limit ${normalizedLimit}`,
+    },
+    {
+      label: "daily_activity_approval_logs",
+      query: sql`select
         dal.id::text as id,
         'PERFORMANCE'::text as module,
         dal.action::text as "eventType",
@@ -53,10 +55,12 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         '{}'::jsonb as payload,
         dal.created_at as "occurredAt"
       from daily_activity_approval_logs dal
-
-      union all
-
-      select
+      order by dal.created_at desc
+      limit ${normalizedLimit}`,
+    },
+    {
+      label: "payroll_audit_logs",
+      query: sql`select
         pal.id::text as id,
         'PAYROLL'::text as module,
         pal.action::text as "eventType",
@@ -68,10 +72,12 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         pal.payload as payload,
         pal.created_at as "occurredAt"
       from payroll_audit_logs pal
-
-      union all
-
-      select
+      order by pal.created_at desc
+      limit ${normalizedLimit}`,
+    },
+    {
+      label: "employee_status_histories",
+      query: sql`select
         esh.id::text as id,
         'EMPLOYEE'::text as module,
         'STATUS_CHANGE'::text as "eventType",
@@ -88,10 +94,12 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         ) as payload,
         esh.created_at as "occurredAt"
       from employee_status_histories esh
-
-      union all
-
-      select
+      order by esh.created_at desc
+      limit ${normalizedLimit}`,
+    },
+    {
+      label: "employee_division_histories",
+      query: sql`select
         edh.id::text as id,
         'EMPLOYEE'::text as module,
         'DIVISION_CHANGE'::text as "eventType",
@@ -107,10 +115,12 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         ) as payload,
         edh.created_at as "occurredAt"
       from employee_division_histories edh
-
-      union all
-
-      select
+      order by edh.created_at desc
+      limit ${normalizedLimit}`,
+    },
+    {
+      label: "payroll_adjustments",
+      query: sql`select
         pa.id::text as id,
         'FINANCE'::text as module,
         pa.adjustment_type::text as "eventType",
@@ -126,10 +136,12 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         ) as payload,
         pa.created_at as "occurredAt"
       from payroll_adjustments pa
-
-      union all
-
-      select
+      order by pa.created_at desc
+      limit ${normalizedLimit}`,
+    },
+    {
+      label: "incident_logs",
+      query: sql`select
         il.id::text as id,
         'REVIEW'::text as module,
         il.incident_type::text as "eventType",
@@ -145,12 +157,22 @@ export async function getSystemHistory(limit = 1000): Promise<SystemHistoryRow[]
         ) as payload,
         il.created_at as "occurredAt"
       from incident_logs il
-    )
-    select *
-    from history_union
-    order by "occurredAt" desc
-    limit ${normalizedLimit}
-  `);
+      order by il.created_at desc
+      limit ${normalizedLimit}`,
+    },
+  ];
 
-  return rows;
+  const allRows: SystemHistoryRow[] = [];
+  for (const segment of segmentQueries) {
+    try {
+      const rows = await db.execute<SystemHistoryRow>(segment.query);
+      allRows.push(...rows);
+    } catch (error) {
+      console.error(`[history] skip segment ${segment.label}:`, error);
+    }
+  }
+
+  return allRows
+    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
+    .slice(0, normalizedLimit);
 }

@@ -35,7 +35,7 @@ import {
   type EmployeeInput,
   type EmployeeOrganizationBulkUpdateInput,
 } from "@/lib/validations/employee";
-import { aliasedTable, and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { aliasedTable, and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -1224,6 +1224,18 @@ function resolveBulkNotes(input: EmployeeOrganizationBulkUpdateInput) {
   return notes && notes.length > 0 ? notes : "Mutasi massal struktur organisasi";
 }
 
+let employeeGroupEnumValuesPromise: Promise<Set<EmployeeGroup>> | null = null;
+async function resolveEmployeeGroupEnumValues() {
+  if (!employeeGroupEnumValuesPromise) {
+    employeeGroupEnumValuesPromise = db
+      .execute(
+        sql<{ enumlabel: string }>`select enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'employee_group'`
+      )
+      .then((rows) => new Set(rows.map((row) => row.enumlabel as EmployeeGroup)));
+  }
+  return employeeGroupEnumValuesPromise;
+}
+
 export async function bulkUpdateEmployeeOrganization(input: unknown) {
   const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
   if (authError) return authError;
@@ -1236,77 +1248,104 @@ export async function bulkUpdateEmployeeOrganization(input: unknown) {
   const payload = parsed.data;
   const effectiveDate = payload.effectiveDate ?? startOfDay(new Date());
   const notes = resolveBulkNotes(payload);
+  const supportedEmployeeGroups = await resolveEmployeeGroupEnumValues();
 
-  await db.transaction(async (tx) => {
-    for (const employeeId of payload.employeeIds) {
-      const [existingEmployee] = await tx
-        .select({
-          id: employees.id,
-          branchId: employees.branchId,
-          divisionId: employees.divisionId,
-          positionId: employees.positionId,
-          gradeId: employees.gradeId,
-          employeeGroup: employees.employeeGroup,
-          trainingGraduationDate: employees.trainingGraduationDate,
-        })
-        .from(employees)
-        .where(eq(employees.id, employeeId))
-        .limit(1);
+  if (payload.employeeGroup && !supportedEmployeeGroups.has(payload.employeeGroup)) {
+    return {
+      error:
+        `Nilai kelompok karyawan "${payload.employeeGroup}" belum tersedia di database. ` +
+        "Jalankan migrasi enum employee_group terbaru (contoh: 0021_employee_group_expansion.sql).",
+    };
+  }
 
-      if (!existingEmployee) continue;
+  try {
+    await db.transaction(async (tx) => {
+      for (const employeeId of payload.employeeIds) {
+        const [existingEmployee] = await tx
+          .select({
+            id: employees.id,
+            branchId: employees.branchId,
+            divisionId: employees.divisionId,
+            positionId: employees.positionId,
+            gradeId: employees.gradeId,
+            employeeGroup: employees.employeeGroup,
+            trainingGraduationDate: employees.trainingGraduationDate,
+          })
+          .from(employees)
+          .where(eq(employees.id, employeeId))
+          .limit(1);
 
-      const nextBranchId = payload.branchId ?? existingEmployee.branchId;
-      const nextDivisionId = payload.divisionId ?? existingEmployee.divisionId;
-      const nextPositionId = payload.positionId ?? existingEmployee.positionId;
-      const nextGradeId = payload.gradeId ?? existingEmployee.gradeId;
-      const nextEmployeeGroup = payload.employeeGroup ?? existingEmployee.employeeGroup;
-      const persistedEmployeeGroup = isPointBasedEmployeeGroup(nextEmployeeGroup)
-        ? resolveEmployeeGroupFromTrainingDate(existingEmployee.trainingGraduationDate)
-        : nextEmployeeGroup;
+        if (!existingEmployee) continue;
 
-      await tx
-        .update(employees)
-        .set({
-          branchId: nextBranchId,
-          divisionId: nextDivisionId,
-          positionId: nextPositionId,
-          gradeId: nextGradeId,
-          employeeGroup: persistedEmployeeGroup,
-          updatedAt: new Date(),
-        })
-        .where(eq(employees.id, employeeId));
+        const nextBranchId = payload.branchId ?? existingEmployee.branchId;
+        const nextDivisionId = payload.divisionId ?? existingEmployee.divisionId;
+        const nextPositionId = payload.positionId ?? existingEmployee.positionId;
+        const nextGradeId = payload.gradeId ?? existingEmployee.gradeId;
+        const nextEmployeeGroup = payload.employeeGroup ?? existingEmployee.employeeGroup;
+        const persistedEmployeeGroup = isPointBasedEmployeeGroup(nextEmployeeGroup)
+          ? resolveEmployeeGroupFromTrainingDate(existingEmployee.trainingGraduationDate)
+          : nextEmployeeGroup;
 
-      if (existingEmployee.divisionId !== nextDivisionId) {
-        await tx.insert(employeeDivisionHistories).values({
-          employeeId,
-          previousDivisionId: existingEmployee.divisionId,
-          newDivisionId: nextDivisionId,
-          effectiveDate,
-          notes,
-        });
+        await tx
+          .update(employees)
+          .set({
+            branchId: nextBranchId,
+            divisionId: nextDivisionId,
+            positionId: nextPositionId,
+            gradeId: nextGradeId,
+            employeeGroup: persistedEmployeeGroup,
+            updatedAt: new Date(),
+          })
+          .where(eq(employees.id, employeeId));
+
+        if (existingEmployee.divisionId !== nextDivisionId) {
+          await tx.insert(employeeDivisionHistories).values({
+            employeeId,
+            previousDivisionId: existingEmployee.divisionId,
+            newDivisionId: nextDivisionId,
+            effectiveDate,
+            notes,
+          });
+        }
+
+        if (existingEmployee.positionId !== nextPositionId) {
+          await tx.insert(employeePositionHistories).values({
+            employeeId,
+            previousPositionId: existingEmployee.positionId,
+            newPositionId: nextPositionId,
+            effectiveDate,
+            notes,
+          });
+        }
+
+        if (existingEmployee.gradeId !== nextGradeId) {
+          await tx.insert(employeeGradeHistories).values({
+            employeeId,
+            previousGradeId: existingEmployee.gradeId,
+            newGradeId: nextGradeId,
+            effectiveDate,
+            notes,
+          });
+        }
       }
-
-      if (existingEmployee.positionId !== nextPositionId) {
-        await tx.insert(employeePositionHistories).values({
-          employeeId,
-          previousPositionId: existingEmployee.positionId,
-          newPositionId: nextPositionId,
-          effectiveDate,
-          notes,
-        });
-      }
-
-      if (existingEmployee.gradeId !== nextGradeId) {
-        await tx.insert(employeeGradeHistories).values({
-          employeeId,
-          previousGradeId: existingEmployee.gradeId,
-          newGradeId: nextGradeId,
-          effectiveDate,
-          notes,
-        });
-      }
+    });
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "22P02") {
+      return {
+        error:
+          "Nilai enum tidak cocok dengan schema database (kemungkinan employee_group belum update). " +
+          "Jalankan migration terbaru lalu coba lagi.",
+      };
     }
-  });
+    if (code === "23503") {
+      return {
+        error:
+          "Referensi branch/division/position/grade tidak valid di database. Periksa data master atau sinkronisasi environment.",
+      };
+    }
+    throw error;
+  }
 
   revalidatePath("/positioning");
   revalidatePath("/employees");

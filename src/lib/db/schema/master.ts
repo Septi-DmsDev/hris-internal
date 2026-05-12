@@ -12,6 +12,10 @@ import {
 import { ALL_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 
 export const employeeGroupEnum = pgEnum("employee_group", [...ALL_EMPLOYEE_GROUPS]);
+export const employeeGroupPayrollModeEnum = pgEnum("employee_group_payroll_mode", [
+  "KPI",
+  "POINT",
+]);
 
 export const branches = pgTable("branches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -56,6 +60,19 @@ export const grades = pgTable("grades", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
 
+export const employeeGroupConfigs = pgTable("employee_group_configs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeGroup: employeeGroupEnum("employee_group").notNull().unique(),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  legacyAlias: varchar("legacy_alias", { length: 50 }),
+  payrollMode: employeeGroupPayrollModeEnum("payroll_mode").notNull(),
+  description: text("description"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
 export type Branch = typeof branches.$inferSelect;
 export type NewBranch = typeof branches.$inferInsert;
 export type Division = typeof divisions.$inferSelect;
@@ -64,3 +81,5 @@ export type Position = typeof positions.$inferSelect;
 export type NewPosition = typeof positions.$inferInsert;
 export type Grade = typeof grades.$inferSelect;
 export type NewGrade = typeof grades.$inferInsert;
+export type EmployeeGroupConfig = typeof employeeGroupConfigs.$inferSelect;
+export type NewEmployeeGroupConfig = typeof employeeGroupConfigs.$inferInsert;

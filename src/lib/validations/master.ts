@@ -42,7 +42,18 @@ export const gradeSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const employeeGroupConfigSchema = z.object({
+  employeeGroup: z.enum([...ALL_EMPLOYEE_GROUPS]),
+  displayName: z.string().trim().min(1, "Nama tampilan wajib diisi").max(100),
+  legacyAlias: z.string().trim().max(50).optional(),
+  payrollMode: z.enum(["KPI", "POINT"]),
+  description: z.string().trim().max(255).optional(),
+  sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+  isActive: z.boolean().default(true),
+});
+
 export type BranchInput = z.infer<typeof branchSchema>;
 export type DivisionInput = z.infer<typeof divisionSchema>;
 export type PositionInput = z.infer<typeof positionSchema>;
 export type GradeInput = z.infer<typeof gradeSchema>;
+export type EmployeeGroupConfigInput = z.infer<typeof employeeGroupConfigSchema>;

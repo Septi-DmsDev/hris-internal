@@ -43,6 +43,7 @@ import {
   submitDailyActivityEntry,
 } from "@/server/actions/performance";
 import { resolveActivityJobIdLabel } from "@/lib/performance/job-id";
+import { formatOneDecimal } from "@/lib/format/number";
 import type { UserRole } from "@/types";
 
 export type PerformanceVersionRow = {
@@ -267,15 +268,6 @@ function createManagerialMonthlyInputDraft(): ManagerialMonthlyInputDraft {
     performancePercent: "100",
     notes: "",
   };
-}
-
-function formatOneDecimal(value: string | number) {
-  const num = Number(value);
-  if (Number.isNaN(num)) return "0,0";
-  return num.toLocaleString("id-ID", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
 }
 
 type PerformanceCatalogClientProps = {
@@ -839,7 +831,7 @@ export default function PerformanceCatalogClient({
         header: "Poin",
         accessorKey: "pointValue",
         cell: ({ row }) => (
-          <span className="tabular-nums font-medium">{row.original.pointValue}</span>
+          <span className="tabular-nums font-medium">{formatOneDecimal(row.original.pointValue)}</span>
         ),
       },
       { header: "Keterangan", accessorKey: "unitDescription" },
@@ -914,7 +906,7 @@ export default function PerformanceCatalogClient({
           <div className="space-y-0.5">
             <p className="text-slate-900">{row.original.workNameSnapshot}</p>
             <p className="text-xs text-slate-500">
-              {row.original.actualDivisionName} · {row.original.pointValueSnapshot} × {row.original.quantity}
+              {row.original.actualDivisionName} · {formatOneDecimal(row.original.pointValueSnapshot)} × {row.original.quantity}
             </p>
           </div>
         ),
@@ -1492,8 +1484,8 @@ export default function PerformanceCatalogClient({
                         </td>
                         <td className="px-3 py-2.5 text-slate-900">{activity.workNameSnapshot}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{activity.quantity}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{activity.pointValueSnapshot}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-900">{activity.totalPoints}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{formatOneDecimal(activity.pointValueSnapshot)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-900">{formatOneDecimal(activity.totalPoints)}</td>
                       </tr>
                     ))}
                   </tbody>

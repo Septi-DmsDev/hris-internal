@@ -127,13 +127,25 @@ export async function POST(request: NextRequest) {
     scheduleDayMap.set(row.scheduleId, current);
   }
 
-  // Bulk-fetch all existing attendance records for matched employees in a single query,
-  // then build a Map for O(1) lookup inside the processing loop.
+  const uniqueDateStrings = [...new Set(parsed.data.records.map((r) => r.attendanceDate.toISOString().slice(0, 10)))];
+  const uniqueDates = uniqueDateStrings.map((s) => new Date(s));
+
+  // Bulk-fetch existing attendance records for matched employees on the dates in this batch.
   const existingRows = employeeIds.length > 0
     ? await db
-        .select({ id: employeeAttendanceRecords.id, source: employeeAttendanceRecords.source, employeeId: employeeAttendanceRecords.employeeId, attendanceDate: employeeAttendanceRecords.attendanceDate })
+        .select({
+          id: employeeAttendanceRecords.id,
+          source: employeeAttendanceRecords.source,
+          employeeId: employeeAttendanceRecords.employeeId,
+          attendanceDate: employeeAttendanceRecords.attendanceDate,
+        })
         .from(employeeAttendanceRecords)
-        .where(inArray(employeeAttendanceRecords.employeeId, employeeIds))
+        .where(
+          and(
+            inArray(employeeAttendanceRecords.employeeId, employeeIds),
+            inArray(employeeAttendanceRecords.attendanceDate, uniqueDates)
+          )
+        )
     : [];
 
   // Key: "${employeeId}|${attendanceDateIso}"

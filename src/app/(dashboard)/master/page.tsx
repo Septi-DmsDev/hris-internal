@@ -19,6 +19,7 @@ import EmployeeGroupConfigsTable, {
 } from "./employee-groups/EmployeeGroupConfigsTable";
 import GradesTable, { type GradeRow } from "./grades/GradesTable";
 import PositionsTable, { type PositionRow } from "./positions/PositionsTable";
+import type { UserRole } from "@/types";
 
 export default async function MasterPage() {
   const [roleRow, branches, divisions, positions, grades, employeeGroupConfigs, overview] = await Promise.all([
@@ -105,7 +106,7 @@ export default async function MasterPage() {
 
         <TabsContent value="catalog" className="space-y-4">
           <CatalogPoinClient
-            role={roleRow.role}
+            role={roleRow.role as UserRole}
             canManageCatalog={overview.canManageCatalog}
             entries={entryRows}
           />

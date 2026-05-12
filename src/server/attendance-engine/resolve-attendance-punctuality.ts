@@ -57,6 +57,7 @@ export function resolveAttendancePunctuality(
     return "TELAT";
   }
 
+  // breakToleranceMinutes covers both break return and checkout per spec ("toleransi istirahat/pulang")
   if (isLate(input.checkOutTime, scheduleDay.endTime, scheduleDay.breakToleranceMinutes)) {
     return "TELAT";
   }

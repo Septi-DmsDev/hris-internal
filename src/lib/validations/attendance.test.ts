@@ -40,3 +40,17 @@ describe("admsAttendanceIngestSchema", () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+describe("admsTime transform", () => {
+  it("normalizes HH:mm:ss to HH:mm", () => {
+    const result = admsAttendanceRecordSchema.safeParse({
+      employeeCode: "EMP001",
+      attendanceDate: "2026-05-12",
+      checkInTime: "07:30:45",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.checkInTime).toBe("07:30");
+    }
+  });
+});

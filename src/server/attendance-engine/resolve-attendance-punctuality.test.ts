@@ -71,4 +71,24 @@ describe("resolveAttendancePunctuality", () => {
       scheduleDay,
     })).toBe("TELAT");
   });
+
+  it("returns null for non-working day", () => {
+    const result = resolveAttendancePunctuality({
+      checkInTime: "07:00",
+      checkOutTime: "16:00",
+      scheduleDay: { ...scheduleDay, isWorkingDay: false, dayStatus: "OFF" },
+    });
+    expect(result).toBeNull();
+  });
+
+  it("returns null when no scan data is present", () => {
+    const result = resolveAttendancePunctuality({
+      checkInTime: null,
+      checkOutTime: null,
+      breakOutTime: null,
+      breakInTime: null,
+      scheduleDay,
+    });
+    expect(result).toBeNull();
+  });
 });

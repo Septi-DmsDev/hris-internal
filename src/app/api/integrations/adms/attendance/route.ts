@@ -241,12 +241,17 @@ export async function POST(request: NextRequest) {
 
   // Flush inserts in a single batch statement.
   if (insertPayloads.length > 0) {
-    await db.insert(employeeAttendanceRecords).values(insertPayloads);
+    try {
+      await db.insert(employeeAttendanceRecords).values(insertPayloads);
+    } catch (err) {
+      inserted = 0;
+      errors.push({ employeeCode: "BATCH_INSERT", attendanceDate: "", reason: String(err) });
+    }
   }
 
-  // Flush updates in parallel (one statement per updated record).
+  // Flush updates in parallel (one statement per updated record; parallel, not atomic).
   if (updatePayloads.length > 0) {
-    await Promise.all(
+    const results = await Promise.allSettled(
       updatePayloads.map((p) =>
         db
           .update(employeeAttendanceRecords)
@@ -254,6 +259,14 @@ export async function POST(request: NextRequest) {
           .where(eq(employeeAttendanceRecords.id, p.id))
       )
     );
+    const failedCount = results.filter((r) => r.status === "rejected").length;
+    updated -= failedCount;
+    for (const [i, result] of results.entries()) {
+      if (result.status === "rejected") {
+        const p = updatePayloads[i];
+        errors.push({ employeeCode: p.payload.externalUserCode ?? "", attendanceDate: "", reason: String(result.reason) });
+      }
+    }
   }
 
   revalidatePath("/absensi");

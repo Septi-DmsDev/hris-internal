@@ -127,10 +127,32 @@ export async function POST(request: NextRequest) {
     scheduleDayMap.set(row.scheduleId, current);
   }
 
+  // Bulk-fetch all existing attendance records for matched employees in a single query,
+  // then build a Map for O(1) lookup inside the processing loop.
+  const existingRows = employeeIds.length > 0
+    ? await db
+        .select({ id: employeeAttendanceRecords.id, source: employeeAttendanceRecords.source, employeeId: employeeAttendanceRecords.employeeId, attendanceDate: employeeAttendanceRecords.attendanceDate })
+        .from(employeeAttendanceRecords)
+        .where(inArray(employeeAttendanceRecords.employeeId, employeeIds))
+    : [];
+
+  // Key: "${employeeId}|${attendanceDateIso}"
+  const existingByKey = new Map<string, { id: string; source: string }>();
+  for (const row of existingRows) {
+    const dateIso = row.attendanceDate.toISOString().slice(0, 10);
+    existingByKey.set(`${row.employeeId}|${dateIso}`, { id: row.id, source: row.source });
+  }
+
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
   const errors: Array<{ employeeCode: string; attendanceDate: string; reason: string }> = [];
+
+  type InsertPayload = typeof employeeAttendanceRecords.$inferInsert;
+  type UpdateEntry = { id: string; payload: Omit<InsertPayload, "id"> };
+
+  const insertPayloads: InsertPayload[] = [];
+  const updatePayloads: UpdateEntry[] = [];
 
   for (const item of parsed.data.records) {
     const employee = employeeByCode.get(item.employeeCode);
@@ -142,16 +164,7 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const [existing] = await db
-      .select({ id: employeeAttendanceRecords.id, source: employeeAttendanceRecords.source })
-      .from(employeeAttendanceRecords)
-      .where(
-        and(
-          eq(employeeAttendanceRecords.employeeId, employee.id),
-          eq(employeeAttendanceRecords.attendanceDate, item.attendanceDate)
-        )
-      )
-      .limit(1);
+    const existing = existingByKey.get(`${employee.id}|${attendanceDateIso}`);
 
     if (existing && existing.source === "MANUAL") {
       skipped += 1;
@@ -206,15 +219,29 @@ export async function POST(request: NextRequest) {
     };
 
     if (existing) {
-      await db
-        .update(employeeAttendanceRecords)
-        .set(payload)
-        .where(eq(employeeAttendanceRecords.id, existing.id));
+      updatePayloads.push({ id: existing.id, payload });
       updated += 1;
     } else {
-      await db.insert(employeeAttendanceRecords).values(payload);
+      insertPayloads.push(payload);
       inserted += 1;
     }
+  }
+
+  // Flush inserts in a single batch statement.
+  if (insertPayloads.length > 0) {
+    await db.insert(employeeAttendanceRecords).values(insertPayloads);
+  }
+
+  // Flush updates in parallel (one statement per updated record).
+  if (updatePayloads.length > 0) {
+    await Promise.all(
+      updatePayloads.map((p) =>
+        db
+          .update(employeeAttendanceRecords)
+          .set(p.payload)
+          .where(eq(employeeAttendanceRecords.id, p.id))
+      )
+    );
   }
 
   revalidatePath("/absensi");

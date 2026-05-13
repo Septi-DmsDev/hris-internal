@@ -36,6 +36,7 @@ export async function GET(_: Request, context: RouteContext) {
   }));
 
   const assignedEmployeeIds = new Set<string>();
+  const tabSummaries: Array<{ tabName: string; employeeCount: number; totalThp: number }> = [];
 
   function createSheetRows(rows: typeof normalizedRows) {
     const body = rows
@@ -62,8 +63,15 @@ export async function GET(_: Request, context: RouteContext) {
       uniqueRows.push(row);
     }
     if (uniqueRows.length === 0) return;
+    const tabName = title.slice(0, 31);
+    const totalThp = uniqueRows.reduce((sum, row) => sum + row.thp, 0);
+    tabSummaries.push({
+      tabName,
+      employeeCount: uniqueRows.length,
+      totalThp,
+    });
     const worksheet = XLSX.utils.aoa_to_sheet(createSheetRows(uniqueRows));
-    XLSX.utils.book_append_sheet(workbook, worksheet, title.slice(0, 31));
+    XLSX.utils.book_append_sheet(workbook, worksheet, tabName);
   }
 
   const workbook = XLSX.utils.book_new();
@@ -105,6 +113,21 @@ export async function GET(_: Request, context: RouteContext) {
   // Safety net: jika ada data yang belum masuk tab manapun, masukkan ke tab fallback.
   const unassigned = normalizedRows.filter((row) => !assignedEmployeeIds.has(row.id));
   appendSheet(workbook, "Unassigned", unassigned);
+
+  const grandTotalThp = tabSummaries.reduce((sum, row) => sum + row.totalThp, 0);
+  const grandTotalEmployees = tabSummaries.reduce((sum, row) => sum + row.employeeCount, 0);
+  const summaryRows: Array<Array<string | number>> = [
+    ["periode", periodCode],
+    [],
+    ["tab", "jumlah_karyawan", "total_thp"],
+    ...tabSummaries.map((row) => [row.tabName, row.employeeCount, row.totalThp]),
+    [],
+    ["GRAND TOTAL", grandTotalEmployees, grandTotalThp],
+  ];
+  const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "Summary");
+  // Ensure Summary appears as the first sheet in the workbook.
+  workbook.SheetNames = ["Summary", ...workbook.SheetNames.filter((name) => name !== "Summary")];
 
   const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 

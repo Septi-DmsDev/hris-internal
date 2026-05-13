@@ -16,7 +16,7 @@ File ditemukan:
 
 Gap yang perlu dibangun:
 
-- overtime dan uang harian masih ada di schema/UI tetapi belum dihitung di preview,
+- uang harian masih ada di schema/UI tetapi belum dihitung di preview,
 - rule “koreksi setelah paid masuk periode berikutnya” belum dibantu alur UI khusus,
 - belum ada scope payroll per divisi,
 - attendance manual sudah dibaca preview untuk eligibility fulltime/disiplin, tetapi integrasi fingerprint/ADMS belum ada.
@@ -169,6 +169,8 @@ Logika penting:
   - membaca incident aktif dalam periode,
   - menghitung SP penalty dari incident type `SP1` dan `SP2` sebagai pengurang performa absolut sebelum tier bonus dipilih,
   - membaca `employeeAttendanceRecords` periode untuk menentukan bonus fulltime dan bonus disiplin,
+  - membaca `overtime_requests` berstatus `APPROVED` dalam periode untuk dihitung sebagai komponen overtime THP,
+  - untuk snapshot struktur (divisi/jabatan/grade), sistem mengutamakan histori perubahan **terbaru berdasarkan waktu input (`createdAt`)**; `effectiveDate` tetap disimpan sebagai referensi tanggal efektif.
   - tanpa data absensi periode, bonus fulltime dan bonus disiplin dibayar `0`,
   - bonus disiplin tidak dipicu oleh input persentase/manual KPI; eligibility-nya mengikuti absensi dan incident telat,
   - menyatukan adjustment periode dan recurring adjustment aktif.
@@ -301,6 +303,7 @@ Catatan:
 | `attendance_tickets` | ya | tidak | unpaid/paid leave days |
 | `employee_attendance_records` | ya | tidak | eligibility bonus fulltime dan disiplin |
 | `incident_logs` | ya | tidak | potongan dan SP penalty |
+| `overtime_requests` | ya | tidak | nominal overtime approved per periode |
 | `daily_activity_entries` | ya | di-lock saat finalize | mengunci aktivitas yang sudah masuk payroll |
 | `daily_activity_approval_logs` | ya | ya | log `LOCK_PAYROLL` |
 
@@ -316,7 +319,7 @@ Catatan:
 
 ## 8. Hal yang Perlu Diperhatikan Developer
 
-- `dailyAllowanceAmount` dan `overtimeRateAmount` sudah ada di salary config, tetapi preview saat ini tetap menyimpan `dailyAllowancePaid = 0` dan `overtimeAmount = 0`.
+- `dailyAllowanceAmount` dan `overtimeRateAmount` sudah ada di salary config, tetapi preview saat ini tetap menyimpan `dailyAllowancePaid = 0`; nominal overtime dibaca dari `overtime_requests` approved per periode.
 - adjustment period-specific dan recurring adjustment adalah sumber penambah/pengurang manual.
 - absensi manual saat ini adalah sumber payroll untuk bonus fulltime/disiplin; integrasi fingerprint/ADMS akan menulis ke tabel yang sama dengan source berbeda.
 - payroll saat ini belum menerapkan scope divisi; aksesnya global sesuai role payroll.

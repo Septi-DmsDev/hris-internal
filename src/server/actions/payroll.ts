@@ -11,7 +11,7 @@ import {
   employees,
   workScheduleDays,
 } from "@/lib/db/schema/employee";
-import { attendanceTickets, employeeAttendanceRecords, incidentLogs } from "@/lib/db/schema/hr";
+import { attendanceTickets, employeeAttendanceRecords, incidentLogs, overtimeRequests } from "@/lib/db/schema/hr";
 import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
 import {
   employeeSalaryConfigs,
@@ -186,6 +186,7 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
           baseSalaryPaid: payrollResults.baseSalaryPaid,
           gradeAllowancePaid: payrollResults.gradeAllowancePaid,
           tenureAllowancePaid: payrollResults.tenureAllowancePaid,
+          overtimeAmount: payrollResults.overtimeAmount,
           bonusKinerjaAmount: payrollResults.bonusKinerjaAmount,
           bonusPrestasiAmount: payrollResults.bonusPrestasiAmount,
           bonusFulltimeAmount: payrollResults.bonusFulltimeAmount,
@@ -1235,6 +1236,28 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     attendanceByEmployee.set(row.employeeId, current);
   }
 
+  const approvedOvertimeRows = employeeIds.length > 0
+    ? await db
+        .select({
+          employeeId: overtimeRequests.employeeId,
+          totalAmount: overtimeRequests.totalAmount,
+        })
+        .from(overtimeRequests)
+        .where(
+          and(
+            inArray(overtimeRequests.employeeId, employeeIds),
+            eq(overtimeRequests.status, "APPROVED"),
+            gte(overtimeRequests.requestDate, period.periodStartDate),
+            lte(overtimeRequests.requestDate, period.periodEndDate),
+          )
+        )
+    : [];
+  const overtimeByEmployee = new Map<string, number>();
+  for (const row of approvedOvertimeRows) {
+    const current = overtimeByEmployee.get(row.employeeId) ?? 0;
+    overtimeByEmployee.set(row.employeeId, roundCurrency(current + toNumber(row.totalAmount)));
+  }
+
   const periodAdjustmentRows = await db
     .select({
       employeeId: payrollAdjustments.employeeId,
@@ -1283,6 +1306,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           divisionId: employeeDivisionHistories.newDivisionId,
           divisionName: divisions.name,
           effectiveDate: employeeDivisionHistories.effectiveDate,
+          createdAt: employeeDivisionHistories.createdAt,
         })
         .from(employeeDivisionHistories)
         .leftJoin(divisions, eq(employeeDivisionHistories.newDivisionId, divisions.id))
@@ -1291,11 +1315,20 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           lte(employeeDivisionHistories.effectiveDate, snapshotAsOfDate)
         ))
     : [];
-  const latestDivByEmployee = new Map<string, { divisionId: string | null; divisionName: string | null; effectiveDate: Date }>();
+  const latestDivByEmployee = new Map<string, { divisionId: string | null; divisionName: string | null; effectiveDate: Date; createdAt: Date }>();
   for (const row of divHistoryRows) {
     const existing = latestDivByEmployee.get(row.employeeId);
-    if (!existing || row.effectiveDate > existing.effectiveDate) {
-      latestDivByEmployee.set(row.employeeId, { divisionId: row.divisionId, divisionName: row.divisionName, effectiveDate: row.effectiveDate });
+    if (
+      !existing ||
+      row.createdAt > existing.createdAt ||
+      (row.createdAt.getTime() === existing.createdAt.getTime() && row.effectiveDate > existing.effectiveDate)
+    ) {
+      latestDivByEmployee.set(row.employeeId, {
+        divisionId: row.divisionId,
+        divisionName: row.divisionName,
+        effectiveDate: row.effectiveDate,
+        createdAt: row.createdAt,
+      });
     }
   }
 
@@ -1306,6 +1339,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           positionId: employeePositionHistories.newPositionId,
           positionName: positions.name,
           effectiveDate: employeePositionHistories.effectiveDate,
+          createdAt: employeePositionHistories.createdAt,
         })
         .from(employeePositionHistories)
         .leftJoin(positions, eq(employeePositionHistories.newPositionId, positions.id))
@@ -1314,11 +1348,20 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           lte(employeePositionHistories.effectiveDate, snapshotAsOfDate)
         ))
     : [];
-  const latestPosByEmployee = new Map<string, { positionId: string | null; positionName: string | null; effectiveDate: Date }>();
+  const latestPosByEmployee = new Map<string, { positionId: string | null; positionName: string | null; effectiveDate: Date; createdAt: Date }>();
   for (const row of posHistoryRows) {
     const existing = latestPosByEmployee.get(row.employeeId);
-    if (!existing || row.effectiveDate > existing.effectiveDate) {
-      latestPosByEmployee.set(row.employeeId, { positionId: row.positionId, positionName: row.positionName, effectiveDate: row.effectiveDate });
+    if (
+      !existing ||
+      row.createdAt > existing.createdAt ||
+      (row.createdAt.getTime() === existing.createdAt.getTime() && row.effectiveDate > existing.effectiveDate)
+    ) {
+      latestPosByEmployee.set(row.employeeId, {
+        positionId: row.positionId,
+        positionName: row.positionName,
+        effectiveDate: row.effectiveDate,
+        createdAt: row.createdAt,
+      });
     }
   }
 
@@ -1329,6 +1372,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           gradeId: employeeGradeHistories.newGradeId,
           gradeName: grades.name,
           effectiveDate: employeeGradeHistories.effectiveDate,
+          createdAt: employeeGradeHistories.createdAt,
         })
         .from(employeeGradeHistories)
         .leftJoin(grades, eq(employeeGradeHistories.newGradeId, grades.id))
@@ -1337,11 +1381,20 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           lte(employeeGradeHistories.effectiveDate, snapshotAsOfDate)
         ))
     : [];
-  const latestGradeByEmployee = new Map<string, { gradeId: string | null; gradeName: string | null; effectiveDate: Date }>();
+  const latestGradeByEmployee = new Map<string, { gradeId: string | null; gradeName: string | null; effectiveDate: Date; createdAt: Date }>();
   for (const row of gradeHistoryRows) {
     const existing = latestGradeByEmployee.get(row.employeeId);
-    if (!existing || row.effectiveDate > existing.effectiveDate) {
-      latestGradeByEmployee.set(row.employeeId, { gradeId: row.gradeId, gradeName: row.gradeName, effectiveDate: row.effectiveDate });
+    if (
+      !existing ||
+      row.createdAt > existing.createdAt ||
+      (row.createdAt.getTime() === existing.createdAt.getTime() && row.effectiveDate > existing.effectiveDate)
+    ) {
+      latestGradeByEmployee.set(row.employeeId, {
+        gradeId: row.gradeId,
+        gradeName: row.gradeName,
+        effectiveDate: row.effectiveDate,
+        createdAt: row.createdAt,
+      });
     }
   }
 
@@ -1484,6 +1537,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         return sum + signedAmount;
       }, 0)
     );
+    const overtimeAmount = roundCurrency(overtimeByEmployee.get(employee.id) ?? 0);
 
     const hasApprovedAbsence = approvedUnpaidLeaveDays + approvedPaidLeaveDays > 0;
     const attendanceSummary = resolveAttendancePayrollEligibility({
@@ -1594,11 +1648,12 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         });
 
     const takeHomePay = roundCurrency(
-      payrollCalc.takeHomePay + gradeAllowanceAmount + tenureAllowanceAmount
+      payrollCalc.takeHomePay + gradeAllowanceAmount + tenureAllowanceAmount + overtimeAmount
     );
     const totalAdditionAmount = roundCurrency(
       gradeAllowanceAmount +
         tenureAllowanceAmount +
+        overtimeAmount +
         payrollCalc.performanceBonusAmount +
         payrollCalc.achievementBonusAmount +
         payrollCalc.fulltimeBonusPaid +
@@ -1663,7 +1718,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         gradeAllowancePaid: gradeAllowanceAmount.toFixed(2),
         tenureAllowancePaid: tenureAllowanceAmount.toFixed(2),
         dailyAllowancePaid: "0.00",
-        overtimeAmount: "0.00",
+        overtimeAmount: overtimeAmount.toFixed(2),
         bonusFulltimeAmount: payrollCalc.fulltimeBonusPaid.toFixed(2),
         bonusDisciplineAmount: payrollCalc.disciplineBonusPaid.toFixed(2),
         bonusKinerjaAmount: payrollCalc.performanceBonusAmount.toFixed(2),

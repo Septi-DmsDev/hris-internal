@@ -30,7 +30,10 @@ import {
   type EmployeeGroup,
 } from "@/lib/employee-groups";
 import {
+  employeeDivisionHistoryDeleteSchema,
+  employeeGradeHistoryDeleteSchema,
   employeeOrganizationBulkUpdateSchema,
+  employeePositionHistoryDeleteSchema,
   employeeSchema,
   type EmployeeInput,
   type EmployeeOrganizationBulkUpdateInput,
@@ -645,6 +648,7 @@ export async function getEmployeeById(id: string) {
         .select({
           id: employeeDivisionHistories.id,
           effectiveDate: employeeDivisionHistories.effectiveDate,
+          createdAt: employeeDivisionHistories.createdAt,
           notes: employeeDivisionHistories.notes,
           previousDivisionName: previousDivision.name,
           newDivisionName: nextDivision.name,
@@ -653,11 +657,12 @@ export async function getEmployeeById(id: string) {
         .leftJoin(previousDivision, eq(employeeDivisionHistories.previousDivisionId, previousDivision.id))
         .leftJoin(nextDivision, eq(employeeDivisionHistories.newDivisionId, nextDivision.id))
         .where(eq(employeeDivisionHistories.employeeId, id))
-        .orderBy(desc(employeeDivisionHistories.effectiveDate)),
+        .orderBy(desc(employeeDivisionHistories.createdAt), desc(employeeDivisionHistories.effectiveDate)),
       db
         .select({
           id: employeePositionHistories.id,
           effectiveDate: employeePositionHistories.effectiveDate,
+          createdAt: employeePositionHistories.createdAt,
           notes: employeePositionHistories.notes,
           previousPositionName: previousPosition.name,
           newPositionName: nextPosition.name,
@@ -666,11 +671,12 @@ export async function getEmployeeById(id: string) {
         .leftJoin(previousPosition, eq(employeePositionHistories.previousPositionId, previousPosition.id))
         .leftJoin(nextPosition, eq(employeePositionHistories.newPositionId, nextPosition.id))
         .where(eq(employeePositionHistories.employeeId, id))
-        .orderBy(desc(employeePositionHistories.effectiveDate)),
+        .orderBy(desc(employeePositionHistories.createdAt), desc(employeePositionHistories.effectiveDate)),
       db
         .select({
           id: employeeGradeHistories.id,
           effectiveDate: employeeGradeHistories.effectiveDate,
+          createdAt: employeeGradeHistories.createdAt,
           notes: employeeGradeHistories.notes,
           previousGradeName: previousGrade.name,
           newGradeName: nextGrade.name,
@@ -679,11 +685,12 @@ export async function getEmployeeById(id: string) {
         .leftJoin(previousGrade, eq(employeeGradeHistories.previousGradeId, previousGrade.id))
         .leftJoin(nextGrade, eq(employeeGradeHistories.newGradeId, nextGrade.id))
         .where(eq(employeeGradeHistories.employeeId, id))
-        .orderBy(desc(employeeGradeHistories.effectiveDate)),
+        .orderBy(desc(employeeGradeHistories.createdAt), desc(employeeGradeHistories.effectiveDate)),
       db
         .select({
           id: employeeSupervisorHistories.id,
           effectiveDate: employeeSupervisorHistories.effectiveDate,
+          createdAt: employeeSupervisorHistories.createdAt,
           notes: employeeSupervisorHistories.notes,
           previousSupervisorName: previousSupervisor.fullName,
           newSupervisorName: nextSupervisor.fullName,
@@ -695,7 +702,7 @@ export async function getEmployeeById(id: string) {
         )
         .leftJoin(nextSupervisor, eq(employeeSupervisorHistories.newSupervisorEmployeeId, nextSupervisor.id))
         .where(eq(employeeSupervisorHistories.employeeId, id))
-        .orderBy(desc(employeeSupervisorHistories.effectiveDate)),
+        .orderBy(desc(employeeSupervisorHistories.createdAt), desc(employeeSupervisorHistories.effectiveDate)),
       db
         .select({
           id: employeeStatusHistories.id,
@@ -730,6 +737,7 @@ export async function getEmployeeById(id: string) {
     ]);
 
   return {
+    isSuperAdmin: role === "SUPER_ADMIN",
     employee: employeeRow,
     currentScheduleAssignment: currentScheduleAssignment[0] ?? null,
     scheduleHistory: currentScheduleAssignment,
@@ -1349,6 +1357,192 @@ export async function bulkUpdateEmployeeOrganization(input: unknown) {
 
   revalidatePath("/positioning");
   revalidatePath("/employees");
+  return { success: true };
+}
+
+export async function deleteEmployeePositionHistory(input: unknown) {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const parsed = employeePositionHistoryDeleteSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input hapus histori jabatan tidak valid." };
+  }
+
+  const { employeeId, historyId } = parsed.data;
+
+  const [target] = await db
+    .select({
+      id: employeePositionHistories.id,
+      employeeId: employeePositionHistories.employeeId,
+    })
+    .from(employeePositionHistories)
+    .where(eq(employeePositionHistories.id, historyId))
+    .limit(1);
+
+  if (!target || target.employeeId !== employeeId) {
+    return { error: "Histori jabatan tidak ditemukan." };
+  }
+
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(employeePositionHistories)
+    .where(eq(employeePositionHistories.employeeId, employeeId));
+
+  if ((countRow?.count ?? 0) <= 1) {
+    return { error: "Histori jabatan terakhir tidak boleh dihapus." };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(employeePositionHistories).where(eq(employeePositionHistories.id, historyId));
+
+    const [latestPositionHistory] = await tx
+      .select({
+        newPositionId: employeePositionHistories.newPositionId,
+      })
+      .from(employeePositionHistories)
+      .where(eq(employeePositionHistories.employeeId, employeeId))
+      .orderBy(desc(employeePositionHistories.createdAt), desc(employeePositionHistories.effectiveDate))
+      .limit(1);
+
+    if (latestPositionHistory) {
+      await tx
+        .update(employees)
+        .set({
+          positionId: latestPositionHistory.newPositionId,
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, employeeId));
+    }
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+  revalidatePath("/payroll");
+  return { success: true };
+}
+
+export async function deleteEmployeeDivisionHistory(input: unknown) {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const parsed = employeeDivisionHistoryDeleteSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input hapus histori divisi tidak valid." };
+  }
+
+  const { employeeId, historyId } = parsed.data;
+
+  const [target] = await db
+    .select({
+      id: employeeDivisionHistories.id,
+      employeeId: employeeDivisionHistories.employeeId,
+    })
+    .from(employeeDivisionHistories)
+    .where(eq(employeeDivisionHistories.id, historyId))
+    .limit(1);
+
+  if (!target || target.employeeId !== employeeId) {
+    return { error: "Histori divisi tidak ditemukan." };
+  }
+
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(employeeDivisionHistories)
+    .where(eq(employeeDivisionHistories.employeeId, employeeId));
+
+  if ((countRow?.count ?? 0) <= 1) {
+    return { error: "Histori divisi terakhir tidak boleh dihapus." };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(employeeDivisionHistories).where(eq(employeeDivisionHistories.id, historyId));
+
+    const [latestDivisionHistory] = await tx
+      .select({
+        newDivisionId: employeeDivisionHistories.newDivisionId,
+      })
+      .from(employeeDivisionHistories)
+      .where(eq(employeeDivisionHistories.employeeId, employeeId))
+      .orderBy(desc(employeeDivisionHistories.createdAt), desc(employeeDivisionHistories.effectiveDate))
+      .limit(1);
+
+    if (latestDivisionHistory) {
+      await tx
+        .update(employees)
+        .set({
+          divisionId: latestDivisionHistory.newDivisionId,
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, employeeId));
+    }
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+  revalidatePath("/payroll");
+  return { success: true };
+}
+
+export async function deleteEmployeeGradeHistory(input: unknown) {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const parsed = employeeGradeHistoryDeleteSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input hapus histori grade tidak valid." };
+  }
+
+  const { employeeId, historyId } = parsed.data;
+
+  const [target] = await db
+    .select({
+      id: employeeGradeHistories.id,
+      employeeId: employeeGradeHistories.employeeId,
+    })
+    .from(employeeGradeHistories)
+    .where(eq(employeeGradeHistories.id, historyId))
+    .limit(1);
+
+  if (!target || target.employeeId !== employeeId) {
+    return { error: "Histori grade tidak ditemukan." };
+  }
+
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(employeeGradeHistories)
+    .where(eq(employeeGradeHistories.employeeId, employeeId));
+
+  if ((countRow?.count ?? 0) <= 1) {
+    return { error: "Histori grade terakhir tidak boleh dihapus." };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(employeeGradeHistories).where(eq(employeeGradeHistories.id, historyId));
+
+    const [latestGradeHistory] = await tx
+      .select({
+        newGradeId: employeeGradeHistories.newGradeId,
+      })
+      .from(employeeGradeHistories)
+      .where(eq(employeeGradeHistories.employeeId, employeeId))
+      .orderBy(desc(employeeGradeHistories.createdAt), desc(employeeGradeHistories.effectiveDate))
+      .limit(1);
+
+    if (latestGradeHistory) {
+      await tx
+        .update(employees)
+        .set({
+          gradeId: latestGradeHistory.newGradeId,
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, employeeId));
+    }
+  });
+
+  revalidatePath(`/employees/${employeeId}`);
+  revalidatePath("/employees");
+  revalidatePath("/payroll");
   return { success: true };
 }
 

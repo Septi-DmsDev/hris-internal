@@ -146,6 +146,21 @@ export const employeeOrganizationBulkUpdateSchema = z
     }
   });
 
+export const employeePositionHistoryDeleteSchema = z.object({
+  employeeId: z.string().uuid("ID karyawan tidak valid."),
+  historyId: z.string().uuid("ID histori jabatan tidak valid."),
+});
+
+export const employeeDivisionHistoryDeleteSchema = z.object({
+  employeeId: z.string().uuid("ID karyawan tidak valid."),
+  historyId: z.string().uuid("ID histori divisi tidak valid."),
+});
+
+export const employeeGradeHistoryDeleteSchema = z.object({
+  employeeId: z.string().uuid("ID karyawan tidak valid."),
+  historyId: z.string().uuid("ID histori grade tidak valid."),
+});
+
 export const workScheduleSchema = z
   .object({
     code: z.string().trim().min(1, "Kode jadwal wajib diisi").max(20).toUpperCase(),
@@ -205,3 +220,6 @@ export type EmployeeOrganizationBulkUpdateInput = z.infer<typeof employeeOrganiz
 export type WorkScheduleDayInput = z.infer<typeof workScheduleDaySchema>;
 export type WorkScheduleInput = z.infer<typeof workScheduleSchema>;
 export type WorkShiftMasterInput = z.infer<typeof workShiftMasterSchema>;
+export type EmployeePositionHistoryDeleteInput = z.infer<typeof employeePositionHistoryDeleteSchema>;
+export type EmployeeDivisionHistoryDeleteInput = z.infer<typeof employeeDivisionHistoryDeleteSchema>;
+export type EmployeeGradeHistoryDeleteInput = z.infer<typeof employeeGradeHistoryDeleteSchema>;

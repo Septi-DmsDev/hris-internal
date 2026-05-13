@@ -1,13 +1,8 @@
-import type { EmployeeGroup } from "@/types";
-
 export type PayrollExportRowInput = {
   employeeCode: string;
   employeeName: string;
-  employeeGroup: EmployeeGroup;
+  gradeName: string;
   divisionName: string;
-  positionName: string;
-  payrollStatus: string;
-  performancePercent: number;
   baseSalaryPaid: number;
   gradeAllowancePaid: number;
   tenureAllowancePaid: number;
@@ -30,13 +25,10 @@ type BuildPayrollExportRowsInput = {
 export function buildPayrollExportRows(input: BuildPayrollExportRowsInput) {
   return input.results.map((row) => ({
     periode: input.periodCode,
-    nik: row.employeeCode,
-    nama_karyawan: row.employeeName,
-    kelompok_karyawan: row.employeeGroup,
+    uid: row.employeeCode,
+    nama_lengkap: row.employeeName,
+    grade: row.gradeName,
     divisi: row.divisionName,
-    jabatan: row.positionName,
-    status_payroll: row.payrollStatus,
-    performa_persen: Number(row.performancePercent.toFixed(2)),
     gaji_pokok_dibayar: row.baseSalaryPaid,
     tunjangan_grade: row.gradeAllowancePaid,
     tunjangan_masa_kerja: row.tenureAllowancePaid,

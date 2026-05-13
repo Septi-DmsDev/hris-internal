@@ -11,15 +11,13 @@ type PayslipPdfLine = {
   amount: number;
 };
 
-type PayslipPdfDocumentProps = {
+export type PayslipPdfSlip = {
   employeeName: string;
   employeeCode: string;
   divisionName: string;
-  positionName: string;
+  gradeName: string;
   periodCode: string;
   periodLabel: string;
-  payrollStatus: string;
-  performancePercent: number;
   additions: PayslipPdfLine[];
   deductions: PayslipPdfLine[];
   totalAdditions: number;
@@ -27,78 +25,82 @@ type PayslipPdfDocumentProps = {
   takeHomePay: number;
 };
 
+type PayslipPdfDocumentProps = {
+  slips: PayslipPdfSlip[];
+};
+
 const styles = StyleSheet.create({
   page: {
-    padding: 24,
-    fontSize: 10,
+    padding: 16,
+    fontSize: 8,
     fontFamily: "Helvetica",
     color: "#0f172a",
   },
   header: {
-    marginBottom: 18,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: 700,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   subtitle: {
     color: "#475569",
-    marginBottom: 2,
+    marginBottom: 1,
   },
-  badgeRow: {
+  employeeMetaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 4,
   },
   cardGrid: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 8,
   },
   card: {
     flexGrow: 1,
     border: "1 solid #cbd5e1",
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 6,
+    padding: 6,
   },
   cardLabel: {
     color: "#64748b",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   cardValue: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: 700,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: 8,
     border: "1 solid #cbd5e1",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 6,
+    padding: 8,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: 700,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   line: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 4,
+    paddingVertical: 2,
     borderBottom: "1 solid #e2e8f0",
   },
   footer: {
-    marginTop: 12,
+    marginTop: 6,
     borderTop: "1 solid #cbd5e1",
-    paddingTop: 8,
+    paddingTop: 4,
   },
   footerLine: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 3,
+    paddingVertical: 2,
   },
   footerStrong: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: 700,
   },
 });
@@ -107,74 +109,75 @@ function formatCurrency(amount: number) {
   return `Rp ${amount.toLocaleString("id-ID", { maximumFractionDigits: 2 })}`;
 }
 
-export function PayslipPdfDocument(props: PayslipPdfDocumentProps) {
+function PayslipPdfPage(props: PayslipPdfSlip) {
+  return (
+    <Page size="A6" style={styles.page}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Slip Gaji</Text>
+        <Text style={styles.subtitle}>{props.periodCode} - {props.periodLabel}</Text>
+      </View>
+
+      <View style={styles.employeeMetaRow}>
+        <Text>Nama: {props.employeeName}</Text>
+        <Text>UID: {props.employeeCode}</Text>
+      </View>
+      <View style={styles.employeeMetaRow}>
+        <Text>Divisi: {props.divisionName}</Text>
+        <Text>Grade: {props.gradeName}</Text>
+      </View>
+
+      <View style={styles.cardGrid}>
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Total Addition</Text>
+          <Text style={styles.cardValue}>{formatCurrency(props.totalAdditions)}</Text>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Total Deduction</Text>
+          <Text style={styles.cardValue}>{formatCurrency(props.totalDeductions)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Rincian THP - Penambahan</Text>
+        {props.additions.map((line) => (
+          <View key={line.label} style={styles.line}>
+            <Text>{line.label}</Text>
+            <Text>{formatCurrency(line.amount)}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Rincian THP - Potongan</Text>
+        {props.deductions.length === 0 ? (
+          <Text>Tidak ada potongan pada periode ini.</Text>
+        ) : props.deductions.map((line) => (
+          <View key={line.label} style={styles.line}>
+            <Text>{line.label}</Text>
+            <Text>{formatCurrency(line.amount)}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.footer}>
+        <View style={styles.footerLine}>
+          <Text style={styles.footerStrong}>Take Home Pay</Text>
+          <Text style={styles.footerStrong}>{formatCurrency(props.takeHomePay)}</Text>
+        </View>
+      </View>
+    </Page>
+  );
+}
+
+export function PayslipPdfDocument({ slips }: PayslipPdfDocumentProps) {
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Slip Gaji</Text>
-          <Text style={styles.subtitle}>{props.periodCode} · {props.periodLabel}</Text>
-          <Text style={styles.subtitle}>{props.employeeName} · {props.employeeCode}</Text>
-          <Text style={styles.subtitle}>{props.divisionName} · {props.positionName}</Text>
-        </View>
-
-        <View style={styles.badgeRow}>
-          <Text>Status Payroll: {props.payrollStatus}</Text>
-          <Text>Performa: {props.performancePercent.toFixed(2)}%</Text>
-        </View>
-
-        <View style={styles.cardGrid}>
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>Total Addition</Text>
-            <Text style={styles.cardValue}>{formatCurrency(props.totalAdditions)}</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>Total Deduction</Text>
-            <Text style={styles.cardValue}>{formatCurrency(props.totalDeductions)}</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>Take Home Pay</Text>
-            <Text style={styles.cardValue}>{formatCurrency(props.takeHomePay)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Addition</Text>
-          {props.additions.map((line) => (
-            <View key={line.label} style={styles.line}>
-              <Text>{line.label}</Text>
-              <Text>{formatCurrency(line.amount)}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Deduction</Text>
-          {props.deductions.length === 0 ? (
-            <Text>Tidak ada deduction pada periode ini.</Text>
-          ) : props.deductions.map((line) => (
-            <View key={line.label} style={styles.line}>
-              <Text>{line.label}</Text>
-              <Text>{formatCurrency(line.amount)}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.footer}>
-          <View style={styles.footerLine}>
-            <Text>Total Addition</Text>
-            <Text>{formatCurrency(props.totalAdditions)}</Text>
-          </View>
-          <View style={styles.footerLine}>
-            <Text>Total Deduction</Text>
-            <Text>{formatCurrency(props.totalDeductions)}</Text>
-          </View>
-          <View style={styles.footerLine}>
-            <Text style={styles.footerStrong}>Take Home Pay</Text>
-            <Text style={styles.footerStrong}>{formatCurrency(props.takeHomePay)}</Text>
-          </View>
-        </View>
-      </Page>
+      {slips.map((slip) => (
+        <PayslipPdfPage
+          key={`${slip.periodCode}-${slip.employeeCode}`}
+          {...slip}
+        />
+      ))}
     </Document>
   );
 }

@@ -9,11 +9,8 @@ describe("buildPayrollExportRows", () => {
         {
           employeeCode: "EMP-001",
           employeeName: "Budi",
-          employeeGroup: "TEAMWORK",
+          gradeName: "Grade A",
           divisionName: "Printing",
-          positionName: "Operator",
-          payrollStatus: "REGULER",
-          performancePercent: 105,
           baseSalaryPaid: 1_200_000,
           gradeAllowancePaid: 100_000,
           tenureAllowancePaid: 50_000,
@@ -33,11 +30,10 @@ describe("buildPayrollExportRows", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       periode: "2026-04",
-      nik: "EMP-001",
-      nama_karyawan: "Budi",
-      kelompok_karyawan: "TEAMWORK",
+      uid: "EMP-001",
+      nama_lengkap: "Budi",
+      grade: "Grade A",
       divisi: "Printing",
-      status_payroll: "REGULER",
       total_thp: 1_700_000,
     });
   });

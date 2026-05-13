@@ -353,7 +353,7 @@ export default function PayrollClient({
                 target="_blank"
                 rel="noreferrer"
               >
-                Slip .pdf
+                Daftar Slip .pdf
               </a>
             </Button>
             {canDelete && row.original.status !== "LOCKED" && (

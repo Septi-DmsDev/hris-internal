@@ -5,6 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getEmployeeById } from "@/server/actions/employees";
 import { resolveEmployeeGroupLabel } from "@/lib/employee-groups";
+import DeleteDivisionHistoryButton from "./DeleteDivisionHistoryButton";
+import DeleteGradeHistoryButton from "./DeleteGradeHistoryButton";
+import DeletePositionHistoryButton from "./DeletePositionHistoryButton";
 
 const EMPLOYMENT_STATUS_LABEL: Record<string, string> = {
   TRAINING: "Training",
@@ -108,7 +111,7 @@ export default async function EmployeeDetailPage({
     notFound();
   }
 
-  const { employee, currentScheduleAssignment, scheduleHistory, histories } = detail;
+  const { employee, currentScheduleAssignment, scheduleHistory, histories, isSuperAdmin } = detail;
 
   return (
     <div className="space-y-6">
@@ -207,32 +210,71 @@ export default async function EmployeeDetailPage({
       <div className="grid gap-4 xl:grid-cols-2">
         <HistoryTable
           title="Histori Divisi"
-          headers={["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan"]}
+          headers={isSuperAdmin ? ["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan", "Aksi"] : ["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan"]}
           rows={histories.divisions.map((row) => [
             formatDate(row.effectiveDate),
             row.previousDivisionName ?? "-",
             row.newDivisionName ?? "-",
             row.notes ?? "-",
+            ...(isSuperAdmin
+              ? [
+                  row.previousDivisionName
+                    ? (
+                      <DeleteDivisionHistoryButton
+                        key={row.id}
+                        employeeId={employee.id}
+                        historyId={row.id}
+                      />
+                    )
+                    : <span key={row.id} className="text-slate-300">-</span>,
+                ]
+              : []),
           ])}
         />
         <HistoryTable
           title="Histori Jabatan"
-          headers={["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan"]}
+          headers={isSuperAdmin ? ["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan", "Aksi"] : ["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan"]}
           rows={histories.positions.map((row) => [
             formatDate(row.effectiveDate),
             row.previousPositionName ?? "-",
             row.newPositionName ?? "-",
             row.notes ?? "-",
+            ...(isSuperAdmin
+              ? [
+                  row.previousPositionName
+                    ? (
+                      <DeletePositionHistoryButton
+                        key={row.id}
+                        employeeId={employee.id}
+                        historyId={row.id}
+                      />
+                    )
+                    : <span key={row.id} className="text-slate-300">-</span>,
+                ]
+              : []),
           ])}
         />
         <HistoryTable
           title="Histori Grade"
-          headers={["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan"]}
+          headers={isSuperAdmin ? ["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan", "Aksi"] : ["Tanggal Efektif", "Sebelum", "Sesudah", "Catatan"]}
           rows={histories.grades.map((row) => [
             formatDate(row.effectiveDate),
             row.previousGradeName ?? "-",
             row.newGradeName ?? "-",
             row.notes ?? "-",
+            ...(isSuperAdmin
+              ? [
+                  row.previousGradeName
+                    ? (
+                      <DeleteGradeHistoryButton
+                        key={row.id}
+                        employeeId={employee.id}
+                        historyId={row.id}
+                      />
+                    )
+                    : <span key={row.id} className="text-slate-300">-</span>,
+                ]
+              : []),
           ])}
         />
         <HistoryTable

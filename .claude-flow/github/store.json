@@ -1,0 +1,20 @@
+{
+  "repos": {
+    "Septi-DmsDev/hris-internal": {
+      "owner": "Septi-DmsDev",
+      "name": "hris-internal",
+      "branch": "main",
+      "lastAnalyzed": "2026-05-13T03:10:04.268Z",
+      "metrics": {
+        "commits": 115,
+        "branches": 0,
+        "contributors": 0,
+        "openIssues": 0,
+        "openPRs": 0
+      }
+    }
+  },
+  "prs": {},
+  "issues": {},
+  "version": "3.0.0"
+}

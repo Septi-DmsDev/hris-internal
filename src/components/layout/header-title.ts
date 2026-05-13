@@ -1,4 +1,7 @@
 export function resolveHeaderMeta(pathname: string) {
+  if (pathname.startsWith("/payroll/") && pathname.endsWith("/slips.pdf")) {
+    return { title: "Daftar Slip Gaji", description: "Dokumen slip gaji per periode" };
+  }
   if (pathname.startsWith("/payroll/") && pathname.endsWith("/payslip.pdf")) {
     return { title: "Slip Gaji", description: "Dokumen pembayaran karyawan" };
   }

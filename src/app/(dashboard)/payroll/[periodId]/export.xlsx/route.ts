@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { getPayrollWorkspace } from "@/server/actions/payroll";
+import { generatePayrollPreview, getPayrollWorkspace } from "@/server/actions/payroll";
 import { normalizeEmployeeGroup } from "@/lib/employee-groups";
 
 export const runtime = "nodejs";
@@ -13,16 +13,40 @@ type RouteContext = {
 
 export async function GET(_: Request, context: RouteContext) {
   const { periodId } = await context.params;
-  const workspace = await getPayrollWorkspace(periodId);
+  let workspace = await getPayrollWorkspace(periodId);
 
   if ("error" in workspace) {
     return NextResponse.json({ error: workspace.error }, { status: 403 });
   }
 
-  const period = workspace.selectedPeriod;
+  let period = workspace.selectedPeriod;
   if (!period) {
     return NextResponse.json({ error: "Periode payroll tidak ditemukan." }, { status: 404 });
   }
+
+  // Allow recap export directly from history even when period is still editable.
+  // If preview rows are not ready yet, generate them once and re-fetch workspace.
+  if (
+    workspace.results.length === 0 &&
+    ["OPEN", "DATA_REVIEW", "DRAFT"].includes(period.status)
+  ) {
+    const previewResult = await generatePayrollPreview({ periodId }, { revalidate: false });
+    if (!("error" in previewResult)) {
+      workspace = await getPayrollWorkspace(periodId);
+      if ("error" in workspace) {
+        return NextResponse.json({ error: workspace.error }, { status: 403 });
+      }
+      period = workspace.selectedPeriod;
+      if (!period) {
+        return NextResponse.json({ error: "Periode payroll tidak ditemukan." }, { status: 404 });
+      }
+    }
+  }
+
+  if (workspace.results.length === 0) {
+    return NextResponse.json({ error: "Belum ada data payroll untuk direkap di periode ini." }, { status: 400 });
+  }
+
   const periodCode = period.periodCode;
 
   const normalizedRows = workspace.results.map((row) => ({
@@ -76,38 +100,32 @@ export async function GET(_: Request, context: RouteContext) {
 
   const workbook = XLSX.utils.book_new();
 
-  // 1) KARTAP: dikelompokkan jabatan (KABAG, SPV, MANAGERIAL)
-  const kartapRows = normalizedRows.filter((row) => row.normalizedGroup === "KARYAWAN_TETAP");
-  const kartapByRole: Record<string, typeof normalizedRows> = {
-    KABAG: [],
-    SPV: [],
-    MANAGERIAL: [],
-    LAINNYA: [],
-  };
-  for (const row of kartapRows) {
-    if (row.positionName.includes("KABAG")) kartapByRole.KABAG.push(row);
-    else if (row.positionName.includes("SPV")) kartapByRole.SPV.push(row);
-    else if (row.positionName.includes("MANAGERIAL")) kartapByRole.MANAGERIAL.push(row);
-    else kartapByRole.LAINNYA.push(row);
-  }
+  // Tab langsung per kategori:
+  // - KABAG/SPV/MANAGERIAL berdasar jabatan
+  // - selain itu berdasar divisi
+  const rowsByCategory = new Map<string, typeof normalizedRows>();
+  for (const row of normalizedRows) {
+    let category = row.divisionName || "-";
+    if (row.positionName.includes("KABAG")) category = "KABAG";
+    else if (row.positionName.includes("SPV")) category = "SPV";
+    else if (row.positionName.includes("MANAGERIAL")) category = "MANAGERIAL";
 
-  appendSheet(workbook, "Kartap - KABAG", kartapByRole.KABAG);
-  appendSheet(workbook, "Kartap - SPV", kartapByRole.SPV);
-  appendSheet(workbook, "Kartap - MANAGERIAL", kartapByRole.MANAGERIAL);
-  appendSheet(workbook, "Kartap - Lainnya", kartapByRole.LAINNYA);
-
-  // 2) MITRA KERJA: dikelompokkan berdasarkan divisi.
-  // Semua non-KARTAP diarahkan ke kelompok ini agar tidak ada karyawan yang hilang.
-  const mitraRows = normalizedRows.filter((row) => row.normalizedGroup !== "KARYAWAN_TETAP");
-  const mitraByDivision = new Map<string, typeof normalizedRows>();
-  for (const row of mitraRows) {
-    const key = row.divisionName || "-";
-    const current = mitraByDivision.get(key) ?? [];
+    const current = rowsByCategory.get(category) ?? [];
     current.push(row);
-    mitraByDivision.set(key, current);
+    rowsByCategory.set(category, current);
   }
-  for (const [divisionName, rows] of [...mitraByDivision.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    appendSheet(workbook, `Mitra - ${divisionName}`, rows);
+
+  const orderedCategories = [
+    "KABAG",
+    "SPV",
+    "MANAGERIAL",
+    ...[...rowsByCategory.keys()]
+      .filter((key) => key !== "KABAG" && key !== "SPV" && key !== "MANAGERIAL")
+      .sort((a, b) => a.localeCompare(b)),
+  ];
+
+  for (const category of orderedCategories) {
+    appendSheet(workbook, category, rowsByCategory.get(category) ?? []);
   }
 
   // Safety net: jika ada data yang belum masuk tab manapun, masukkan ke tab fallback.

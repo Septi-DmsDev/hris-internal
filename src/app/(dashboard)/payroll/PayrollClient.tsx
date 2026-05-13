@@ -345,7 +345,7 @@ export default function PayrollClient({
               Edit
             </Button>
             <Button asChild size="sm" variant="outline">
-              <a href={`/payroll/${row.original.id}/export.xlsx`}>Rekap .xlsx</a>
+              <a href={`/payroll/${row.original.id}/rekap.xlsx`}>Rekap .xlsx</a>
             </Button>
             <Button asChild size="sm" variant="outline">
               <a

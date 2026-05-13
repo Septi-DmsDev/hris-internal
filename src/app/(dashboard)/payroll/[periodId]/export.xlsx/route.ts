@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { generatePayrollPreview, getPayrollWorkspace } from "@/server/actions/payroll";
-import { normalizeEmployeeGroup } from "@/lib/employee-groups";
+import { buildPayrollExportRows } from "@/server/payroll-engine/build-payroll-export-rows";
 
 export const runtime = "nodejs";
 
@@ -44,108 +44,35 @@ export async function GET(_: Request, context: RouteContext) {
   }
 
   if (workspace.results.length === 0) {
-    return NextResponse.json({ error: "Belum ada data payroll untuk direkap di periode ini." }, { status: 400 });
+    return NextResponse.json({ error: "Belum ada data payroll untuk diexport di periode ini." }, { status: 400 });
   }
 
   const periodCode = period.periodCode;
-
-  const normalizedRows = workspace.results.map((row) => ({
-    id: row.employeeId,
-    uid: row.employeeCode ?? "-",
-    name: row.employeeName ?? "-",
-    divisionName: row.divisionName ?? "-",
-    positionName: (row.positionName ?? "-").toUpperCase(),
-    normalizedGroup: normalizeEmployeeGroup(row.employeeGroup ?? "MITRA_KERJA"),
-    thp: Number(row.takeHomePay),
-  }));
-
-  const assignedEmployeeIds = new Set<string>();
-  const tabSummaries: Array<{ tabName: string; employeeCount: number; totalThp: number }> = [];
-
-  function createSheetRows(rows: typeof normalizedRows) {
-    const body = rows
-      .map((row) => [row.uid, row.name, row.thp] as const)
-      .sort((a, b) => String(a[1]).localeCompare(String(b[1])));
-    const totalThp = rows.reduce((sum, row) => sum + row.thp, 0);
-
-    return [
-      ["periode", periodCode],
-      [],
-      ["uid", "nama_lengkap", "total_thp"],
-      ...body,
-      [],
-      ["TOTAL THP", "", totalThp],
-    ] as Array<Array<string | number>>;
-  }
-
-  function appendSheet(workbook: XLSX.WorkBook, title: string, rows: typeof normalizedRows) {
-    if (rows.length === 0) return;
-    const uniqueRows: typeof normalizedRows = [];
-    for (const row of rows) {
-      if (assignedEmployeeIds.has(row.id)) continue;
-      assignedEmployeeIds.add(row.id);
-      uniqueRows.push(row);
-    }
-    if (uniqueRows.length === 0) return;
-    const tabName = title.slice(0, 31);
-    const totalThp = uniqueRows.reduce((sum, row) => sum + row.thp, 0);
-    tabSummaries.push({
-      tabName,
-      employeeCount: uniqueRows.length,
-      totalThp,
-    });
-    const worksheet = XLSX.utils.aoa_to_sheet(createSheetRows(uniqueRows));
-    XLSX.utils.book_append_sheet(workbook, worksheet, tabName);
-  }
+  const rows = buildPayrollExportRows({
+    periodCode,
+    results: workspace.results.map((row) => ({
+      employeeCode: row.employeeCode ?? "-",
+      employeeName: row.employeeName ?? "-",
+      gradeName: row.gradeName ?? "-",
+      divisionName: row.divisionName ?? "-",
+      baseSalaryPaid: Number(row.baseSalaryPaid),
+      gradeAllowancePaid: Number(row.gradeAllowancePaid),
+      tenureAllowancePaid: Number(row.tenureAllowancePaid),
+      overtimeAmount: Number(row.overtimeAmount),
+      bonusKinerjaAmount: Number(row.bonusKinerjaAmount),
+      bonusPrestasiAmount: Number(row.bonusPrestasiAmount),
+      bonusFulltimeAmount: Number(row.bonusFulltimeAmount),
+      bonusDisciplineAmount: Number(row.bonusDisciplineAmount),
+      bonusTeamAmount: Number(row.bonusTeamAmount),
+      totalAdditionAmount: Number(row.totalAdditionAmount),
+      totalDeductionAmount: Number(row.totalDeductionAmount),
+      takeHomePay: Number(row.takeHomePay),
+    })),
+  });
 
   const workbook = XLSX.utils.book_new();
-
-  // Tab langsung per kategori:
-  // - KABAG/SPV/MANAGERIAL berdasar jabatan
-  // - selain itu berdasar divisi
-  const rowsByCategory = new Map<string, typeof normalizedRows>();
-  for (const row of normalizedRows) {
-    let category = row.divisionName || "-";
-    if (row.positionName.includes("KABAG")) category = "KABAG";
-    else if (row.positionName.includes("SPV")) category = "SPV";
-    else if (row.positionName.includes("MANAGERIAL")) category = "MANAGERIAL";
-
-    const current = rowsByCategory.get(category) ?? [];
-    current.push(row);
-    rowsByCategory.set(category, current);
-  }
-
-  const orderedCategories = [
-    "KABAG",
-    "SPV",
-    "MANAGERIAL",
-    ...[...rowsByCategory.keys()]
-      .filter((key) => key !== "KABAG" && key !== "SPV" && key !== "MANAGERIAL")
-      .sort((a, b) => a.localeCompare(b)),
-  ];
-
-  for (const category of orderedCategories) {
-    appendSheet(workbook, category, rowsByCategory.get(category) ?? []);
-  }
-
-  // Safety net: jika ada data yang belum masuk tab manapun, masukkan ke tab fallback.
-  const unassigned = normalizedRows.filter((row) => !assignedEmployeeIds.has(row.id));
-  appendSheet(workbook, "Unassigned", unassigned);
-
-  const grandTotalThp = tabSummaries.reduce((sum, row) => sum + row.totalThp, 0);
-  const grandTotalEmployees = tabSummaries.reduce((sum, row) => sum + row.employeeCount, 0);
-  const summaryRows: Array<Array<string | number>> = [
-    ["periode", periodCode],
-    [],
-    ["tab", "jumlah_karyawan", "total_thp"],
-    ...tabSummaries.map((row) => [row.tabName, row.employeeCount, row.totalThp]),
-    [],
-    ["GRAND TOTAL", grandTotalEmployees, grandTotalThp],
-  ];
-  const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryRows);
-  XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "Summary");
-  // Ensure Summary appears as the first sheet in the workbook.
-  workbook.SheetNames = ["Summary", ...workbook.SheetNames.filter((name) => name !== "Summary")];
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Payroll");
 
   const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
 

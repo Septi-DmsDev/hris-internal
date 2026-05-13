@@ -1475,7 +1475,6 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         .reduce((sum, incident) => sum + toNumber(incident.payrollDeduction), 0)
     );
     const spPenaltyMultiplier = 1;
-    const hasLateIncident = employeeIncidents.some((incident) => incident.incidentType === "TELAT");
 
     const employeeAdjustments = adjustmentsByEmployee.get(employee.id) ?? [];
     const manualAdjustmentAmount = roundCurrency(
@@ -1521,32 +1520,33 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       toNumber(gradeCompensation?.bonusKinerjaTeam90),
       toNumber(gradeCompensation?.bonusKinerjaTeam100)
     );
-    const disciplineBonusByGrade = resolveTieredBonusAmount(
-      performancePercent,
-      toNumber(gradeCompensation?.bonusDisiplin80),
-      toNumber(gradeCompensation?.bonusDisiplin90),
-      toNumber(gradeCompensation?.bonusDisiplin100)
-    );
+    const configuredDisciplineBonusAmount = toNumber(salaryConfig?.disciplineBonusAmount);
+    const disciplineBonusTier80Amount = configuredDisciplineBonusAmount
+      || toNumber(gradeCompensation?.bonusDisiplin80);
+    const disciplineBonusTier90Amount = configuredDisciplineBonusAmount
+      || toNumber(gradeCompensation?.bonusDisiplin90);
+    const disciplineBonusTier100Amount = configuredDisciplineBonusAmount
+      || toNumber(gradeCompensation?.bonusDisiplin100);
     const achievementBonus140Amount = toNumber(salaryConfig?.achievementBonus140Amount)
       || toNumber(gradeCompensation?.bonusPrestasi140);
     const achievementBonus165Amount = toNumber(salaryConfig?.achievementBonus165Amount)
       || toNumber(gradeCompensation?.bonusPrestasi165);
     const performanceBonusBaseAmount = toNumber(salaryConfig?.performanceBonusBaseAmount)
       || performanceBonusByGrade;
-    const configuredDisciplineBonusAmount = toNumber(salaryConfig?.disciplineBonusAmount)
-      || disciplineBonusByGrade;
     const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount)
       || teamBonusByGrade;
     const fulltimeEligible = attendanceSummary.fulltimeEligible && !hasApprovedAbsence;
-    const disciplinePerformanceEligible = performancePercent >= 80;
     const {
       disciplineBonusAmount,
       disciplineEligible,
+      disciplinePercent,
     } = resolveDisciplineBonus({
       ruleEnabled: attendanceSummary.hasAttendanceData,
-      configuredAmount: configuredDisciplineBonusAmount,
-      fulltimeEligible: attendanceSummary.disciplineEligible && !hasApprovedAbsence && disciplinePerformanceEligible,
-      hasLateIncident,
+      presentDays: attendanceSummary.presentDays,
+      scheduledWorkDays,
+      bonusTier80Amount: disciplineBonusTier80Amount,
+      bonusTier90Amount: disciplineBonusTier90Amount,
+      bonusTier100Amount: disciplineBonusTier100Amount,
     });
 
     if (isKpiEmployee && !managerialKpi) {
@@ -1682,8 +1682,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           attendanceLateDays: attendanceSummary.lateDays,
           attendanceFulltimeEligible: attendanceSummary.fulltimeEligible,
           attendanceDisciplineEligible: attendanceSummary.disciplineEligible,
-          disciplinePerformanceEligible,
-          hasLateIncident,
+          disciplinePercent,
           approvedUnpaidLeaveDays,
           approvedPaidLeaveDays,
           unpaidLeaveDeductionAmount: payrollCalc.unpaidLeaveDeductionAmount,

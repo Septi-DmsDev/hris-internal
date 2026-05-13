@@ -22,21 +22,27 @@ export default async function AttendancePage({ searchParams }: PageProps) {
     );
   }
 
-  const records = workspace.records.map((record) => ({
-    id: record.id,
-    employeeId: record.employeeId,
-    employeeName: record.employeeName ?? "-",
-    employeeCode: record.employeeCode ?? "-",
-    divisionName: record.divisionName ?? "-",
-    attendanceDate: format(record.attendanceDate, "yyyy-MM-dd"),
-    attendanceStatus: record.attendanceStatus,
-    checkInTime: record.checkInTime?.slice(0, 5) ?? "",
-    checkOutTime: record.checkOutTime?.slice(0, 5) ?? "",
-    punctualityStatus: record.punctualityStatus ?? "",
-    source: record.source,
-    notes: record.notes ?? "",
-    updatedAt: record.updatedAt ? format(record.updatedAt, "yyyy-MM-dd HH:mm") : "-",
-  }));
+  const records = workspace.records.map((record) => {
+    const raw = record.rawPayload as { breakOutTime?: string | null; breakInTime?: string | null; taps?: string[] } | null;
+    return {
+      id: record.id,
+      employeeId: record.employeeId,
+      employeeName: record.employeeName ?? "-",
+      employeeCode: record.employeeCode ?? "-",
+      divisionName: record.divisionName ?? "-",
+      attendanceDate: format(record.attendanceDate, "yyyy-MM-dd"),
+      attendanceStatus: record.attendanceStatus,
+      checkInTime: record.checkInTime?.slice(0, 5) ?? "",
+      checkOutTime: record.checkOutTime?.slice(0, 5) ?? "",
+      breakOutTime: raw?.breakOutTime?.slice(0, 5) ?? "",
+      breakInTime: raw?.breakInTime?.slice(0, 5) ?? "",
+      tapsCount: raw?.taps?.length ?? 0,
+      punctualityStatus: record.punctualityStatus ?? "",
+      source: record.source,
+      notes: record.notes ?? "",
+      updatedAt: record.updatedAt ? format(record.updatedAt, "yyyy-MM-dd HH:mm") : "-",
+    };
+  });
 
   const employees = workspace.employees.map((employee) => ({
     id: employee.id,

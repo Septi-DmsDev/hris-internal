@@ -63,6 +63,7 @@ export async function getAttendanceWorkspace(selectedDateInput?: string) {
       checkOutTime: employeeAttendanceRecords.checkOutTime,
       punctualityStatus: employeeAttendanceRecords.punctualityStatus,
       source: employeeAttendanceRecords.source,
+      rawPayload: employeeAttendanceRecords.rawPayload,
       notes: employeeAttendanceRecords.notes,
       updatedAt: employeeAttendanceRecords.updatedAt,
     })

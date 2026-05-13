@@ -76,5 +76,25 @@ export const admsAttendanceIngestSchema = z.object({
 export type AttendanceRecordInput = z.infer<typeof attendanceRecordSchema>;
 export type AttendanceFallbackRequestInput = z.infer<typeof attendanceFallbackRequestSchema>;
 export type AttendanceFallbackDecisionInput = z.infer<typeof attendanceFallbackDecisionSchema>;
+export const admsRawTapSchema = z.object({
+  employeeCode: z.string().trim().min(1, "employeeCode wajib diisi."),
+  time: z
+    .string()
+    .trim()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Format jam harus HH:mm atau HH:mm:ss.")
+    .transform((v) => v.slice(0, 5)),
+  deviceId: z.string().trim().max(120).optional(),
+});
+
+export const admsRawTapIngestSchema = z.object({
+  date: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal harus YYYY-MM-DD."),
+  taps: z.array(admsRawTapSchema).min(1, "taps minimal 1 data."),
+});
+
 export type AdmsAttendanceRecordInput = z.infer<typeof admsAttendanceRecordSchema>;
 export type AdmsAttendanceIngestInput = z.infer<typeof admsAttendanceIngestSchema>;
+export type AdmsRawTapInput = z.infer<typeof admsRawTapSchema>;
+export type AdmsRawTapIngestInput = z.infer<typeof admsRawTapIngestSchema>;

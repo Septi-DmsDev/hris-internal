@@ -220,8 +220,6 @@ export async function POST(request: NextRequest) {
       checkOutTime: item.checkOutTime ?? null,
       punctualityStatus,
       source: "FINGERPRINT_ADMS" as const,
-      externalDeviceId: parsed.data.deviceId,
-      externalUserCode: item.externalUserCode ?? item.employeeCode,
       rawPayload: {
         ...(item.rawPayload ?? {}),
         externalEventId: item.externalEventId ?? null,
@@ -268,7 +266,7 @@ export async function POST(request: NextRequest) {
     for (const [i, result] of results.entries()) {
       if (result.status === "rejected") {
         const p = updatePayloads[i];
-        errors.push({ employeeCode: p.payload.externalUserCode ?? "", attendanceDate: "", reason: String(result.reason) });
+        errors.push({ employeeCode: (p.payload.rawPayload as { employeeCode?: string })?.employeeCode ?? "", attendanceDate: "", reason: String(result.reason) });
       }
     }
   }

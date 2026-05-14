@@ -12,7 +12,7 @@ import {
   workScheduleDays,
 } from "@/lib/db/schema/employee";
 import { attendanceTickets, employeeAttendanceRecords, incidentLogs, overtimeRequests } from "@/lib/db/schema/hr";
-import { branches, divisions, grades, positions } from "@/lib/db/schema/master";
+import { branches, divisions, employeeGroupConfigs, grades, positions } from "@/lib/db/schema/master";
 import {
   employeeSalaryConfigs,
   gradeCompensationConfigs,
@@ -49,7 +49,7 @@ import { resolveSpPerformancePenalty } from "@/server/payroll-engine/resolve-sp-
 import { resolveTenureAllowanceAmount } from "@/server/payroll-engine/resolve-tenure-allowance";
 import { countTargetDaysForPeriod } from "@/server/point-engine/count-target-days-for-period";
 import { isKpiEmployeeGroup, isPointBasedEmployeeGroup } from "@/lib/employee-groups";
-import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { PayrollPeriodStatus, UserRole } from "@/types";
 import {
@@ -106,6 +106,16 @@ function countCalendarDaysInclusive(start: Date, end: Date) {
   return Math.floor(diff / 86_400_000) + 1;
 }
 
+function countSundaysInclusive(start: Date, end: Date) {
+  const cursorStart = normalizeDate(start);
+  const cursorEnd = normalizeDate(end);
+  let sundays = 0;
+  for (let cursor = new Date(cursorStart); cursor <= cursorEnd; cursor.setDate(cursor.getDate() + 1)) {
+    if (cursor.getDay() === 0) sundays += 1;
+  }
+  return sundays;
+}
+
 function countOverlapDays(start: Date, end: Date, rangeStart: Date, rangeEnd: Date) {
   const overlapStart = normalizeDate(start) > normalizeDate(rangeStart) ? normalizeDate(start) : normalizeDate(rangeStart);
   const overlapEnd = normalizeDate(end) < normalizeDate(rangeEnd) ? normalizeDate(end) : normalizeDate(rangeEnd);
@@ -113,16 +123,21 @@ function countOverlapDays(start: Date, end: Date, rangeStart: Date, rangeEnd: Da
   return countCalendarDaysInclusive(overlapStart, overlapEnd);
 }
 
-function resolveActiveEmploymentDays(startDate: Date, periodStartDate: Date, periodEndDate: Date) {
-  if (normalizeDate(startDate) > normalizeDate(periodEndDate)) return 0;
-  const effectiveStart = normalizeDate(startDate) > normalizeDate(periodStartDate)
-    ? normalizeDate(startDate)
-    : normalizeDate(periodStartDate);
-  return countCalendarDaysInclusive(effectiveStart, periodEndDate);
-}
-
 function isSpIncidentType(incidentType: string) {
   return incidentType === "SP1" || incidentType === "SP2";
+}
+
+async function hasEmployeeGroupBaseSalaryColumn() {
+  const rows = await db.execute(sql<{ exists: boolean }>`
+    select exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'employee_group_configs'
+        and column_name = 'base_salary_amount'
+    ) as "exists"
+  `);
+  return Boolean(rows[0]?.exists);
 }
 
 async function assertPayrollReadAccess(): Promise<PayrollReadAccess> {
@@ -251,45 +266,86 @@ export async function getPayrollWorkspace(selectedPeriodId?: string) {
       .map((row) => ({ ...row, source: "PERIOD" as const })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  const salaryConfigs = await db
-    .select({
-      employeeId: employees.id,
-      employeeCode: employees.employeeCode,
-      employeeName: employees.fullName,
-      positionName: positions.name,
-      divisionName: divisions.name,
-      trainingGraduationDate: employees.trainingGraduationDate,
-      employeeGroup: employees.employeeGroup,
-      payrollStatus: employees.payrollStatus,
-      baseSalaryAmount: employeeSalaryConfigs.baseSalaryAmount,
-      gradeAllowanceAmount: employeeSalaryConfigs.gradeAllowanceAmount,
-      tenureAllowanceAmount: employeeSalaryConfigs.tenureAllowanceAmount,
-      dailyAllowanceAmount: employeeSalaryConfigs.dailyAllowanceAmount,
-      performanceBonusBaseAmount: employeeSalaryConfigs.performanceBonusBaseAmount,
-      achievementBonus140Amount: employeeSalaryConfigs.achievementBonus140Amount,
-      achievementBonus165Amount: employeeSalaryConfigs.achievementBonus165Amount,
-      fulltimeBonusAmount: employeeSalaryConfigs.fulltimeBonusAmount,
-      disciplineBonusAmount: employeeSalaryConfigs.disciplineBonusAmount,
-      teamBonusAmount: employeeSalaryConfigs.teamBonusAmount,
-      overtimeRateAmount: employeeSalaryConfigs.overtimeRateAmount,
-      notes: employeeSalaryConfigs.notes,
-      updatedAt: employeeSalaryConfigs.updatedAt,
-    })
-    .from(employees)
-    .leftJoin(positions, eq(employees.positionId, positions.id))
-    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
-    .leftJoin(employeeSalaryConfigs, eq(employees.id, employeeSalaryConfigs.employeeId))
-    .where(
-      and(
-        eq(employees.isActive, true),
-        inArray(employees.payrollStatus, ["TRAINING", "REGULER", "FINAL_PAYROLL"])
-      )
-    )
-    .orderBy(asc(employees.fullName));
+  const hasGroupBaseSalaryColumn = await hasEmployeeGroupBaseSalaryColumn();
+  const salaryConfigs = hasGroupBaseSalaryColumn
+    ? await db
+        .select({
+          employeeId: employees.id,
+          employeeCode: employees.employeeCode,
+          employeeName: employees.fullName,
+          positionName: positions.name,
+          divisionName: divisions.name,
+          trainingGraduationDate: employees.trainingGraduationDate,
+          employeeGroup: employees.employeeGroup,
+          employeeGroupBaseSalaryAmount: employeeGroupConfigs.baseSalaryAmount,
+          payrollStatus: employees.payrollStatus,
+          baseSalaryAmount: employeeSalaryConfigs.baseSalaryAmount,
+          gradeAllowanceAmount: employeeSalaryConfigs.gradeAllowanceAmount,
+          tenureAllowanceAmount: employeeSalaryConfigs.tenureAllowanceAmount,
+          dailyAllowanceAmount: employeeSalaryConfigs.dailyAllowanceAmount,
+          performanceBonusBaseAmount: employeeSalaryConfigs.performanceBonusBaseAmount,
+          achievementBonus140Amount: employeeSalaryConfigs.achievementBonus140Amount,
+          achievementBonus165Amount: employeeSalaryConfigs.achievementBonus165Amount,
+          fulltimeBonusAmount: employeeSalaryConfigs.fulltimeBonusAmount,
+          disciplineBonusAmount: employeeSalaryConfigs.disciplineBonusAmount,
+          teamBonusAmount: employeeSalaryConfigs.teamBonusAmount,
+          overtimeRateAmount: employeeSalaryConfigs.overtimeRateAmount,
+          notes: employeeSalaryConfigs.notes,
+          updatedAt: employeeSalaryConfigs.updatedAt,
+        })
+        .from(employees)
+        .leftJoin(positions, eq(employees.positionId, positions.id))
+        .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+        .leftJoin(employeeGroupConfigs, eq(employees.employeeGroup, employeeGroupConfigs.employeeGroup))
+        .leftJoin(employeeSalaryConfigs, eq(employees.id, employeeSalaryConfigs.employeeId))
+        .where(
+          and(
+            eq(employees.isActive, true),
+            inArray(employees.payrollStatus, ["TRAINING", "REGULER", "FINAL_PAYROLL"])
+          )
+        )
+        .orderBy(asc(employees.fullName))
+    : await db
+        .select({
+          employeeId: employees.id,
+          employeeCode: employees.employeeCode,
+          employeeName: employees.fullName,
+          positionName: positions.name,
+          divisionName: divisions.name,
+          trainingGraduationDate: employees.trainingGraduationDate,
+          employeeGroup: employees.employeeGroup,
+          employeeGroupBaseSalaryAmount: sql<string | null>`null`,
+          payrollStatus: employees.payrollStatus,
+          baseSalaryAmount: employeeSalaryConfigs.baseSalaryAmount,
+          gradeAllowanceAmount: employeeSalaryConfigs.gradeAllowanceAmount,
+          tenureAllowanceAmount: employeeSalaryConfigs.tenureAllowanceAmount,
+          dailyAllowanceAmount: employeeSalaryConfigs.dailyAllowanceAmount,
+          performanceBonusBaseAmount: employeeSalaryConfigs.performanceBonusBaseAmount,
+          achievementBonus140Amount: employeeSalaryConfigs.achievementBonus140Amount,
+          achievementBonus165Amount: employeeSalaryConfigs.achievementBonus165Amount,
+          fulltimeBonusAmount: employeeSalaryConfigs.fulltimeBonusAmount,
+          disciplineBonusAmount: employeeSalaryConfigs.disciplineBonusAmount,
+          teamBonusAmount: employeeSalaryConfigs.teamBonusAmount,
+          overtimeRateAmount: employeeSalaryConfigs.overtimeRateAmount,
+          notes: employeeSalaryConfigs.notes,
+          updatedAt: employeeSalaryConfigs.updatedAt,
+        })
+        .from(employees)
+        .leftJoin(positions, eq(employees.positionId, positions.id))
+        .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+        .leftJoin(employeeSalaryConfigs, eq(employees.id, employeeSalaryConfigs.employeeId))
+        .where(
+          and(
+            eq(employees.isActive, true),
+            inArray(employees.payrollStatus, ["TRAINING", "REGULER", "FINAL_PAYROLL"])
+          )
+        )
+        .orderBy(asc(employees.fullName));
 
   const tenureReferenceDate = selectedPeriod?.periodEndDate ?? new Date();
   const salaryConfigsWithAutoTenure = salaryConfigs.map((row) => ({
     ...row,
+    baseSalaryAmount: row.baseSalaryAmount ?? row.employeeGroupBaseSalaryAmount,
     tenureAllowanceAmount: resolveTenureAllowanceAmount(row.trainingGraduationDate, tenureReferenceDate).toFixed(2),
   }));
 
@@ -594,6 +650,89 @@ export async function upsertEmployeeSalaryConfig(input: unknown) {
   revalidatePath("/payroll");
   revalidatePath("/finance");
   return { success: true };
+}
+
+export async function syncSalaryConfigWithEmployeeGroupMaster() {
+  const access = await assertPayrollWriteAccess();
+  if ("error" in access) return access;
+
+  const hasGroupBaseSalaryColumn = await hasEmployeeGroupBaseSalaryColumn();
+  if (!hasGroupBaseSalaryColumn) {
+    return { error: "Kolom gaji pokok kelompok belum tersedia. Jalankan migration 0028 terlebih dahulu." };
+  }
+
+  const employeeRows = await db
+    .select({
+      id: employees.id,
+      employeeGroup: employees.employeeGroup,
+      trainingGraduationDate: employees.trainingGraduationDate,
+      payrollStatus: employees.payrollStatus,
+    })
+    .from(employees)
+    .where(
+      and(
+        eq(employees.isActive, true),
+        inArray(employees.payrollStatus, ["TRAINING", "REGULER", "FINAL_PAYROLL"])
+      )
+    );
+
+  const groupRows = await db
+    .select({
+      employeeGroup: employeeGroupConfigs.employeeGroup,
+      baseSalaryAmount: employeeGroupConfigs.baseSalaryAmount,
+    })
+    .from(employeeGroupConfigs);
+  const groupBaseSalaryMap = new Map(groupRows.map((row) => [row.employeeGroup, toNumber(row.baseSalaryAmount)]));
+
+  if (employeeRows.length === 0) {
+    return { success: true, message: "Tidak ada karyawan aktif untuk disinkronkan." };
+  }
+
+  const existingRows = await db
+    .select({
+      id: employeeSalaryConfigs.id,
+      employeeId: employeeSalaryConfigs.employeeId,
+    })
+    .from(employeeSalaryConfigs)
+    .where(inArray(employeeSalaryConfigs.employeeId, employeeRows.map((row) => row.id)));
+  const existingSet = new Set(existingRows.map((row) => row.employeeId));
+
+  const now = new Date();
+
+  await db.transaction(async (tx) => {
+    for (const employee of employeeRows) {
+      const baseSalaryAmount = groupBaseSalaryMap.get(employee.employeeGroup)
+        || (employee.payrollStatus === "TRAINING" ? GAJI_TRAINING_DEFAULT : GAJI_POKOK_REGULER_DEFAULT);
+      const tenureAllowanceAmount = resolveTenureAllowanceAmount(
+        employee.trainingGraduationDate,
+        now
+      );
+
+      if (existingSet.has(employee.id)) {
+        await tx
+          .update(employeeSalaryConfigs)
+          .set({
+            baseSalaryAmount: baseSalaryAmount.toFixed(2),
+            tenureAllowanceAmount: tenureAllowanceAmount.toFixed(2),
+            updatedAt: now,
+          })
+          .where(eq(employeeSalaryConfigs.employeeId, employee.id));
+      } else {
+        await tx.insert(employeeSalaryConfigs).values({
+          employeeId: employee.id,
+          baseSalaryAmount: baseSalaryAmount.toFixed(2),
+          tenureAllowanceAmount: tenureAllowanceAmount.toFixed(2),
+        });
+      }
+    }
+  });
+
+  revalidatePath("/finance");
+  revalidatePath("/payroll");
+  return {
+    success: true,
+    message: `Sync selesai untuk ${employeeRows.length} karyawan aktif.`,
+  };
 }
 
 export async function upsertGradeCompensationConfig(input: unknown) {
@@ -1141,6 +1280,19 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     : [];
 
   const salaryConfigMap = new Map(salaryConfigRows.map((row) => [row.employeeId, row]));
+  const hasGroupBaseSalaryColumn = await hasEmployeeGroupBaseSalaryColumn();
+  const employeeGroupBaseSalaryMap = hasGroupBaseSalaryColumn
+    ? new Map(
+        (
+          await db
+            .select({
+              employeeGroup: employeeGroupConfigs.employeeGroup,
+              baseSalaryAmount: employeeGroupConfigs.baseSalaryAmount,
+            })
+            .from(employeeGroupConfigs)
+        ).map((row) => [row.employeeGroup, toNumber(row.baseSalaryAmount)])
+      )
+    : new Map();
   const gradeCompensationRows = await db
     .select()
     .from(gradeCompensationConfigs)
@@ -1452,8 +1604,9 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
   const missingManagerialKpi: string[] = [];
 
   for (const employee of employeeRows) {
-    const activeEmploymentDays = resolveActiveEmploymentDays(employee.startDate, periodStartDate, periodEndDate);
-    if (activeEmploymentDays <= 0) continue;
+    // Business alignment: active employment days in payroll snapshot always follows
+    // the full calendar span of the payroll period (26-25), regardless of start date.
+    const activeEmploymentDays = periodDayCount;
 
     // Division snapshot — from pre-fetched bulk data
     const divHistory = latestDivByEmployee.get(employee.id);
@@ -1476,7 +1629,9 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       gradeSnapshotName: gradeHistory?.gradeName ?? employee.gradeName ?? null,
     };
 
-    // Scheduled work days — from pre-fetched bulk data
+    // Scheduled work days — from pre-fetched bulk data.
+    // Fallback rule: if no schedule is assigned, target days use
+    // active calendar days minus Sundays in the payroll period.
     const employeeAssignments = assignmentsByEmployee.get(employee.id) ?? [];
     const scheduledWorkDays = employeeAssignments.length > 0
       ? countTargetDaysForPeriod({
@@ -1488,10 +1643,11 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
             workingDays: workingDaysBySchedule.get(a.scheduleId) ?? [],
           })),
         })
-      : 0;
+      : Math.max(activeEmploymentDays - countSundaysInclusive(periodStartDate, periodEndDate), 0);
 
     const salaryConfig = salaryConfigMap.get(employee.id);
     const baseSalaryAmount = toNumber(salaryConfig?.baseSalaryAmount)
+      || employeeGroupBaseSalaryMap.get(employee.employeeGroup)
       || (employee.payrollStatus === "TRAINING" ? GAJI_TRAINING_DEFAULT : GAJI_POKOK_REGULER_DEFAULT);
     const gradeCompensation = gradeSnapshot.gradeSnapshotId
       ? gradeCompensationMap.get(gradeSnapshot.gradeSnapshotId)
@@ -1632,6 +1788,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           periodDayCount,
           activeEmploymentDays,
           scheduledWorkDays,
+          presentDays: attendanceSummary.presentDays,
           unpaidLeaveDays: approvedUnpaidLeaveDays,
           performancePercent,
           performanceBonusBaseAmount,

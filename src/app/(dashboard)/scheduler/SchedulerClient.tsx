@@ -109,6 +109,23 @@ function formatDateDisplay(dateStr: string): string {
   return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
 }
 
+function buildShiftCodeFromName(name: string): string {
+  const normalized = name
+    .toLowerCase()
+    .trim()
+    .replace(/target\s*13\.?000/g, "")
+    .replace(/target\s*13000/g, "")
+    .replace(/13k/g, "")
+    .replace(/[^a-z0-9_ ]+/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const match = normalized.match(/^shift_?(\d+[a-z]?)$/);
+  if (match) return `shift_${match[1]}`.slice(0, 20);
+  return (normalized || "shift").slice(0, 20);
+}
+
 export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMasters, canBulkAssign = false }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -391,7 +408,7 @@ export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMas
     }
 
     startTransition(async () => {
-      const code = shiftDraft.name.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 20);
+      const code = buildShiftCodeFromName(shiftDraft.name.trim());
       const payload = {
         code,
         name: shiftDraft.name.trim(),

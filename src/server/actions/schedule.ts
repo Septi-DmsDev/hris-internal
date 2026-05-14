@@ -159,17 +159,31 @@ function dayNameId(dayOfWeek: number): string {
   return ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"][dayOfWeek] ?? "-";
 }
 
+function sanitizeScheduleLabel(value: string): string {
+  return value
+    .replace(/target\s*13\.?000/gi, "")
+    .replace(/target\s*13000/gi, "")
+    .replace(/13k/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function normalizeScheduleCode(code: string): string {
-  const upper = code.toUpperCase().trim();
-  if (/^SHIFT_\d/.test(upper) || upper === "STATUS_IZIN") return upper;
+  const cleaned = code
+    .toLowerCase()
+    .trim()
+    .replace(/target\s*13\.?000/g, "")
+    .replace(/target\s*13000/g, "")
+    .replace(/13k/g, "")
+    .replace(/[^a-z0-9_ ]+/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
-  const base = upper.replace(/_\d+K$/, "");
-  const match = base.match(/^SHIFT(\d[A-Z]?)$/);
-  if (match) {
-    return `SHIFT_${match[1]}`;
-  }
-
-  return base;
+  if (cleaned === "status_izin") return "status_izin";
+  const match = cleaned.match(/^shift_?(\d+[a-z]?)$/);
+  if (match) return `shift_${match[1]}`;
+  return cleaned;
 }
 
 function isSelectableShiftMaster(code: string, name: string): boolean {
@@ -856,8 +870,24 @@ export async function getTeamSchedules(): Promise<TeamMember[]> {
     assignmentMap.set(assignment.employeeId, current);
   }
 
+  const activeMasterRows = await db
+    .select({
+      code: workShiftMasters.code,
+      name: workShiftMasters.name,
+    })
+    .from(workShiftMasters)
+    .where(eq(workShiftMasters.isActive, true));
+
+  const masterLabelMap = new Map(
+    activeMasterRows.map((master) => [normalizeScheduleCode(master.code), sanitizeScheduleLabel(master.name)] as const)
+  );
+
   return employeeRows.map((employee) => {
     const currentAssignment = pickLatestAssignmentForDate(assignmentMap.get(employee.employeeId) ?? [], today);
+    const normalizedCode = currentAssignment?.scheduleCode ? normalizeScheduleCode(currentAssignment.scheduleCode) : null;
+    const displayName = normalizedCode
+      ? (masterLabelMap.get(normalizedCode) ?? sanitizeScheduleLabel(currentAssignment?.scheduleName ?? normalizedCode))
+      : null;
 
     return {
       employeeId: employee.employeeId,
@@ -870,8 +900,8 @@ export async function getTeamSchedules(): Promise<TeamMember[]> {
       positionId: employee.positionId,
       positionName: employee.positionName ?? "—",
       employeeGroup: employee.employeeGroup,
-      scheduleName: currentAssignment?.scheduleName ?? null,
-      scheduleCode: currentAssignment?.scheduleCode ?? null,
+      scheduleName: displayName,
+      scheduleCode: normalizedCode,
       scheduleId: currentAssignment?.scheduleId ?? null,
       effectiveStartDate: currentAssignment?.effectiveStartDate ? toDateKey(currentAssignment.effectiveStartDate) : null,
       effectiveEndDate: currentAssignment?.effectiveEndDate ? toDateKey(currentAssignment.effectiveEndDate) : null,
@@ -917,8 +947,8 @@ export async function getScheduleOptions(): Promise<ScheduleOption[]> {
         const inserted = await tx
           .insert(workSchedules)
           .values({
-            code: master.code,
-            name: master.name,
+            code: normalizeScheduleCode(master.code),
+            name: sanitizeScheduleLabel(master.name),
             description: master.notes ?? null,
             isActive: master.isActive,
           })
@@ -930,7 +960,7 @@ export async function getScheduleOptions(): Promise<ScheduleOption[]> {
           (await tx
             .select({ id: workSchedules.id, code: workSchedules.code, name: workSchedules.name })
             .from(workSchedules)
-            .where(eq(workSchedules.code, master.code))
+            .where(eq(workSchedules.code, normalizeScheduleCode(master.code)))
             .limit(1))[0];
 
         if (!scheduleRow) continue;
@@ -950,8 +980,8 @@ export async function getScheduleOptions(): Promise<ScheduleOption[]> {
       if (!scheduleRow) return null;
       return {
         id: scheduleRow.id,
-        name: master.name,
-        code: master.code,
+        name: sanitizeScheduleLabel(master.name),
+        code: normalizeScheduleCode(master.code),
         sortOrder: master.sortOrder,
       };
     })
@@ -1047,7 +1077,7 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
     .where(eq(workShiftMasters.isActive, true));
 
   const masterLabelMap = new Map(
-    activeMasterRows.map((master) => [normalizeScheduleCode(master.code), master.name] as const)
+    activeMasterRows.map((master) => [normalizeScheduleCode(master.code), sanitizeScheduleLabel(master.name)] as const)
   );
 
   const assignmentMap = new Map<string, ScheduleAssignmentRow[]>();
@@ -1102,7 +1132,7 @@ export async function getHrdScheduleOverview(): Promise<HrdScheduleOverview> {
       if (masterLabel) return masterLabel;
     }
 
-    return scheduleName ?? scheduleCode ?? "Jadwal";
+    return sanitizeScheduleLabel(scheduleName ?? scheduleCode ?? "Jadwal");
   }
 
   const days: HrdScheduleOverviewDay[] = [];

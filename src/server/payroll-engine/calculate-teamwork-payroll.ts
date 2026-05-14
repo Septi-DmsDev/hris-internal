@@ -7,6 +7,7 @@ type CalculateTeamworkPayrollInput = {
   periodDayCount: number;
   activeEmploymentDays: number;
   scheduledWorkDays: number;
+  presentDays: number;
   unpaidLeaveDays: number;
   performancePercent: number;
   performanceBonusBaseAmount: number;
@@ -42,11 +43,16 @@ function roundCurrency(amount: number) {
 export function calculateTeamworkPayroll(
   input: CalculateTeamworkPayrollInput
 ): TeamworkPayrollResult {
-  const baseSalaryPaid = roundCurrency(
-    input.baseSalaryAmount * (input.activeEmploymentDays / Math.max(input.periodDayCount, 1))
-  );
-
   const isTraining = input.payrollStatus === "TRAINING";
+  const baseSalaryPaid = roundCurrency(
+    isTraining
+      ? (
+          input.scheduledWorkDays > 0
+            ? input.baseSalaryAmount * (input.presentDays / input.scheduledWorkDays)
+            : 0
+        )
+      : input.baseSalaryAmount * (input.activeEmploymentDays / Math.max(input.periodDayCount, 1))
+  );
   const bonusLevel = isTraining
     ? { bonusKinerjaPercent: 0, bonusPrestasiLevel: 0 }
     : resolveBonusLevel(input.performancePercent);
@@ -77,7 +83,7 @@ export function calculateTeamworkPayroll(
   );
 
   const unpaidLeaveDeductionAmount = roundCurrency(
-    input.scheduledWorkDays > 0
+    !isTraining && input.scheduledWorkDays > 0
       ? (baseSalaryPaid / input.scheduledWorkDays) * input.unpaidLeaveDays
       : 0
   );

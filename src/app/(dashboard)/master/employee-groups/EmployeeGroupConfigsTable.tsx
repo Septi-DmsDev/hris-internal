@@ -21,6 +21,7 @@ export type EmployeeGroupConfigRow = {
   id: string;
   employeeGroup: EmployeeGroup;
   displayName: string;
+  baseSalaryAmount: number | null;
   legacyAlias: string | null;
   payrollMode: "KPI" | "POINT";
   description: string | null;
@@ -64,6 +65,14 @@ export default function EmployeeGroupConfigsTable({ data }: { data: EmployeeGrou
         ),
       },
       { header: "Nama Tampil", accessorKey: "displayName" },
+      {
+        header: "Gaji Pokok",
+        accessorKey: "baseSalaryAmount",
+        cell: ({ row }) =>
+          row.original.baseSalaryAmount == null
+            ? "-"
+            : `Rp ${row.original.baseSalaryAmount.toLocaleString("id-ID")}`,
+      },
       {
         header: "Mode Payroll",
         accessorKey: "payrollMode",
@@ -158,6 +167,18 @@ export default function EmployeeGroupConfigsTable({ data }: { data: EmployeeGrou
                   <option value="KPI">KPI</option>
                   <option value="POINT">POINT</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="group-base-salary" className="text-sm font-medium">
+                  Gaji Pokok Kelompok (Rp)
+                </label>
+                <Input
+                  id="group-base-salary"
+                  name="baseSalaryAmount"
+                  type="number"
+                  defaultValue={editingRow.baseSalaryAmount ?? ""}
+                  min={0}
+                />
               </div>
               <div className="space-y-2">
                 <label htmlFor="group-legacy-alias" className="text-sm font-medium">

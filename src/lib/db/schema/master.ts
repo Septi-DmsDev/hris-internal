@@ -64,6 +64,7 @@ export const employeeGroupConfigs = pgTable("employee_group_configs", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeGroup: employeeGroupEnum("employee_group").notNull().unique(),
   displayName: varchar("display_name", { length: 100 }).notNull(),
+  baseSalaryAmount: numeric("base_salary_amount", { precision: 12, scale: 2 }),
   legacyAlias: varchar("legacy_alias", { length: 50 }),
   payrollMode: employeeGroupPayrollModeEnum("payroll_mode").notNull(),
   description: text("description"),

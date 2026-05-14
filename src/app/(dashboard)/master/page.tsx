@@ -85,6 +85,7 @@ export default async function MasterPage() {
     id: config.id,
     employeeGroup: config.employeeGroup,
     displayName: config.displayName,
+    baseSalaryAmount: config.baseSalaryAmount != null ? Number(config.baseSalaryAmount) : null,
     legacyAlias: config.legacyAlias,
     payrollMode: config.payrollMode,
     description: config.description,

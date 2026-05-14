@@ -9,6 +9,7 @@ describe("calculateTeamworkPayroll", () => {
       periodDayCount: 31,
       activeEmploymentDays: 31,
       scheduledWorkDays: 24,
+      presentDays: 24,
       unpaidLeaveDays: 0,
       performancePercent: 95,
       performanceBonusBaseAmount: 200_000,
@@ -34,13 +35,14 @@ describe("calculateTeamworkPayroll", () => {
     expect(result.takeHomePay).toBe(1_625_000);
   });
 
-  it("mematikan bonus training dan memprorata gaji pokok berdasarkan hari aktif", () => {
+  it("training memakai rasio kehadiran terhadap hari kerja target", () => {
     const result = calculateTeamworkPayroll({
       payrollStatus: "TRAINING",
       baseSalaryAmount: 1_000_000,
       periodDayCount: 31,
       activeEmploymentDays: 10,
       scheduledWorkDays: 8,
+      presentDays: 6,
       unpaidLeaveDays: 0,
       performancePercent: 180,
       performanceBonusBaseAmount: 200_000,
@@ -56,13 +58,13 @@ describe("calculateTeamworkPayroll", () => {
       manualAdjustmentAmount: 0,
     });
 
-    expect(result.baseSalaryPaid).toBe(322_580.65);
+    expect(result.baseSalaryPaid).toBe(750_000);
     expect(result.performanceBonusAmount).toBe(0);
     expect(result.achievementBonusAmount).toBe(0);
     expect(result.fulltimeBonusPaid).toBe(0);
     expect(result.disciplineBonusPaid).toBe(0);
     expect(result.teamBonusPaid).toBe(0);
-    expect(result.takeHomePay).toBe(322_580.65);
+    expect(result.takeHomePay).toBe(750_000);
   });
 
   it("tidak mengalikan bonus dengan multiplier SP dan tetap mengurangkan unpaid leave, incident, dan adjustment", () => {
@@ -72,6 +74,7 @@ describe("calculateTeamworkPayroll", () => {
       periodDayCount: 30,
       activeEmploymentDays: 30,
       scheduledWorkDays: 20,
+      presentDays: 18,
       unpaidLeaveDays: 2,
       performancePercent: 150,
       performanceBonusBaseAmount: 200_000,
@@ -102,6 +105,7 @@ describe("calculateTeamworkPayroll", () => {
       periodDayCount: 30,
       activeEmploymentDays: 30,
       scheduledWorkDays: 25,
+      presentDays: 25,
       unpaidLeaveDays: 0,
       performancePercent: 79.99,
       performanceBonusBaseAmount: 300_000,

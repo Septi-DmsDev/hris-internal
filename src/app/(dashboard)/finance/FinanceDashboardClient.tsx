@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   addPayrollAdjustment,
   deletePayrollAdjustment,
+  syncSalaryConfigWithEmployeeGroupMaster,
   upsertEmployeeSalaryConfig,
   upsertGradeCompensationConfig,
 } from "@/server/actions/payroll";
@@ -24,7 +25,7 @@ import {
   filterAdjustmentEmployeeOptions,
   getEligibleAdjustmentEmployeeOptions,
 } from "./employee-search";
-import { isKpiEmployeeGroup } from "@/lib/employee-groups";
+import { isKpiEmployeeGroup, resolveEmployeeGroupLabel, type EmployeeGroup } from "@/lib/employee-groups";
 import type {
   PayrollAdjustmentRow,
   PayrollGradeCompensationRow,
@@ -80,6 +81,23 @@ function fmt(amount: number | null) {
 
 function asInput(value: number | null) {
   return value == null ? "" : String(value);
+}
+
+function employeeGroupBadgeClass(group: EmployeeGroup) {
+  switch (group) {
+    case "KARYAWAN_TETAP":
+    case "MANAGERIAL":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "MITRA_KERJA":
+    case "TEAMWORK":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "BORONGAN":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "TRAINING":
+      return "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-700";
+  }
 }
 
 function emptySalaryDraft(row?: PayrollSalaryConfigRow): SalaryDraft {
@@ -171,11 +189,11 @@ export default function FinanceDashboardClient({
         ),
       },
       {
-        header: "Status",
-        accessorKey: "payrollStatus",
+        header: "Kelompok Karyawan",
+        accessorKey: "employeeGroup",
         cell: ({ row }) => (
-          <Badge variant={row.original.payrollStatus === "REGULER" ? "default" : "secondary"}>
-            {row.original.payrollStatus}
+          <Badge variant="outline" className={employeeGroupBadgeClass(row.original.employeeGroup)}>
+            {resolveEmployeeGroupLabel(row.original.employeeGroup)}
           </Badge>
         ),
       },
@@ -403,14 +421,26 @@ export default function FinanceDashboardClient({
         {/* Tab 1 - Gaji Pokok per Karyawan */}
         <TabsContent value="salary">
           <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
-            <p className="text-sm text-slate-500">
-              Atur gaji pokok per karyawan. Data ini digunakan sebagai dasar perhitungan payroll.
-            </p>
             <DataTable
               data={salaryConfigs}
               columns={salaryColumns}
               searchKey="employeeName"
               searchPlaceholder="Cari karyawan..."
+              toolbarSlot={
+                canManage ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={async () => {
+                      await runAction(() => syncSalaryConfigWithEmployeeGroupMaster());
+                    }}
+                  >
+                    🔁 Sync
+                  </Button>
+                ) : null
+              }
             />
           </div>
         </TabsContent>

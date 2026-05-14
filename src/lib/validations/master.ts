@@ -45,6 +45,10 @@ export const gradeSchema = z.object({
 export const employeeGroupConfigSchema = z.object({
   employeeGroup: z.enum([...ALL_EMPLOYEE_GROUPS]),
   displayName: z.string().trim().min(1, "Nama tampilan wajib diisi").max(100),
+  baseSalaryAmount: z
+    .union([z.coerce.number().min(0), z.literal("")])
+    .transform((value) => (value === "" ? undefined : value))
+    .optional(),
   legacyAlias: z.string().trim().max(50).optional(),
   payrollMode: z.enum(["KPI", "POINT"]),
   description: z.string().trim().max(255).optional(),

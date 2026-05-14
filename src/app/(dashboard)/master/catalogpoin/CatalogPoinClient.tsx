@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/tables/DataTable";
+import { formatPointNumber } from "@/lib/format/number";
 import {
   Dialog,
   DialogContent,
@@ -161,7 +162,7 @@ export default function CatalogPoinClient({
         header: "Poin",
         accessorKey: "pointValue",
         cell: ({ row }) => (
-          <span className="tabular-nums font-medium">{row.original.pointValue}</span>
+          <span className="tabular-nums font-medium">{formatPointNumber(row.original.pointValue)}</span>
         ),
       },
       { header: "Keterangan", accessorKey: "unitDescription" },

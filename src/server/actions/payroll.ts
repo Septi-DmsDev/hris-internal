@@ -1,6 +1,10 @@
 "use server";
 
-import { GAJI_POKOK_REGULER_DEFAULT, GAJI_TRAINING_DEFAULT } from "@/config/constants";
+import {
+  BONUS_FULLTIME_DEFAULT,
+  GAJI_POKOK_REGULER_DEFAULT,
+  GAJI_TRAINING_DEFAULT,
+} from "@/config/constants";
 import { getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
@@ -722,6 +726,11 @@ export async function syncSalaryConfigWithEmployeeGroupMaster() {
           employeeId: employee.id,
           baseSalaryAmount: baseSalaryAmount.toFixed(2),
           tenureAllowanceAmount: tenureAllowanceAmount.toFixed(2),
+          fulltimeBonusAmount: (
+            employee.payrollStatus === "TRAINING"
+              ? 0
+              : BONUS_FULLTIME_DEFAULT
+          ).toFixed(2),
         });
       }
     }
@@ -1658,7 +1667,11 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       employee.trainingGraduationDate,
       periodEndDate
     );
-    const fulltimeBonusAmount = toNumber(salaryConfig?.fulltimeBonusAmount);
+    const fulltimeBonusAmount = salaryConfig?.fulltimeBonusAmount != null
+      ? toNumber(salaryConfig.fulltimeBonusAmount)
+      : employee.payrollStatus === "TRAINING"
+        ? 0
+        : BONUS_FULLTIME_DEFAULT;
 
     const performance = performanceMap.get(employee.id);
     const managerialKpi = managerialKpiMap.get(employee.id);

@@ -82,6 +82,7 @@ export type ScheduleOption = {
   code: string;
 };
 
+
 export type HrdScheduleOverviewDayCount = {
   key: string;
   label: string;
@@ -999,7 +1000,10 @@ export async function getScheduleManagementWorkspace(): Promise<{
 }> {
   await requireAuth();
 
-  const [teamMembers, scheduleOptions] = await Promise.all([getTeamSchedules(), getScheduleOptions()]);
+  const [teamMembers, scheduleOptions] = await Promise.all([
+    getTeamSchedules(),
+    getScheduleOptions(),
+  ]);
 
   return { teamMembers, scheduleOptions };
 }

@@ -14,6 +14,8 @@ export const GAJI_POKOK_REGULER_DEFAULT = 1_200_000;
 
 export const GAJI_TRAINING_DEFAULT = 1_000_000;
 
+export const BONUS_FULLTIME_DEFAULT = 200_000;
+
 export const BONUS_KINERJA_LEVEL = [
   { minPersen: 165, bonusKinerja: 100, bonusPrestasi: 165 },
   { minPersen: 140, bonusKinerja: 100, bonusPrestasi: 140 },

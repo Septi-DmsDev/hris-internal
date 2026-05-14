@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
 import { getTickets } from "@/server/actions/tickets";
+import { getAttendancePeriodOverrideWorkspace } from "@/server/actions/attendance";
 import TicketingClient from "./TicketingClient";
 import { getCurrentUserRoleRow } from "@/lib/auth/session";
 import type { UserRole } from "@/types";
@@ -9,9 +10,6 @@ export default async function TicketingPage() {
   const roleRow = await getCurrentUserRoleRow();
   const role = roleRow.role as UserRole;
 
-  if (role === "HRD") {
-    redirect("/ticketingapproval");
-  }
   if (role === "FINANCE") {
     redirect("/finance");
   }
@@ -32,6 +30,36 @@ export default async function TicketingPage() {
     rejectionReason: t.rejectionReason ?? "",
     attachmentUrl: t.attachmentUrl ?? null,
   }));
+  const isAttendanceManager = role === "SUPER_ADMIN" || role === "HRD";
+  const attendanceWorkspace = isAttendanceManager
+    ? await getAttendancePeriodOverrideWorkspace()
+    : null;
+
+  const attendanceData =
+    attendanceWorkspace && !("error" in attendanceWorkspace)
+      ? {
+          periodStart: attendanceWorkspace.periodStart,
+          periodEnd: attendanceWorkspace.periodEnd,
+          workingDaysInPeriod: attendanceWorkspace.workingDaysInPeriod,
+          employees: attendanceWorkspace.employees.map((row) => ({
+            id: row.id,
+            employeeCode: row.employeeCode,
+            fullName: row.fullName,
+            divisionName: row.divisionName ?? "-",
+          })),
+          totals: attendanceWorkspace.totals.map((row) => ({
+            employeeId: row.employeeId,
+            employeeName: row.employeeName,
+            employeeCode: row.employeeCode,
+            divisionName: row.divisionName,
+            hadir: row.hadir,
+            telat: row.telat,
+            alpha: row.alpha,
+            cuti: row.cuti,
+            izinSakit: row.izinSakit,
+          })),
+        }
+      : null;
 
   return (
     <div className="space-y-4">
@@ -39,6 +67,8 @@ export default async function TicketingPage() {
         role={role}
         hasEmployeeLink={Boolean(roleRow.employeeId)}
         tickets={ticketRows}
+        attendanceData={attendanceData}
+        canManageAttendance={isAttendanceManager}
       />
     </div>
   );

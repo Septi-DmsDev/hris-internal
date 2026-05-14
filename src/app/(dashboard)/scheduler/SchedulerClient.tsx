@@ -126,7 +126,12 @@ function buildShiftCodeFromName(name: string): string {
   return (normalized || "shift").slice(0, 20);
 }
 
-export default function SchedulerClient({ teamMembers, scheduleOptions, shiftMasters, canBulkAssign = false }: Props) {
+export default function SchedulerClient({
+  teamMembers,
+  scheduleOptions,
+  shiftMasters,
+  canBulkAssign = false,
+}: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<"SCHEDULER" | "SHIFT">("SCHEDULER");

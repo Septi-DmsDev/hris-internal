@@ -7,9 +7,10 @@ import { employees } from "@/lib/db/schema/employee";
 import { attendanceFallbackRequests, employeeAttendanceRecords } from "@/lib/db/schema/hr";
 import { branches, divisions } from "@/lib/db/schema/master";
 import { attendanceFallbackDecisionSchema, attendanceFallbackRequestSchema, attendanceRecordSchema } from "@/lib/validations/attendance";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { UserRole } from "@/types";
+import { z } from "zod";
 
 const ATTENDANCE_MANAGE_ROLES: UserRole[] = ["SUPER_ADMIN", "HRD"];
 const ATTENDANCE_SELF_SERVICE_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL", "SPV", "KABAG", "FINANCE", "PAYROLL_VIEWER"];
@@ -109,6 +110,249 @@ export async function getAttendanceWorkspace(selectedDateInput?: string) {
   };
 }
 
+function resolvePayrollPeriodWindow(now: Date): { periodStart: Date; periodEnd: Date } {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = today.getDate();
+
+  if (day >= 26) {
+    return {
+      periodStart: new Date(today.getFullYear(), today.getMonth(), 26),
+      periodEnd: new Date(today.getFullYear(), today.getMonth() + 1, 25),
+    };
+  }
+
+  return {
+    periodStart: new Date(today.getFullYear(), today.getMonth() - 1, 26),
+    periodEnd: new Date(today.getFullYear(), today.getMonth(), 25),
+  };
+}
+
+function toDateOnly(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function toDateKey(date: Date) {
+  return format(date, "yyyy-MM-dd");
+}
+
+export async function getAttendanceOverrideWorkspace(selectedDateInput?: string) {
+  const authError = await checkRole(ATTENDANCE_MANAGE_ROLES);
+  if (authError) return authError;
+
+  const selectedDate = normalizeDateInput(selectedDateInput);
+  const dateKey = format(selectedDate, "yyyy-MM-dd");
+
+  const employeeRows = await db
+    .select({
+      id: employees.id,
+      employeeCode: employees.employeeCode,
+      fullName: employees.fullName,
+      divisionName: divisions.name,
+    })
+    .from(employees)
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+    .where(eq(employees.isActive, true))
+    .orderBy(asc(employees.fullName));
+
+  const records = await db
+    .select({
+      id: employeeAttendanceRecords.id,
+      employeeId: employeeAttendanceRecords.employeeId,
+      attendanceStatus: employeeAttendanceRecords.attendanceStatus,
+      checkInTime: employeeAttendanceRecords.checkInTime,
+      checkOutTime: employeeAttendanceRecords.checkOutTime,
+      punctualityStatus: employeeAttendanceRecords.punctualityStatus,
+      notes: employeeAttendanceRecords.notes,
+      source: employeeAttendanceRecords.source,
+      updatedAt: employeeAttendanceRecords.updatedAt,
+    })
+    .from(employeeAttendanceRecords)
+    .where(eq(employeeAttendanceRecords.attendanceDate, selectedDate))
+    .orderBy(desc(employeeAttendanceRecords.updatedAt));
+
+  return {
+    selectedDate: dateKey,
+    employees: employeeRows,
+    records,
+  };
+}
+
+export async function getAttendancePeriodOverrideWorkspace() {
+  const authError = await checkRole(ATTENDANCE_MANAGE_ROLES);
+  if (authError) return authError;
+
+  const { periodStart, periodEnd } = resolvePayrollPeriodWindow(new Date());
+  const start = toDateOnly(periodStart);
+  const end = toDateOnly(periodEnd);
+
+  let workingDaysInPeriod = 0;
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    if (cursor.getDay() !== 0) workingDaysInPeriod += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const employeeRows = await db
+    .select({
+      id: employees.id,
+      employeeCode: employees.employeeCode,
+      fullName: employees.fullName,
+      divisionName: divisions.name,
+    })
+    .from(employees)
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
+    .where(eq(employees.isActive, true))
+    .orderBy(asc(employees.fullName));
+
+  const employeeIds = employeeRows.map((e) => e.id);
+  const attendanceRows = employeeIds.length
+    ? await db
+        .select({
+          employeeId: employeeAttendanceRecords.employeeId,
+          attendanceStatus: employeeAttendanceRecords.attendanceStatus,
+          punctualityStatus: employeeAttendanceRecords.punctualityStatus,
+        })
+        .from(employeeAttendanceRecords)
+        .where(
+          and(
+            inArray(employeeAttendanceRecords.employeeId, employeeIds),
+            gte(employeeAttendanceRecords.attendanceDate, start),
+            lte(employeeAttendanceRecords.attendanceDate, end)
+          )
+        )
+    : [];
+
+  const recapMap = new Map<string, { hadir: number; telat: number; alpha: number; cuti: number; izinSakit: number }>();
+  for (const row of attendanceRows) {
+    const current = recapMap.get(row.employeeId) ?? { hadir: 0, telat: 0, alpha: 0, cuti: 0, izinSakit: 0 };
+    if (row.attendanceStatus === "HADIR") current.hadir += 1;
+    if (row.attendanceStatus === "HADIR" && row.punctualityStatus === "TELAT") current.telat += 1;
+    if (row.attendanceStatus === "ALPA") current.alpha += 1;
+    if (row.attendanceStatus === "CUTI") current.cuti += 1;
+    if (row.attendanceStatus === "IZIN" || row.attendanceStatus === "SAKIT") current.izinSakit += 1;
+    recapMap.set(row.employeeId, current);
+  }
+
+  return {
+    periodStart: toDateKey(start),
+    periodEnd: toDateKey(end),
+    workingDaysInPeriod,
+    employees: employeeRows,
+    totals: employeeRows.map((employee) => {
+      const totals = recapMap.get(employee.id) ?? { hadir: 0, telat: 0, alpha: 0, cuti: 0, izinSakit: 0 };
+      return {
+        employeeId: employee.id,
+        employeeName: employee.fullName,
+        employeeCode: employee.employeeCode,
+        divisionName: employee.divisionName ?? "-",
+        ...totals,
+      };
+    }),
+  };
+}
+
+const attendancePeriodOverrideSchema = z.object({
+  employeeId: z.string().uuid("Karyawan tidak valid."),
+  hadir: z.coerce.number().int().min(0),
+  telat: z.coerce.number().int().min(0),
+  alpha: z.coerce.number().int().min(0),
+  cuti: z.coerce.number().int().min(0),
+  izinSakit: z.coerce.number().int().min(0),
+  notes: z.string().trim().max(300).optional(),
+});
+
+export async function overrideAttendancePeriodTotals(input: unknown) {
+  const authError = await checkRole(ATTENDANCE_MANAGE_ROLES);
+  if (authError) return authError;
+
+  const parsed = attendancePeriodOverrideSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Input override periode tidak valid." };
+  }
+
+  const { periodStart, periodEnd } = resolvePayrollPeriodWindow(new Date());
+  const start = toDateOnly(periodStart);
+  const end = toDateOnly(periodEnd);
+  const user = await getUser();
+
+  const [employee] = await db
+    .select({ id: employees.id, isActive: employees.isActive })
+    .from(employees)
+    .where(eq(employees.id, parsed.data.employeeId))
+    .limit(1);
+  if (!employee?.isActive) return { error: "Karyawan tidak aktif atau tidak ditemukan." };
+
+  let workingDaysInPeriod = 0;
+  const workingDates: Date[] = [];
+  const allDates: Date[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    allDates.push(new Date(cursor));
+    if (cursor.getDay() !== 0) {
+      workingDaysInPeriod += 1;
+      workingDates.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const { hadir, telat, alpha, cuti, izinSakit } = parsed.data;
+  const usedDays = hadir + alpha + cuti + izinSakit;
+  if (telat > hadir) return { error: "Jumlah telat tidak boleh lebih besar dari hadir." };
+  if (usedDays !== workingDaysInPeriod) {
+    return {
+      error: `Total input kehadiran harus sama dengan hari kerja periode (${workingDaysInPeriod} hari, Minggu diabaikan).`,
+    };
+  }
+
+  const statuses: Array<{ attendanceStatus: "HADIR" | "ALPA" | "CUTI" | "IZIN" | "OFF"; punctualityStatus: "TEPAT_WAKTU" | "TELAT" | null }> = [];
+  for (let i = 0; i < telat; i += 1) statuses.push({ attendanceStatus: "HADIR", punctualityStatus: "TELAT" });
+  for (let i = 0; i < hadir - telat; i += 1) statuses.push({ attendanceStatus: "HADIR", punctualityStatus: "TEPAT_WAKTU" });
+  for (let i = 0; i < alpha; i += 1) statuses.push({ attendanceStatus: "ALPA", punctualityStatus: null });
+  for (let i = 0; i < cuti; i += 1) statuses.push({ attendanceStatus: "CUTI", punctualityStatus: null });
+  for (let i = 0; i < izinSakit; i += 1) statuses.push({ attendanceStatus: "IZIN", punctualityStatus: null });
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(employeeAttendanceRecords)
+      .where(
+        and(
+          eq(employeeAttendanceRecords.employeeId, parsed.data.employeeId),
+          gte(employeeAttendanceRecords.attendanceDate, start),
+          lte(employeeAttendanceRecords.attendanceDate, end)
+        )
+      );
+
+    const workingMap = new Map<string, { attendanceStatus: "HADIR" | "ALPA" | "CUTI" | "IZIN" | "OFF"; punctualityStatus: "TEPAT_WAKTU" | "TELAT" | null }>();
+    workingDates.forEach((date, index) => {
+      workingMap.set(toDateKey(date), statuses[index] ?? { attendanceStatus: "ALPA", punctualityStatus: null });
+    });
+
+    await tx.insert(employeeAttendanceRecords).values(
+      allDates.map((date) => {
+        const key = toDateKey(date);
+        const isSunday = date.getDay() === 0;
+        const state = isSunday ? { attendanceStatus: "OFF" as const, punctualityStatus: null } : (workingMap.get(key) ?? { attendanceStatus: "OFF" as const, punctualityStatus: null });
+        return {
+          employeeId: parsed.data.employeeId,
+          attendanceDate: date,
+          attendanceStatus: state.attendanceStatus,
+          checkInTime: null,
+          checkOutTime: null,
+          punctualityStatus: state.punctualityStatus,
+          source: "MANUAL" as const,
+          recordedByUserId: user?.id ?? null,
+          notes: parsed.data.notes || "Override total periode oleh HRD/Admin",
+          updatedAt: new Date(),
+        };
+      })
+    );
+  });
+
+  revalidatePath("/tickets");
+  revalidatePath("/absensi");
+  revalidatePath("/payroll");
+  return { success: true };
+}
+
 export async function upsertAttendanceRecord(input: unknown) {
   const authError = await checkRole(ATTENDANCE_MANAGE_ROLES);
   if (authError) return authError;
@@ -167,6 +411,7 @@ export async function upsertAttendanceRecord(input: unknown) {
 
   revalidatePath("/absensi");
   revalidatePath("/payroll");
+  revalidatePath("/tickets");
   return { success: true };
 }
 

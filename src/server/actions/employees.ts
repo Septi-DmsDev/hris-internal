@@ -3,7 +3,10 @@
 import { db } from "@/lib/db";
 import {
   employeeDivisionHistories,
+  employeeCompetencies,
+  employeeEducationHistories,
   employeeGradeHistories,
+  employeeHobbies,
   employees,
   employeePositionHistories,
   employeeScheduleAssignments,
@@ -650,7 +653,7 @@ export async function getEmployeeById(id: string) {
   const previousSupervisor = aliasedTable(employees, "previous_supervisor");
   const nextSupervisor = aliasedTable(employees, "new_supervisor");
 
-  const [currentScheduleAssignment, divisionHistoryRows, positionHistoryRows, gradeHistoryRows, supervisorHistoryRows, statusHistoryRows, resignHistoryRows] =
+  const [currentScheduleAssignment, divisionHistoryRows, positionHistoryRows, gradeHistoryRows, supervisorHistoryRows, statusHistoryRows, resignHistoryRows, hobbyRows, educationRows, competencyRows] =
     await Promise.all([
       db
         .select({
@@ -755,6 +758,44 @@ export async function getEmployeeById(id: string) {
           )
         )
         .orderBy(desc(attendanceTickets.createdAt)),
+      db
+        .select({
+          id: employeeHobbies.id,
+          hobbyName: employeeHobbies.hobbyName,
+          notes: employeeHobbies.notes,
+          createdAt: employeeHobbies.createdAt,
+        })
+        .from(employeeHobbies)
+        .where(eq(employeeHobbies.employeeId, id))
+        .orderBy(desc(employeeHobbies.createdAt)),
+      db
+        .select({
+          id: employeeEducationHistories.id,
+          institutionName: employeeEducationHistories.institutionName,
+          degree: employeeEducationHistories.degree,
+          major: employeeEducationHistories.major,
+          startYear: employeeEducationHistories.startYear,
+          endYear: employeeEducationHistories.endYear,
+          notes: employeeEducationHistories.notes,
+          createdAt: employeeEducationHistories.createdAt,
+        })
+        .from(employeeEducationHistories)
+        .where(eq(employeeEducationHistories.employeeId, id))
+        .orderBy(desc(employeeEducationHistories.createdAt)),
+      db
+        .select({
+          id: employeeCompetencies.id,
+          competencyName: employeeCompetencies.competencyName,
+          level: employeeCompetencies.level,
+          issuer: employeeCompetencies.issuer,
+          certifiedAt: employeeCompetencies.certifiedAt,
+          attachmentUrl: employeeCompetencies.attachmentUrl,
+          notes: employeeCompetencies.notes,
+          createdAt: employeeCompetencies.createdAt,
+        })
+        .from(employeeCompetencies)
+        .where(eq(employeeCompetencies.employeeId, id))
+        .orderBy(desc(employeeCompetencies.createdAt)),
     ]);
 
   return {
@@ -769,6 +810,11 @@ export async function getEmployeeById(id: string) {
       supervisors: supervisorHistoryRows,
       statuses: statusHistoryRows,
       resigns: resignHistoryRows,
+    },
+    profileEnrichment: {
+      hobbies: hobbyRows,
+      educationHistories: educationRows,
+      competencies: competencyRows,
     },
   };
 }

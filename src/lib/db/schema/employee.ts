@@ -187,6 +187,41 @@ export const employeeScheduleAssignments = pgTable("employee_schedule_assignment
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const employeeHobbies = pgTable("employee_hobbies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  hobbyName: varchar("hobby_name", { length: 150 }).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const employeeEducationHistories = pgTable("employee_education_histories", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  institutionName: varchar("institution_name", { length: 200 }).notNull(),
+  degree: varchar("degree", { length: 120 }),
+  major: varchar("major", { length: 150 }),
+  startYear: integer("start_year"),
+  endYear: integer("end_year"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const employeeCompetencies = pgTable("employee_competencies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  competencyName: varchar("competency_name", { length: 200 }).notNull(),
+  level: varchar("level", { length: 50 }),
+  issuer: varchar("issuer", { length: 150 }),
+  certifiedAt: date("certified_at", { mode: "date" }),
+  attachmentUrl: text("attachment_url"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
 export type Employee = typeof employees.$inferSelect;
 export type NewEmployee = typeof employees.$inferInsert;
 export type EmployeeDivisionHistory = typeof employeeDivisionHistories.$inferSelect;
@@ -207,3 +242,9 @@ export type WorkScheduleDay = typeof workScheduleDays.$inferSelect;
 export type NewWorkScheduleDay = typeof workScheduleDays.$inferInsert;
 export type EmployeeScheduleAssignment = typeof employeeScheduleAssignments.$inferSelect;
 export type NewEmployeeScheduleAssignment = typeof employeeScheduleAssignments.$inferInsert;
+export type EmployeeHobby = typeof employeeHobbies.$inferSelect;
+export type NewEmployeeHobby = typeof employeeHobbies.$inferInsert;
+export type EmployeeEducationHistory = typeof employeeEducationHistories.$inferSelect;
+export type NewEmployeeEducationHistory = typeof employeeEducationHistories.$inferInsert;
+export type EmployeeCompetency = typeof employeeCompetencies.$inferSelect;
+export type NewEmployeeCompetency = typeof employeeCompetencies.$inferInsert;

@@ -46,6 +46,11 @@ function DetailItem({
   );
 }
 
+function formatBpjsStatus(active: boolean, number: string | null) {
+  if (!number?.trim()) return "Belum diisi";
+  return `${active ? "Aktif" : "Nonaktif"} - ${number}`;
+}
+
 function HistoryTable({
   title,
   headers,
@@ -179,6 +184,8 @@ export default async function EmployeeDetailPage({
           />
           <DetailItem label="Nomor HP" value={employee.phoneNumber ?? "-"} />
           <DetailItem label="Nama Panggilan" value={employee.nickname ?? "-"} />
+          <DetailItem label="BPJS KT" value={formatBpjsStatus(employee.bpjsKetenagakerjaanActive, employee.bpjsKetenagakerjaanNumber)} />
+          <DetailItem label="BPJS KS" value={formatBpjsStatus(employee.bpjsKesehatanActive, employee.bpjsKesehatanNumber)} />
         </div>
       </section>
 
@@ -196,6 +203,55 @@ export default async function EmployeeDetailPage({
           </p>
         </div>
       </section>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-800">Hobi</h2>
+          <ul className="mt-3 space-y-2 text-sm text-slate-700">
+            {detail.profileEnrichment.hobbies.length ? detail.profileEnrichment.hobbies.map((row) => (
+              <li key={row.id} className="rounded-md border border-slate-100 p-2">
+                <p className="font-medium text-slate-900">{row.hobbyName}</p>
+                <p className="text-xs text-slate-500">{row.notes?.trim() || "-"}</p>
+              </li>
+            )) : <li className="text-slate-400">Belum ada data hobi.</li>}
+          </ul>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-800">Riwayat Pendidikan</h2>
+          <ul className="mt-3 space-y-2 text-sm text-slate-700">
+            {detail.profileEnrichment.educationHistories.length ? detail.profileEnrichment.educationHistories.map((row) => (
+              <li key={row.id} className="rounded-md border border-slate-100 p-2">
+                <p className="font-medium text-slate-900">{row.institutionName}</p>
+                <p className="text-xs text-slate-500">{row.degree ?? "-"} · {row.major ?? "-"}</p>
+                <p className="text-xs text-slate-500">{row.startYear ?? "-"} - {row.endYear ?? "-"}</p>
+                <p className="text-xs text-slate-500">{row.notes?.trim() || "-"}</p>
+              </li>
+            )) : <li className="text-slate-400">Belum ada data pendidikan.</li>}
+          </ul>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-800">Kompetensi</h2>
+          <ul className="mt-3 space-y-2 text-sm text-slate-700">
+            {detail.profileEnrichment.competencies.length ? detail.profileEnrichment.competencies.map((row) => (
+              <li key={row.id} className="rounded-md border border-slate-100 p-2">
+                <p className="font-medium text-slate-900">{row.competencyName}</p>
+                <p className="text-xs text-slate-500">{row.level ?? "-"} · {row.issuer ?? "-"}</p>
+                <p className="text-xs text-slate-500">{formatDate(row.certifiedAt)}</p>
+                {row.attachmentUrl ? (
+                  <a href={row.attachmentUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
+                    Lihat dokumen pendukung
+                  </a>
+                ) : (
+                  <p className="text-xs text-slate-500">Dokumen: -</p>
+                )}
+                <p className="text-xs text-slate-500">{row.notes?.trim() || "-"}</p>
+              </li>
+            )) : <li className="text-slate-400">Belum ada data kompetensi.</li>}
+          </ul>
+        </section>
+      </div>
 
       <HistoryTable
         title="Histori Jadwal Kerja"

@@ -6,8 +6,7 @@ describe("resolveDisciplineBonus", () => {
     expect(
       resolveDisciplineBonus({
         ruleEnabled: false,
-        presentDays: 26,
-        scheduledWorkDays: 26,
+        lateDays: 0,
         bonusTier80Amount: 80_000,
         bonusTier90Amount: 90_000,
         bonusTier100Amount: 100_000,
@@ -19,12 +18,11 @@ describe("resolveDisciplineBonus", () => {
     });
   });
 
-  it("memberi tier 80 saat disiplin 80% sampai <90%", () => {
+  it("memberi tier 80 saat telat maksimal 7x", () => {
     expect(
       resolveDisciplineBonus({
         ruleEnabled: true,
-        presentDays: 21,
-        scheduledWorkDays: 26,
+        lateDays: 7,
         bonusTier80Amount: 80_000,
         bonusTier90Amount: 90_000,
         bonusTier100Amount: 100_000,
@@ -32,16 +30,15 @@ describe("resolveDisciplineBonus", () => {
     ).toEqual({
       disciplineBonusAmount: 80_000,
       disciplineEligible: true,
-      disciplinePercent: 80.76923076923077,
+      disciplinePercent: 80,
     });
   });
 
-  it("memberi tier 90 saat disiplin 90% sampai <100%", () => {
+  it("memberi tier 90 saat telat maksimal 3x", () => {
     expect(
       resolveDisciplineBonus({
         ruleEnabled: true,
-        presentDays: 24,
-        scheduledWorkDays: 26,
+        lateDays: 3,
         bonusTier80Amount: 80_000,
         bonusTier90Amount: 90_000,
         bonusTier100Amount: 100_000,
@@ -49,16 +46,15 @@ describe("resolveDisciplineBonus", () => {
     ).toEqual({
       disciplineBonusAmount: 90_000,
       disciplineEligible: true,
-      disciplinePercent: 92.3076923076923,
+      disciplinePercent: 90,
     });
   });
 
-  it("memberi tier 100 saat disiplin 100%", () => {
+  it("memberi tier 100 saat tidak telat sama sekali", () => {
     expect(
       resolveDisciplineBonus({
         ruleEnabled: true,
-        presentDays: 26,
-        scheduledWorkDays: 26,
+        lateDays: 0,
         bonusTier80Amount: 80_000,
         bonusTier90Amount: 90_000,
         bonusTier100Amount: 100_000,
@@ -70,12 +66,11 @@ describe("resolveDisciplineBonus", () => {
     });
   });
 
-  it("tidak memberi bonus jika disiplin di bawah 80%", () => {
+  it("tidak memberi bonus jika telat 8x atau lebih", () => {
     expect(
       resolveDisciplineBonus({
         ruleEnabled: true,
-        presentDays: 20,
-        scheduledWorkDays: 26,
+        lateDays: 8,
         bonusTier80Amount: 80_000,
         bonusTier90Amount: 90_000,
         bonusTier100Amount: 100_000,
@@ -83,7 +78,7 @@ describe("resolveDisciplineBonus", () => {
     ).toEqual({
       disciplineBonusAmount: 0,
       disciplineEligible: false,
-      disciplinePercent: 76.92307692307693,
+      disciplinePercent: 0,
     });
   });
 });

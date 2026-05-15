@@ -1,7 +1,6 @@
 type ResolveDisciplineBonusInput = {
   ruleEnabled: boolean;
-  presentDays: number;
-  scheduledWorkDays: number;
+  lateDays: number;
   bonusTier80Amount: number;
   bonusTier90Amount: number;
   bonusTier100Amount: number;
@@ -16,7 +15,7 @@ type ResolvedDisciplineBonus = {
 export function resolveDisciplineBonus(
   input: ResolveDisciplineBonusInput
 ): ResolvedDisciplineBonus {
-  if (!input.ruleEnabled || input.scheduledWorkDays <= 0) {
+  if (!input.ruleEnabled) {
     return {
       disciplineBonusAmount: 0,
       disciplineEligible: false,
@@ -24,7 +23,14 @@ export function resolveDisciplineBonus(
     };
   }
 
-  const disciplinePercent = (input.presentDays / input.scheduledWorkDays) * 100;
+  const disciplinePercent =
+    input.lateDays <= 0
+      ? 100
+      : input.lateDays <= 3
+        ? 90
+        : input.lateDays <= 7
+          ? 80
+          : 0;
   const disciplineBonusAmount =
     disciplinePercent >= 100
       ? input.bonusTier100Amount

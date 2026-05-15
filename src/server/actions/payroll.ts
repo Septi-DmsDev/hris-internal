@@ -1765,8 +1765,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       disciplinePercent,
     } = resolveDisciplineBonus({
       ruleEnabled: attendanceSummary.hasAttendanceData,
-      presentDays: attendanceSummary.presentDays,
-      scheduledWorkDays,
+      lateDays: attendanceSummary.lateDays,
       bonusTier80Amount: disciplineBonusTier80Amount,
       bonusTier90Amount: disciplineBonusTier90Amount,
       bonusTier100Amount: disciplineBonusTier100Amount,

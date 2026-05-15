@@ -57,6 +57,17 @@ export function DataTable<T extends Record<string, unknown>>({
   const table = useReactTable({
     data,
     columns,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const query = String(filterValue ?? "").trim().toLowerCase();
+      if (!query) return true;
+
+      const haystack = Object.values(row.original)
+        .map((value) => String(value ?? ""))
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    },
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

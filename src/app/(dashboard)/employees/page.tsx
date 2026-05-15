@@ -27,18 +27,26 @@ export default async function EmployeesPage() {
     startDate: Date;
   }>;
 
-  const rows: EmployeeRow[] = employeeRecords.map((employee) => ({
-    id: employee.id,
-    employeeCode: employee.employeeCode,
-    nik: employee.nik,
-    fullName: employee.fullName,
-    phoneNumber: employee.phoneNumber ?? "-",
-    bpjsKetenagakerjaanNumber: employee.bpjsKetenagakerjaanNumber,
-    bpjsKetenagakerjaanActive: employee.bpjsKetenagakerjaanActive,
-    bpjsKesehatanNumber: employee.bpjsKesehatanNumber,
-    bpjsKesehatanActive: employee.bpjsKesehatanActive,
-    startDate: format(employee.startDate, "yyyy-MM-dd"),
-  }));
+  const rows: EmployeeRow[] = employeeRecords.map((employee) => {
+    const startDate = format(employee.startDate, "yyyy-MM-dd");
+    const nik = employee.nik ?? "";
+    const phone = employee.phoneNumber ?? "-";
+    const uid = employee.employeeCode ?? "";
+    const name = employee.fullName ?? "";
+
+    return {
+      id: employee.id,
+      employeeCode: uid,
+      nik: employee.nik,
+      fullName: name,
+      phoneNumber: phone,
+      bpjsKetenagakerjaanNumber: employee.bpjsKetenagakerjaanNumber,
+      bpjsKetenagakerjaanActive: employee.bpjsKetenagakerjaanActive,
+      bpjsKesehatanNumber: employee.bpjsKesehatanNumber,
+      bpjsKesehatanActive: employee.bpjsKesehatanActive,
+      startDate,
+    };
+  });
 
   const formOptions: EmployeeFormOptions = {
     branches: options.branches,

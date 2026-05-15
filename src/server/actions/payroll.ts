@@ -162,6 +162,16 @@ function resolveTrainingGraduationBonusProrationRatio(input: {
   return Math.min(1, Math.max(0, remainingScheduledWorkDays / input.scheduledWorkDays));
 }
 
+function isTrainingGraduatedWithinPeriod(input: {
+  trainingGraduationDate: Date | string | null | undefined;
+  periodStartDate: Date;
+  periodEndDate: Date;
+}) {
+  if (!input.trainingGraduationDate) return false;
+  const graduationDate = normalizeDate(input.trainingGraduationDate);
+  return graduationDate >= normalizeDate(input.periodStartDate) && graduationDate <= normalizeDate(input.periodEndDate);
+}
+
 function isSpIncidentType(incidentType: string) {
   return incidentType === "SP1" || incidentType === "SP2";
 }
@@ -1727,7 +1737,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       : Math.max(activeEmploymentDays - countSundaysInclusive(periodStartDate, periodEndDate), 0);
 
     const salaryConfig = salaryConfigMap.get(employee.id);
-    const baseSalaryAmount = toNumber(salaryConfig?.baseSalaryAmount)
+    const configuredBaseSalaryAmount = toNumber(salaryConfig?.baseSalaryAmount)
       || employeeGroupBaseSalaryMap.get(employee.employeeGroup)
       || (employee.payrollStatus === "TRAINING" ? GAJI_TRAINING_DEFAULT : GAJI_POKOK_REGULER_DEFAULT);
     const gradeCompensation = gradeSnapshot.gradeSnapshotId
@@ -1758,6 +1768,18 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     const fulltimeBonusProratedAmount = roundCurrency(
       fulltimeBonusAmount * trainingGraduationBonusProrationRatio
     );
+    const graduatedWithinPeriod = isTrainingGraduatedWithinPeriod({
+      trainingGraduationDate: employee.trainingGraduationDate,
+      periodStartDate,
+      periodEndDate,
+    });
+    const shouldApplyMidPeriodTrainingFeeRule = graduatedWithinPeriod && trainingGraduationBonusProrationRatio > 0;
+    const baseSalaryAmount = shouldApplyMidPeriodTrainingFeeRule
+      ? GAJI_TRAINING_DEFAULT
+      : configuredBaseSalaryAmount;
+    const trainingGraduationSalaryRemainderAmount = shouldApplyMidPeriodTrainingFeeRule
+      ? roundCurrency((GAJI_POKOK_REGULER_DEFAULT - GAJI_TRAINING_DEFAULT) * trainingGraduationBonusProrationRatio)
+      : 0;
 
     const performance = performanceMap.get(employee.id);
     const managerialKpi = managerialKpiMap.get(employee.id);
@@ -1785,12 +1807,15 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
     const spPenaltyMultiplier = 1;
 
     const employeeAdjustments = adjustmentsByEmployee.get(employee.id) ?? [];
-    const manualAdjustmentAmount = roundCurrency(
+    const manualAdjustmentAmountBase = roundCurrency(
       employeeAdjustments.reduce((sum, adjustment) => {
         const signedAmount = toNumber(adjustment.amount)
           * (adjustment.adjustmentType === "ADDITION" ? 1 : -1);
         return sum + signedAmount;
       }, 0)
+    );
+    const manualAdjustmentAmount = roundCurrency(
+      manualAdjustmentAmountBase + trainingGraduationSalaryRemainderAmount
     );
     const overtimeAmount = roundCurrency(overtimeByEmployee.get(employee.id) ?? 0);
 
@@ -1840,8 +1865,11 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       || toNumber(gradeCompensation?.bonusPrestasi140);
     const achievementBonus165Amount = toNumber(salaryConfig?.achievementBonus165Amount)
       || toNumber(gradeCompensation?.bonusPrestasi165);
-    const performanceBonusBaseAmount = toNumber(salaryConfig?.performanceBonusBaseAmount)
+    const performanceBonusBaseAmountRaw = toNumber(salaryConfig?.performanceBonusBaseAmount)
       || performanceBonusByGrade;
+    const performanceBonusBaseAmount = shouldApplyMidPeriodTrainingFeeRule
+      ? roundCurrency(performanceBonusBaseAmountRaw * trainingGraduationBonusProrationRatio)
+      : performanceBonusBaseAmountRaw;
     const teamBonusAmount = toNumber(salaryConfig?.teamBonusAmount)
       || teamBonusByGrade;
     const fulltimeEligible = attendanceSummary.fulltimeEligible && !hasApprovedAbsence;
@@ -1997,6 +2025,8 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           attendanceDisciplineEligible: attendanceSummary.disciplineEligible,
           disciplinePercent,
           trainingGraduationBonusProrationRatio,
+          trainingGraduationSalaryRemainderAmount,
+          midPeriodTrainingFeeRuleApplied: shouldApplyMidPeriodTrainingFeeRule,
           approvedUnpaidLeaveDays,
           approvedPaidLeaveDays,
           unpaidLeaveDeductionAmount: payrollCalc.unpaidLeaveDeductionAmount,

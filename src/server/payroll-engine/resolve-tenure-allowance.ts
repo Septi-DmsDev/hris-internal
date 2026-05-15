@@ -1,9 +1,9 @@
 export const TENURE_ALLOWANCE_PER_YEAR = 100_000;
 
 function resolveAnchorMonth(graduationMonth: number) {
-  if (graduationMonth >= 2 && graduationMonth <= 4) return 4;
-  if (graduationMonth >= 5 && graduationMonth <= 7) return 7;
-  if (graduationMonth >= 8 && graduationMonth <= 10) return 10;
+  if (graduationMonth >= 1 && graduationMonth <= 3) return 4;
+  if (graduationMonth >= 4 && graduationMonth <= 6) return 7;
+  if (graduationMonth >= 7 && graduationMonth <= 9) return 10;
   return 1;
 }
 

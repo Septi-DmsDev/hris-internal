@@ -41,4 +41,17 @@ describe("filterAdjustmentEmployeeOptions", () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.employeeGroup).toBe("KARYAWAN_TETAP");
   });
+
+  test("limits CSM bonus categories to CSM division", () => {
+    const result = filterAdjustmentEmployeeOptions(rows, "BONUS_OMSET_1_CSM", "");
+
+    expect(result).toHaveLength(0);
+  });
+
+  test("limits mesin counter bonus to printing division", () => {
+    const result = filterAdjustmentEmployeeOptions(rows, "BONUS_COUNTER_MESIN", "");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.divisionName).toBe("Printing");
+  });
 });

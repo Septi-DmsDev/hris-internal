@@ -12,6 +12,11 @@ export const payrollPeriodActionSchema = z.object({
 export const ADJUSTMENT_CATEGORIES = [
   "MANUAL_ADDITION",
   "TRANSPORT",
+  "BONUS_OMSET_1_CSM",
+  "BONUS_OMSET_2_CSM",
+  "BONUS_OMSET_3_CSM",
+  "BONUS_KINERJA_CSM_TERTINGGI",
+  "BONUS_COUNTER_MESIN",
   "GANTI_RUGI_PERSONAL",
   "GANTI_RUGI_TEAM",
   "BPJS",
@@ -24,6 +29,11 @@ export type AdjustmentCategory = (typeof ADJUSTMENT_CATEGORIES)[number];
 export const ADJUSTMENT_CATEGORY_LABELS: Record<AdjustmentCategory, string> = {
   MANUAL_ADDITION: "Penambahan Manual",
   TRANSPORT: "Uang Transport",
+  BONUS_OMSET_1_CSM: "Bonus Omset 1 CSM",
+  BONUS_OMSET_2_CSM: "Bonus Omset 2 CSM",
+  BONUS_OMSET_3_CSM: "Bonus Omset 3 CSM",
+  BONUS_KINERJA_CSM_TERTINGGI: "Bonus Kinerja CSM Tertinggi",
+  BONUS_COUNTER_MESIN: "Bonus Counter Mesin",
   GANTI_RUGI_PERSONAL: "Ganti Rugi Personal",
   GANTI_RUGI_TEAM: "Ganti Rugi Team",
   BPJS: "BPJS",

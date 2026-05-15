@@ -2,8 +2,8 @@
 
 Dokumen ini merangkum aturan bisnis yang wajib dijaga saat membangun HRD Dashboard.
 
-> Catatan code 2026-05-04:
-> Business rules di bawah adalah sumber aturan bisnis. Jika implementasi aktual berbeda, catat sebagai gap dan jangan mengubah rule diam-diam. Gap yang diketahui: enforcement deadline H+1/H+2 belum lengkap, status lulus training di code masih langsung berubah, dan beberapa hardening payroll lanjutan masih dilacak di `next-update.md`.
+> Catatan code 2026-05-15:
+> Business rules di bawah adalah sumber aturan bisnis. Jika implementasi aktual berbeda, catat sebagai gap dan jangan mengubah rule diam-diam. Gap yang diketahui: enforcement deadline H+1/H+2 belum lengkap, dan beberapa hardening payroll lanjutan masih dilacak di `next-update.md`.
 
 ## Kelompok Karyawan
 
@@ -102,6 +102,10 @@ Untuk KARYAWAN_TETAP/KPI, rentang bonus kinerja memakai aturan nominal yang sama
 - Poin training tidak menentukan bonus; poin menentukan kelulusan training.
 - Minimal training 1 bulan, maksimal 3 bulan.
 - Jika lulus training di tengah periode, status reguler efektif mulai periode payroll berikutnya.
+- Jika lulus training di tengah periode payroll berjalan, bonus fulltime dan bonus disiplin diprorate berdasarkan sisa hari kerja terjadwal sejak tanggal lulus sampai akhir periode:
+  - rasio prorate = sisa hari kerja terjadwal sejak lulus / total hari kerja terjadwal periode;
+  - bonus fulltime dibayar = bonus fulltime nominal x rasio prorate (tetap wajib memenuhi eligibility fulltime);
+  - bonus disiplin dibayar = bonus disiplin tier (100/90/80/0 berbasis jumlah telat) x rasio prorate (tetap wajib memenuhi eligibility disiplin).
 
 Standar minimal lulus training:
 
@@ -221,7 +225,12 @@ Bonus fulltime:
 
 Bonus disiplin:
 - mengikuti data absensi, bukan input persentase manual;
-- harus eligible fulltime dan tidak ada `TELAT`;
+- tier bonus berbasis jumlah `TELAT` periode berjalan:
+  - 100% jika tidak telat sama sekali;
+  - 90% jika telat maksimal 3x;
+  - 80% jika telat maksimal 7x;
+  - 0% jika telat 8x atau lebih;
+- harus eligible fulltime;
 - performa payroll minimal 80%;
 - incident `TELAT` aktif pada periode juga menggugurkan bonus disiplin;
 - jika data absensi belum ada, bonus disiplin dibayar `0`.

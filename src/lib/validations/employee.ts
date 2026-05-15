@@ -25,6 +25,10 @@ export const employeeSchema = z
     religion: z.string().trim().max(50).optional().transform((value) => value || undefined),
     maritalStatus: z.string().trim().max(50).optional().transform((value) => value || undefined),
     phoneNumber: z.string().trim().max(30).optional().transform((value) => value || undefined),
+    bpjsKetenagakerjaanNumber: z.string().trim().max(50).optional().transform((value) => value || undefined),
+    bpjsKetenagakerjaanActive: z.boolean().default(false),
+    bpjsKesehatanNumber: z.string().trim().max(50).optional().transform((value) => value || undefined),
+    bpjsKesehatanActive: z.boolean().default(false),
     address: optionalText,
     startDate: z.coerce.date({ message: "Tanggal masuk wajib diisi" }),
     branchId: z.string().uuid("Cabang tidak valid"),
@@ -75,6 +79,22 @@ export const employeeSchema = z
         code: "custom",
         path: ["trainingGraduationDate"],
         message: "Tanggal lulus training tidak boleh lebih awal dari tanggal masuk.",
+      });
+    }
+
+    if (value.bpjsKetenagakerjaanActive && !value.bpjsKetenagakerjaanNumber) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["bpjsKetenagakerjaanActive"],
+        message: "BPJS KT hanya bisa aktif jika nomor BPJS KT sudah diisi.",
+      });
+    }
+
+    if (value.bpjsKesehatanActive && !value.bpjsKesehatanNumber) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["bpjsKesehatanActive"],
+        message: "BPJS KS hanya bisa aktif jika nomor BPJS KS sudah diisi.",
       });
     }
   });

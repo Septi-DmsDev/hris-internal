@@ -74,6 +74,14 @@ type AdjustmentDraft = {
   tenorMonthsRemaining: string;
 };
 
+const ADDITION_DEFAULT_AMOUNTS: Partial<Record<AdjustmentCategory, number>> = {
+  BONUS_OMSET_1_CSM: 400000,
+  BONUS_OMSET_2_CSM: 250000,
+  BONUS_OMSET_3_CSM: 100000,
+  BONUS_KINERJA_CSM_TERTINGGI: 250000,
+  BONUS_COUNTER_MESIN: 100000,
+};
+
 function fmt(amount: number | null) {
   if (amount == null || amount === 0) return "-";
   return `Rp ${amount.toLocaleString("id-ID")}`;
@@ -691,10 +699,12 @@ export default function FinanceDashboardClient({
                 onChange={(e) =>
                   setAdjustmentDraft((v) => {
                     const nextCategory = e.target.value as AdjustmentCategory;
+                    const defaultAmount = ADDITION_DEFAULT_AMOUNTS[nextCategory];
                     return {
                       ...v,
                       category: nextCategory,
                       employeeId: resolveEmployeeForCategory(nextCategory, v.employeeId),
+                      amount: defaultAmount ? String(defaultAmount) : "",
                     };
                   })
                 }
@@ -702,6 +712,11 @@ export default function FinanceDashboardClient({
                 <optgroup label="Penambah Gaji">
                   <option value="MANUAL_ADDITION">Penambahan Manual</option>
                   <option value="TRANSPORT">Uang Transport (berulang)</option>
+                  <option value="BONUS_OMSET_1_CSM">Bonus Omset 1 CSM (sekali/periode)</option>
+                  <option value="BONUS_OMSET_2_CSM">Bonus Omset 2 CSM (sekali/periode)</option>
+                  <option value="BONUS_OMSET_3_CSM">Bonus Omset 3 CSM (sekali/periode)</option>
+                  <option value="BONUS_KINERJA_CSM_TERTINGGI">Bonus Kinerja CSM Tertinggi (sekali/periode)</option>
+                  <option value="BONUS_COUNTER_MESIN">Bonus Counter Mesin (sekali/periode)</option>
                 </optgroup>
                 <optgroup label="Pengurang Gaji">
                   <option value="BPJS">BPJS</option>
@@ -732,6 +747,19 @@ export default function FinanceDashboardClient({
             {adjustmentDraft.category === "GANTI_RUGI_TEAM" && (
               <p className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
                 Hanya karyawan Managerial yang dapat dikenakan Ganti Rugi Team.
+              </p>
+            )}
+            {(adjustmentDraft.category === "BONUS_OMSET_1_CSM"
+              || adjustmentDraft.category === "BONUS_OMSET_2_CSM"
+              || adjustmentDraft.category === "BONUS_OMSET_3_CSM"
+              || adjustmentDraft.category === "BONUS_KINERJA_CSM_TERTINGGI") && (
+              <p className="rounded-md bg-cyan-50 border border-cyan-200 px-3 py-2 text-xs text-cyan-700">
+                Bonus ini hanya untuk divisi CSM dan hanya satu kali per karyawan di periode yang sama.
+              </p>
+            )}
+            {adjustmentDraft.category === "BONUS_COUNTER_MESIN" && (
+              <p className="rounded-md bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs text-indigo-700">
+                Bonus ini hanya untuk divisi Printing dan hanya satu kali per karyawan di periode yang sama.
               </p>
             )}
             {(adjustmentDraft.category === "GANTI_RUGI_PERSONAL" || adjustmentDraft.category === "GANTI_RUGI_TEAM") && (
@@ -831,6 +859,13 @@ export default function FinanceDashboardClient({
                   .filter((row) =>
                     adjustmentDraft.category === "GANTI_RUGI_TEAM"
                       ? isKpiEmployeeGroup(row.employeeGroup)
+                      : adjustmentDraft.category === "BONUS_COUNTER_MESIN"
+                      ? row.divisionName.trim().toUpperCase().includes("PRINTING")
+                      : adjustmentDraft.category === "BONUS_OMSET_1_CSM"
+                        || adjustmentDraft.category === "BONUS_OMSET_2_CSM"
+                        || adjustmentDraft.category === "BONUS_OMSET_3_CSM"
+                        || adjustmentDraft.category === "BONUS_KINERJA_CSM_TERTINGGI"
+                      ? row.divisionName.trim().toUpperCase().includes("CSM")
                       : true
                   )
                   .map((row) => (

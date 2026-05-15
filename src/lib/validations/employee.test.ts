@@ -20,6 +20,8 @@ const validEmployeeInput = {
   supervisorEmployeeId: "55555555-5555-4555-8555-555555555555",
   isActive: true,
   notes: "Catatan onboarding",
+  bpjsKetenagakerjaanActive: false,
+  bpjsKesehatanActive: false,
 };
 
 describe("employeeSchema", () => {
@@ -53,6 +55,16 @@ describe("employeeSchema", () => {
       expect(parsed.data.startDate).toBeInstanceOf(Date);
       expect(parsed.data.trainingGraduationDate).toBeUndefined();
     }
+  });
+
+  it("menolak BPJS KT aktif tanpa nomor", () => {
+    const parsed = employeeSchema.safeParse({
+      ...validEmployeeInput,
+      bpjsKetenagakerjaanActive: true,
+      bpjsKetenagakerjaanNumber: "",
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });
 

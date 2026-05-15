@@ -22,9 +22,21 @@ export function getEligibleAdjustmentEmployeeOptions<T extends AdjustmentEmploye
   rows: T[],
   category: AdjustmentCategory
 ) {
-  return rows.filter((row) =>
-    category === "GANTI_RUGI_TEAM" ? isKpiEmployeeGroup(row.employeeGroup) : true
-  );
+  return rows.filter((row) => {
+    if (category === "GANTI_RUGI_TEAM") return isKpiEmployeeGroup(row.employeeGroup);
+    if (
+      category === "BONUS_OMSET_1_CSM"
+      || category === "BONUS_OMSET_2_CSM"
+      || category === "BONUS_OMSET_3_CSM"
+      || category === "BONUS_KINERJA_CSM_TERTINGGI"
+    ) {
+      return row.divisionName.trim().toUpperCase().includes("CSM");
+    }
+    if (category === "BONUS_COUNTER_MESIN") {
+      return row.divisionName.trim().toUpperCase().includes("PRINTING");
+    }
+    return true;
+  });
 }
 
 export function filterAdjustmentEmployeeOptions<T extends AdjustmentEmployeeOption>(

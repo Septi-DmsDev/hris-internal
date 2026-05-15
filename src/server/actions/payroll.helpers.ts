@@ -21,7 +21,15 @@ export function isRecurringAdjustmentCategory(category: AdjustmentCategory) {
 }
 
 export function resolveAdjustmentTypeForCategory(category: AdjustmentCategory): PayrollAdjustmentType {
-  return category === "MANUAL_ADDITION" || category === "TRANSPORT" ? "ADDITION" : "DEDUCTION";
+  return category === "MANUAL_ADDITION"
+    || category === "TRANSPORT"
+    || category === "BONUS_OMSET_1_CSM"
+    || category === "BONUS_OMSET_2_CSM"
+    || category === "BONUS_OMSET_3_CSM"
+    || category === "BONUS_KINERJA_CSM_TERTINGGI"
+    || category === "BONUS_COUNTER_MESIN"
+    ? "ADDITION"
+    : "DEDUCTION";
 }
 
 export function getAdjustmentCategoryFromReason(reason: string) {

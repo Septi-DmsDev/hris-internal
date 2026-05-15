@@ -91,6 +91,8 @@ Untuk payroll:
 - level bonus memakai `resolveBonusLevel()`;
 - periode 26-25 memakai `resolvePayrollPeriod()`;
 - eligibility bonus fulltime/disiplin memakai `resolveAttendancePayrollEligibility()` dari data absensi periode;
+- bonus disiplin tier memakai rule jumlah telat periode (`0 => 100%`, `<=3 => 90%`, `<=7 => 80%`, `>=8 => 0%`);
+- untuk karyawan yang lulus training di tengah periode, bonus fulltime dan bonus disiplin diprorate dengan rasio sisa hari kerja terjadwal sejak tanggal lulus terhadap total hari kerja terjadwal periode;
 - kalkulasi TEAMWORK/MANAGERIAL memakai engine payroll;
 - PDF/XLSX memakai builder server-side.
 

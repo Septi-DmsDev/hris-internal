@@ -112,7 +112,7 @@ Employee Link
 | Ticketing leave | ada, perlu hardening | self-service employee-link ada; quota eligibility memakai quarter helper |
 | Ticket approval queue | ada | `/ticketingapproval` dipakai role approver untuk antrian dan histori approval tiket |
 | Review & incident | ada | review score 5 aspek, validate review, create incident |
-| Training evaluation | ada, gap bisnis | keputusan lulus/gagal ada; rule efektif periode payroll berikutnya belum penuh |
+| Training evaluation | ada | keputusan lulus/gagal ada; payroll kini mendukung prorate bonus fulltime/disiplin untuk kelulusan training di tengah periode |
 | Payroll | ada, perlu hardening | period, snapshot, preview, finalize, paid, lock, export Excel, payslip PDF |
 | Finance dashboard | ada | membaca payroll result dan summary per divisi |
 | Scheduler | ada | `/scheduler` route tersedia |
@@ -124,7 +124,7 @@ Employee Link
 |---|---|
 | RLS | Dokumentasi bisnis meminta RLS; repo lebih jelas menunjukkan server-side checks daripada policy RLS lengkap. |
 | Performance deadline | Business rules meminta TW input H+1 dan SPV approve H+2; enforcement belum lengkap di semua action. |
-| Training graduation | Business rules meminta reguler efektif payroll berikutnya; `graduateTrainee()` masih mengubah status langsung. |
+| Training graduation | Transisi `graduateTrainee()` masih mengubah status langsung; mitigasi payroll saat ini memprorate bonus fulltime/disiplin jika tanggal lulus berada di tengah periode. |
 | Audit log | Payroll dan performance activity punya log kuat; ticket/review/training masih perlu audit hardening bila diminta. |
 | Payroll hardening | `next-update.md` mencatat overtime, SP quarter, structured additions/deductions, tunjangan masa kerja otomatis, dan rule lain yang belum penuh. |
 

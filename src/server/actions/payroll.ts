@@ -127,6 +127,41 @@ function countOverlapDays(start: Date, end: Date, rangeStart: Date, rangeEnd: Da
   return countCalendarDaysInclusive(overlapStart, overlapEnd);
 }
 
+function resolveTrainingGraduationBonusProrationRatio(input: {
+  trainingGraduationDate: Date | string | null | undefined;
+  periodStartDate: Date;
+  periodEndDate: Date;
+  scheduledWorkDays: number;
+  assignments: Array<{
+    effectiveStartDate: string | Date;
+    effectiveEndDate: string | Date | null;
+    workingDays: number[];
+  }>;
+}) {
+  if (!input.trainingGraduationDate || input.scheduledWorkDays <= 0) {
+    return 1;
+  }
+
+  const graduationDate = normalizeDate(input.trainingGraduationDate);
+  const periodStart = normalizeDate(input.periodStartDate);
+  const periodEnd = normalizeDate(input.periodEndDate);
+  if (graduationDate < periodStart || graduationDate > periodEnd) {
+    return 1;
+  }
+
+  const remainingScheduledWorkDays = countTargetDaysForPeriod({
+    periodStartDate: graduationDate,
+    periodEndDate: periodEnd,
+    assignments: input.assignments,
+  });
+
+  if (remainingScheduledWorkDays <= 0) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, remainingScheduledWorkDays / input.scheduledWorkDays));
+}
+
 function isSpIncidentType(incidentType: string) {
   return incidentType === "SP1" || incidentType === "SP2";
 }
@@ -942,6 +977,18 @@ function encodeAdjustmentReason(
   return description ? `${category}::${description}` : category;
 }
 
+function normalizeDivisionToken(value: string | null | undefined) {
+  return (value ?? "").trim().toUpperCase();
+}
+
+function isCsmDivision(divisionName: string | null | undefined) {
+  return normalizeDivisionToken(divisionName).includes("CSM");
+}
+
+function isPrintingDivision(divisionName: string | null | undefined) {
+  return normalizeDivisionToken(divisionName).includes("PRINTING");
+}
+
 export async function addPayrollAdjustment(input: unknown) {
   const access = await assertPayrollWriteAccess();
   if ("error" in access) return access;
@@ -968,8 +1015,14 @@ export async function addPayrollAdjustment(input: unknown) {
   }
 
   const [employee] = await db
-    .select({ id: employees.id, employeeGroup: employees.employeeGroup, isActive: employees.isActive })
+    .select({
+      id: employees.id,
+      employeeGroup: employees.employeeGroup,
+      isActive: employees.isActive,
+      divisionName: divisions.name,
+    })
     .from(employees)
+    .leftJoin(divisions, eq(employees.divisionId, divisions.id))
     .where(eq(employees.id, employeeId))
     .limit(1);
   if (!employee) return { error: "Karyawan tidak ditemukan." };
@@ -979,8 +1032,28 @@ export async function addPayrollAdjustment(input: unknown) {
     return { error: "Ganti Rugi Team hanya berlaku untuk karyawan tetap." };
   }
 
+  const csmBonusCategories: AdjustmentCategory[] = [
+    "BONUS_OMSET_1_CSM",
+    "BONUS_OMSET_2_CSM",
+    "BONUS_OMSET_3_CSM",
+    "BONUS_KINERJA_CSM_TERTINGGI",
+  ];
+
+  if (csmBonusCategories.includes(category) && !isCsmDivision(employee.divisionName)) {
+    return { error: "Kategori bonus ini hanya berlaku untuk karyawan divisi CSM." };
+  }
+
+  if (category === "BONUS_COUNTER_MESIN" && !isPrintingDivision(employee.divisionName)) {
+    return { error: "Bonus Counter Mesin hanya berlaku untuk karyawan divisi Printing." };
+  }
+
   // Business rule: GANTI_RUGI_PERSONAL / GANTI_RUGI_TEAM — max once per employee per period
-  if (category === "GANTI_RUGI_PERSONAL" || category === "GANTI_RUGI_TEAM") {
+  if (
+    category === "GANTI_RUGI_PERSONAL"
+    || category === "GANTI_RUGI_TEAM"
+    || csmBonusCategories.includes(category)
+    || category === "BONUS_COUNTER_MESIN"
+  ) {
     const [existing] = await db
       .select({ id: payrollAdjustments.id })
       .from(payrollAdjustments)
@@ -993,8 +1066,7 @@ export async function addPayrollAdjustment(input: unknown) {
       )
       .limit(1);
     if (existing) {
-      const label = category === "GANTI_RUGI_PERSONAL" ? "Ganti Rugi Personal" : "Ganti Rugi Team";
-      return { error: `${label} sudah ada untuk karyawan ini di periode ini.` };
+      return { error: "Kategori adjustment ini sudah ada untuk karyawan ini di periode ini." };
     }
   }
 
@@ -1672,6 +1744,20 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       : employee.payrollStatus === "TRAINING"
         ? 0
         : BONUS_FULLTIME_DEFAULT;
+    const trainingGraduationBonusProrationRatio = resolveTrainingGraduationBonusProrationRatio({
+      trainingGraduationDate: employee.trainingGraduationDate,
+      periodStartDate,
+      periodEndDate,
+      scheduledWorkDays,
+      assignments: employeeAssignments.map((a) => ({
+        effectiveStartDate: a.effectiveStartDate,
+        effectiveEndDate: a.effectiveEndDate,
+        workingDays: workingDaysBySchedule.get(a.scheduleId) ?? [],
+      })),
+    });
+    const fulltimeBonusProratedAmount = roundCurrency(
+      fulltimeBonusAmount * trainingGraduationBonusProrationRatio
+    );
 
     const performance = performanceMap.get(employee.id);
     const managerialKpi = managerialKpiMap.get(employee.id);
@@ -1760,7 +1846,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       || teamBonusByGrade;
     const fulltimeEligible = attendanceSummary.fulltimeEligible && !hasApprovedAbsence;
     const {
-      disciplineBonusAmount,
+      disciplineBonusAmount: disciplineBonusBaseAmount,
       disciplineEligible,
       disciplinePercent,
     } = resolveDisciplineBonus({
@@ -1770,6 +1856,9 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
       bonusTier90Amount: disciplineBonusTier90Amount,
       bonusTier100Amount: disciplineBonusTier100Amount,
     });
+    const disciplineBonusAmount = roundCurrency(
+      disciplineBonusBaseAmount * trainingGraduationBonusProrationRatio
+    );
 
     if (isKpiEmployee && !managerialKpi) {
       missingManagerialKpi.push(employee.fullName);
@@ -1785,7 +1874,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           unpaidLeaveDays: approvedUnpaidLeaveDays,
           performancePercent,
           performanceBonusBaseAmount,
-          fulltimeBonusAmount,
+          fulltimeBonusAmount: fulltimeBonusProratedAmount,
           disciplineBonusAmount,
           teamBonusAmount,
           fulltimeEligible,
@@ -1806,7 +1895,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           performanceBonusBaseAmount,
           achievementBonus140Amount,
           achievementBonus165Amount,
-          fulltimeBonusAmount,
+          fulltimeBonusAmount: fulltimeBonusProratedAmount,
           disciplineBonusAmount,
           teamBonusAmount,
           fulltimeEligible,
@@ -1860,7 +1949,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
         performanceBonusBaseAmount: performanceBonusBaseAmount.toFixed(2),
         achievementBonus140Amount: achievementBonus140Amount.toFixed(2),
         achievementBonus165Amount: achievementBonus165Amount.toFixed(2),
-        fulltimeBonusAmount: fulltimeBonusAmount.toFixed(2),
+        fulltimeBonusAmount: fulltimeBonusProratedAmount.toFixed(2),
         disciplineBonusAmount: disciplineBonusAmount.toFixed(2),
         teamBonusAmount: teamBonusAmount.toFixed(2),
         overtimeRateAmount: "0.00",
@@ -1907,6 +1996,7 @@ export async function generatePayrollPreview(input: unknown, options: GeneratePa
           attendanceFulltimeEligible: attendanceSummary.fulltimeEligible,
           attendanceDisciplineEligible: attendanceSummary.disciplineEligible,
           disciplinePercent,
+          trainingGraduationBonusProrationRatio,
           approvedUnpaidLeaveDays,
           approvedPaidLeaveDays,
           unpaidLeaveDeductionAmount: payrollCalc.unpaidLeaveDeductionAmount,

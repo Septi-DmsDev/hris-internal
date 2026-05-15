@@ -19,10 +19,11 @@ import {
   checkRole,
   getCurrentUserRole,
   getCurrentUserRoleRow,
+  getUser,
   requireAuth,
 } from "@/lib/auth/session";
 import { userRoles } from "@/lib/db/schema/auth";
-import { payrollEmployeeSnapshots, payrollResults } from "@/lib/db/schema/payroll";
+import { payrollEmployeeSnapshots, payrollResults, recurringPayrollAdjustments } from "@/lib/db/schema/payroll";
 import {
   isKpiEmployeeGroup,
   isPointBasedEmployeeGroup,
@@ -62,6 +63,10 @@ type EmployeeDetailRow = {
   religion: string | null;
   maritalStatus: string | null;
   phoneNumber: string | null;
+  bpjsKetenagakerjaanNumber: string | null;
+  bpjsKetenagakerjaanActive: boolean;
+  bpjsKesehatanNumber: string | null;
+  bpjsKesehatanActive: boolean;
   address: string | null;
   startDate: Date;
   branchId: string;
@@ -98,6 +103,10 @@ type EmployeeListRow = {
   fullName: string;
   nickname: string | null;
   phoneNumber: string | null;
+  bpjsKetenagakerjaanNumber: string | null;
+  bpjsKetenagakerjaanActive: boolean;
+  bpjsKesehatanNumber: string | null;
+  bpjsKesehatanActive: boolean;
   startDate: Date;
   branchId: string;
   branchName: string | null;
@@ -205,6 +214,10 @@ function toEmployeeRecord(input: EmployeePersistInput) {
     religion: input.religion,
     maritalStatus: input.maritalStatus,
     phoneNumber: input.phoneNumber,
+    bpjsKetenagakerjaanNumber: input.bpjsKetenagakerjaanNumber,
+    bpjsKetenagakerjaanActive: Boolean(input.bpjsKetenagakerjaanActive && input.bpjsKetenagakerjaanNumber),
+    bpjsKesehatanNumber: input.bpjsKesehatanNumber,
+    bpjsKesehatanActive: Boolean(input.bpjsKesehatanActive && input.bpjsKesehatanNumber),
     address: input.address,
     startDate: input.startDate,
     branchId: input.branchId,
@@ -381,6 +394,10 @@ export async function getEmployees() {
       fullName: employees.fullName,
       nickname: employees.nickname,
       phoneNumber: employees.phoneNumber,
+      bpjsKetenagakerjaanNumber: employees.bpjsKetenagakerjaanNumber,
+      bpjsKetenagakerjaanActive: employees.bpjsKetenagakerjaanActive,
+      bpjsKesehatanNumber: employees.bpjsKesehatanNumber,
+      bpjsKesehatanActive: employees.bpjsKesehatanActive,
       startDate: employees.startDate,
       branchId: employees.branchId,
       branchName: branches.name,
@@ -577,6 +594,10 @@ export async function getEmployeeById(id: string) {
       religion: employees.religion,
       maritalStatus: employees.maritalStatus,
       phoneNumber: employees.phoneNumber,
+      bpjsKetenagakerjaanNumber: employees.bpjsKetenagakerjaanNumber,
+      bpjsKetenagakerjaanActive: employees.bpjsKetenagakerjaanActive,
+      bpjsKesehatanNumber: employees.bpjsKesehatanNumber,
+      bpjsKesehatanActive: employees.bpjsKesehatanActive,
       address: employees.address,
       startDate: employees.startDate,
       branchId: employees.branchId,
@@ -960,6 +981,10 @@ export async function importEmployeesFromXlsx(formData: FormData) {
       // STATUS di Excel adalah status pernikahan (bukan employment status)
       maritalStatus: statusIdx >= 0 ? (String(row[statusIdx] ?? "").trim() || undefined) : undefined,
       phoneNumber: noTelpIdx >= 0 ? (String(row[noTelpIdx] ?? "").trim() || undefined) : undefined,
+      bpjsKetenagakerjaanNumber: undefined,
+      bpjsKetenagakerjaanActive: false,
+      bpjsKesehatanNumber: undefined,
+      bpjsKesehatanActive: false,
       address: alamatIdx >= 0 ? (String(row[alamatIdx] ?? "").trim() || undefined) : undefined,
       startDate,
       branchId,
@@ -1224,6 +1249,107 @@ export async function updateEmployee(id: string, input: unknown) {
   revalidatePath("/employees");
   revalidatePath(`/employees/${id}`);
   revalidatePath("/users");
+  return { success: true };
+}
+
+export async function toggleEmployeeBpjs(
+  id: string,
+  type: "KT" | "KS",
+  enabled: boolean
+) {
+  const authError = await checkRole(["HRD", "SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  const [existing] = await db
+    .select({
+      id: employees.id,
+      bpjsKetenagakerjaanNumber: employees.bpjsKetenagakerjaanNumber,
+      bpjsKesehatanNumber: employees.bpjsKesehatanNumber,
+    })
+    .from(employees)
+    .where(eq(employees.id, id))
+    .limit(1);
+
+  if (!existing) return { error: "Data karyawan tidak ditemukan." };
+
+  if (type === "KT" && enabled && !existing.bpjsKetenagakerjaanNumber?.trim()) {
+    return { error: "Isi nomor BPJS KT di form edit karyawan sebelum mengaktifkan toggle." };
+  }
+
+  if (type === "KS" && enabled && !existing.bpjsKesehatanNumber?.trim()) {
+    return { error: "Isi nomor BPJS KS di form edit karyawan sebelum mengaktifkan toggle." };
+  }
+
+  const user = await getUser();
+  const roleRow = await getCurrentUserRoleRow();
+  const actorRole = roleRow.role as UserRole;
+  if (!user) return { error: "Sesi tidak valid." };
+
+  await db
+    .update(employees)
+    .set(
+      type === "KT"
+        ? { bpjsKetenagakerjaanActive: enabled, updatedAt: new Date() }
+        : { bpjsKesehatanActive: enabled, updatedAt: new Date() }
+    )
+    .where(eq(employees.id, id));
+
+  if (type === "KS") {
+    if (enabled) {
+      const [existingRecurring] = await db
+        .select({ id: recurringPayrollAdjustments.id })
+        .from(recurringPayrollAdjustments)
+        .where(
+          and(
+            eq(recurringPayrollAdjustments.employeeId, id),
+            eq(recurringPayrollAdjustments.category, "BPJS")
+          )
+        )
+        .limit(1);
+
+      if (existingRecurring) {
+        await db
+          .update(recurringPayrollAdjustments)
+          .set({
+            adjustmentType: "DEDUCTION",
+            amount: "52000",
+            reason: "BPJS::BPJS KS otomatis dari toggle karyawan",
+            isActive: true,
+            appliedByUserId: user.id,
+            appliedByRole: actorRole,
+            updatedAt: new Date(),
+          })
+          .where(eq(recurringPayrollAdjustments.id, existingRecurring.id));
+      } else {
+        await db.insert(recurringPayrollAdjustments).values({
+          employeeId: id,
+          adjustmentType: "DEDUCTION",
+          category: "BPJS",
+          amount: "52000",
+          reason: "BPJS::BPJS KS otomatis dari toggle karyawan",
+          isActive: true,
+          appliedByUserId: user.id,
+          appliedByRole: actorRole,
+        });
+      }
+    } else {
+      await db
+        .update(recurringPayrollAdjustments)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(recurringPayrollAdjustments.employeeId, id),
+            eq(recurringPayrollAdjustments.category, "BPJS"),
+            eq(recurringPayrollAdjustments.isActive, true)
+          )
+        );
+    }
+  }
+
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${id}`);
+  revalidatePath("/finance");
+  revalidatePath("/payroll");
   return { success: true };
 }
 

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, updateEmployee } from "@/server/actions/employees";
+import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, toggleEmployeeBpjs, updateEmployee } from "@/server/actions/employees";
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
 import { Plus } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -36,15 +36,11 @@ export type EmployeeRow = {
   employeeCode: string;
   nik: string | null;
   fullName: string;
-  branchName: string;
   phoneNumber: string;
-  divisionName: string;
-  positionName: string;
-  employeeGroup: EmployeeGroup;
-  employmentStatus: "TRAINING" | "REGULER" | "DIALIHKAN_TRAINING" | "TIDAK_LOLOS" | "NONAKTIF" | "RESIGN";
-  payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
-  supervisorName: string;
-  isActive: boolean;
+  bpjsKetenagakerjaanNumber: string | null;
+  bpjsKetenagakerjaanActive: boolean;
+  bpjsKesehatanNumber: string | null;
+  bpjsKesehatanActive: boolean;
   startDate: string;
 };
 
@@ -60,6 +56,10 @@ type EmployeeDraft = {
   maritalStatus: string;
   address: string;
   phoneNumber: string;
+  bpjsKetenagakerjaanNumber: string;
+  bpjsKetenagakerjaanActive: boolean;
+  bpjsKesehatanNumber: string;
+  bpjsKesehatanActive: boolean;
   startDate: string;
   trainingGraduationDate: string;
   username: string;
@@ -145,6 +145,10 @@ function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
     maritalStatus: "",
     address: "",
     phoneNumber: "",
+    bpjsKetenagakerjaanNumber: "",
+    bpjsKetenagakerjaanActive: false,
+    bpjsKesehatanNumber: "",
+    bpjsKesehatanActive: false,
     startDate: today,
     trainingGraduationDate: "",
     username: "",
@@ -180,6 +184,10 @@ function createDraftFromEmployee(detail: NonNullable<EmployeeDetailResult>, logi
     maritalStatus: normalizeMaritalStatus(employee.maritalStatus),
     address: employee.address ?? "",
     phoneNumber: employee.phoneNumber ?? "",
+    bpjsKetenagakerjaanNumber: employee.bpjsKetenagakerjaanNumber ?? "",
+    bpjsKetenagakerjaanActive: employee.bpjsKetenagakerjaanActive,
+    bpjsKesehatanNumber: employee.bpjsKesehatanNumber ?? "",
+    bpjsKesehatanActive: employee.bpjsKesehatanActive,
     startDate: new Date(employee.startDate).toISOString().slice(0, 10),
     trainingGraduationDate: employee.trainingGraduationDate ? new Date(employee.trainingGraduationDate).toISOString().slice(0, 10) : "",
     username: loginEmail ? loginEmail.split("@")[0] : "",
@@ -210,6 +218,10 @@ function toActionInput(draft: EmployeeDraft) {
     religion: draft.religion,
     maritalStatus: draft.maritalStatus,
     phoneNumber: draft.phoneNumber,
+    bpjsKetenagakerjaanNumber: draft.bpjsKetenagakerjaanNumber,
+    bpjsKetenagakerjaanActive: draft.bpjsKetenagakerjaanActive,
+    bpjsKesehatanNumber: draft.bpjsKesehatanNumber,
+    bpjsKesehatanActive: draft.bpjsKesehatanActive,
     address: draft.address,
     startDate: draft.startDate,
     branchId: draft.branchId,
@@ -231,13 +243,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <div className="space-y-2"><label className="text-sm font-medium text-slate-700">{label}</label>{children}</div>;
 }
 
-function EmployeePersonalForm({ draft, onChange, options }: { draft: EmployeeDraft; onChange: (field: keyof EmployeeDraft, value: string) => void; options: EmployeeFormOptions }) {
+function EmployeePersonalForm({
+  draft,
+  onChange,
+  options,
+  isEditMode = false,
+}: {
+  draft: EmployeeDraft;
+  onChange: (field: keyof EmployeeDraft, value: string) => void;
+  options: EmployeeFormOptions;
+  isEditMode?: boolean;
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Field label="CABANG"><select value={draft.branchId} onChange={(e) => onChange("branchId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" required><option value="">Pilih cabang</option>{options.branches.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field>
-      <Field label="SUPERVISOR"><select value={draft.supervisorEmployeeId} onChange={(e) => onChange("supervisorEmployeeId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Pilih supervisor</option>{options.supervisors.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}</select></Field>
+      {!isEditMode ? <Field label="CABANG"><select value={draft.branchId} onChange={(e) => onChange("branchId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" required><option value="">Pilih cabang</option>{options.branches.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field> : null}
+      {!isEditMode ? <Field label="SUPERVISOR"><select value={draft.supervisorEmployeeId} onChange={(e) => onChange("supervisorEmployeeId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value="">Pilih supervisor</option>{options.supervisors.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}</select></Field> : null}
       <Field label="NAMA"><Input value={draft.fullName} onChange={(e) => onChange("fullName", e.target.value)} required /></Field>
-      <Field label="UID (otomatis saat tambah baru)"><Input value={draft.employeeCode} onChange={(e) => onChange("employeeCode", e.target.value)} required /></Field>
+      {!isEditMode ? <Field label="UID (otomatis saat tambah baru)"><Input value={draft.employeeCode} onChange={(e) => onChange("employeeCode", e.target.value)} required /></Field> : null}
       <Field label="NIK"><Input value={draft.nik} onChange={(e) => onChange("nik", e.target.value)} maxLength={50} /></Field>
       <Field label="Username"><Input value={draft.username} onChange={(e) => onChange("username", e.target.value)} /></Field>
       <Field label="Email"><Input type="email" value={draft.email} onChange={(e) => onChange("email", e.target.value)} /></Field>
@@ -264,6 +286,8 @@ function EmployeePersonalForm({ draft, onChange, options }: { draft: EmployeeDra
         </select>
       </Field>
       <Field label="NO TELP"><Input value={draft.phoneNumber} onChange={(e) => onChange("phoneNumber", e.target.value)} /></Field>
+      <Field label="NO BPJS KT"><Input value={draft.bpjsKetenagakerjaanNumber} onChange={(e) => onChange("bpjsKetenagakerjaanNumber", e.target.value)} maxLength={50} /></Field>
+      <Field label="NO BPJS KS"><Input value={draft.bpjsKesehatanNumber} onChange={(e) => onChange("bpjsKesehatanNumber", e.target.value)} maxLength={50} /></Field>
       <Field label="MASUK KERJA"><Input type="date" value={draft.startDate} onChange={(e) => onChange("startDate", e.target.value)} /></Field>
       <Field label="LOLOS TRAINING"><Input type="date" value={draft.trainingGraduationDate} onChange={(e) => onChange("trainingGraduationDate", e.target.value)} /></Field>
       <div className="space-y-2 md:col-span-2"><label className="text-sm font-medium text-slate-700">ALAMAT</label><textarea value={draft.address} onChange={(e) => onChange("address", e.target.value)} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
@@ -413,8 +437,23 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
     }
   }
 
+  async function handleToggleBpjs(row: EmployeeRow, type: "KT" | "KS") {
+    setPending(true);
+    setFormError(null);
+    try {
+      const current = type === "KT" ? row.bpjsKetenagakerjaanActive : row.bpjsKesehatanActive;
+      const result = await toggleEmployeeBpjs(row.id, type, !current);
+      if (result && "error" in result) {
+        setFormError(result.error);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
+
   const columns: ColumnDef<EmployeeRow>[] = useMemo(() => [
-    { header: "CABANG", accessorKey: "branchName" },
     { header: "UID", accessorKey: "employeeCode" },
     { header: "NIK", accessorKey: "nik" },
     {
@@ -422,8 +461,76 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
       accessorKey: "fullName",
       cell: ({ row }) => <Link href={`/employees/${row.original.id}`} className="font-medium text-slate-900 hover:underline">{row.original.fullName}</Link>,
     },
-    { header: "NO TELP", accessorKey: "phoneNumber" },
+    { header: "NO TELPON", accessorKey: "phoneNumber" },
     { header: "MASUK KERJA", accessorKey: "startDate" },
+    {
+      header: "BPJS KT",
+      id: "bpjs-kt",
+      cell: ({ row }) => {
+        const hasNumber = Boolean(row.original.bpjsKetenagakerjaanNumber?.trim());
+        const enabled = row.original.bpjsKetenagakerjaanActive;
+        return (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-5 w-9 rounded-full p-0 hover:bg-transparent"
+            disabled={!options.canManage || pending || !hasNumber}
+            onClick={() => void handleToggleBpjs(row.original, "KT")}
+            title={hasNumber ? "Toggle BPJS KT" : "Isi nomor BPJS KT di Edit Karyawan"}
+          >
+            <span
+              className={[
+                "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                enabled ? "bg-emerald-500" : "bg-slate-300",
+                !hasNumber ? "opacity-60" : "",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  enabled ? "translate-x-4.5" : "translate-x-0.5",
+                ].join(" ")}
+              />
+            </span>
+          </Button>
+        );
+      },
+    },
+    {
+      header: "BPJS KS",
+      id: "bpjs-ks",
+      cell: ({ row }) => {
+        const hasNumber = Boolean(row.original.bpjsKesehatanNumber?.trim());
+        const enabled = row.original.bpjsKesehatanActive;
+        return (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-5 w-9 rounded-full p-0 hover:bg-transparent"
+            disabled={!options.canManage || pending || !hasNumber}
+            onClick={() => void handleToggleBpjs(row.original, "KS")}
+            title={hasNumber ? "Toggle BPJS KS" : "Isi nomor BPJS KS di Edit Karyawan"}
+          >
+            <span
+              className={[
+                "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                enabled ? "bg-emerald-500" : "bg-slate-300",
+                !hasNumber ? "opacity-60" : "",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  enabled ? "translate-x-4.5" : "translate-x-0.5",
+                ].join(" ")}
+              />
+            </span>
+          </Button>
+        );
+      },
+    },
     {
       header: "Aksi",
       id: "actions",
@@ -459,7 +566,7 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
         </div>
       ),
     },
-  ], [options.canManage]);
+  ], [options.canManage, pending]);
 
   return (
     <div className="space-y-3">
@@ -467,9 +574,9 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}><DialogContent><DialogHeader><DialogTitle>Import Karyawan</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-slate-600">Format: CABANG, NAMA, NIK/ID KARYAWAN, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, EMAIL, MASUK KERJA, LOLOS TRAINING.</p><Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Batal</Button><Button onClick={() => void submitImport()} disabled={pending}>{pending ? "Mengimpor..." : "Import"}</Button></DialogFooter></div></DialogContent></Dialog>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Tambah Karyawan</DialogTitle></DialogHeader><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Batal</Button><Button onClick={() => void submitCreate()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Tambah Karyawan</DialogTitle></DialogHeader><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} isEditMode={false} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>Batal</Button><Button onClick={() => void submitCreate()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
 
-      <Dialog open={editingRow !== null} onOpenChange={(open) => { if (!open) setEditingRow(null); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Edit Karyawan</DialogTitle></DialogHeader><div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Username login: <span className="font-semibold">{draft.username || "-"}</span> | Password default: <span className="font-semibold">12345678</span></div><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setEditingRow(null)}>Batal</Button><Button onClick={() => void submitEdit()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={editingRow !== null} onOpenChange={(open) => { if (!open) setEditingRow(null); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Edit Karyawan</DialogTitle></DialogHeader><div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Username login: <span className="font-semibold">{draft.username || "-"}</span> | Password default: <span className="font-semibold">12345678</span></div><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} isEditMode />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setEditingRow(null)}>Batal</Button><Button onClick={() => void submitEdit()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
 
       <AlertDialog open={deletingRow !== null} onOpenChange={(open) => { if (!open) setDeletingRow(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus Karyawan</AlertDialogTitle><AlertDialogDescription>{`Data karyawan \"${deletingRow?.fullName ?? ""}\" akan dinonaktifkan.`}</AlertDialogDescription></AlertDialogHeader>{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }}>{pending ? "Menghapus..." : "Hapus"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
 </div>

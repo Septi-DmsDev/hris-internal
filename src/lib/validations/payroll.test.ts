@@ -77,6 +77,18 @@ describe("payrollAdjustmentSchema", () => {
     expect(ADJUSTMENT_CATEGORY_LABELS.TRANSPORT).toBe("Uang Transport");
   });
 
+  it("menerima kategori bonus CSM sebagai adjustment valid", () => {
+    const result = payrollAdjustmentSchema.safeParse({
+      periodId: "123e4567-e89b-12d3-a456-426614174001",
+      employeeId: "123e4567-e89b-12d3-a456-426614174000",
+      category: "BONUS_OMSET_1_CSM",
+      amount: "400000",
+    });
+
+    expect(result.success).toBe(true);
+    expect(ADJUSTMENT_CATEGORY_LABELS.BONUS_OMSET_1_CSM).toBe("Bonus Omset 1 CSM");
+  });
+
   it("menerima payload hapus adjustment berdasarkan sumber data", () => {
     const schema = payrollValidation.deletePayrollAdjustmentSchema;
     const result = schema.safeParse({

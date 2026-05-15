@@ -32,6 +32,8 @@ describe("payroll adjustment helpers", () => {
   it("menentukan tipe adjustment dari kategori", () => {
     expect(payrollHelpers.resolveAdjustmentTypeForCategory("TRANSPORT")).toBe("ADDITION");
     expect(payrollHelpers.resolveAdjustmentTypeForCategory("MANUAL_ADDITION")).toBe("ADDITION");
+    expect(payrollHelpers.resolveAdjustmentTypeForCategory("BONUS_OMSET_1_CSM")).toBe("ADDITION");
+    expect(payrollHelpers.resolveAdjustmentTypeForCategory("BONUS_COUNTER_MESIN")).toBe("ADDITION");
     expect(payrollHelpers.resolveAdjustmentTypeForCategory("BPJS")).toBe("DEDUCTION");
   });
 

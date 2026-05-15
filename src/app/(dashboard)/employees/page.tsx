@@ -19,21 +19,11 @@ export default async function EmployeesPage() {
     employeeCode: string;
     nik: string | null;
     fullName: string;
-    branchName: string | null;
     phoneNumber: string | null;
-    divisionName: string | null;
-    positionName: string | null;
-    employeeGroup: import("@/lib/employee-groups").EmployeeGroup;
-    employmentStatus:
-      | "TRAINING"
-      | "REGULER"
-      | "DIALIHKAN_TRAINING"
-      | "TIDAK_LOLOS"
-      | "NONAKTIF"
-      | "RESIGN";
-    payrollStatus: "TRAINING" | "REGULER" | "FINAL_PAYROLL" | "NONAKTIF";
-    supervisorName: string | null;
-    isActive: boolean;
+    bpjsKetenagakerjaanNumber: string | null;
+    bpjsKetenagakerjaanActive: boolean;
+    bpjsKesehatanNumber: string | null;
+    bpjsKesehatanActive: boolean;
     startDate: Date;
   }>;
 
@@ -42,15 +32,11 @@ export default async function EmployeesPage() {
     employeeCode: employee.employeeCode,
     nik: employee.nik,
     fullName: employee.fullName,
-    branchName: employee.branchName ?? "-",
     phoneNumber: employee.phoneNumber ?? "-",
-    divisionName: employee.divisionName ?? "-",
-    positionName: employee.positionName ?? "-",
-    employeeGroup: employee.employeeGroup,
-    employmentStatus: employee.employmentStatus,
-    payrollStatus: employee.payrollStatus,
-    supervisorName: employee.supervisorName ?? "-",
-    isActive: employee.isActive,
+    bpjsKetenagakerjaanNumber: employee.bpjsKetenagakerjaanNumber,
+    bpjsKetenagakerjaanActive: employee.bpjsKetenagakerjaanActive,
+    bpjsKesehatanNumber: employee.bpjsKesehatanNumber,
+    bpjsKesehatanActive: employee.bpjsKesehatanActive,
     startDate: format(employee.startDate, "yyyy-MM-dd"),
   }));
 

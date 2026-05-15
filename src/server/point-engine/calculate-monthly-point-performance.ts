@@ -2,6 +2,7 @@ import { resolvePointTargetForDivision } from "@/config/constants";
 
 type CalculateMonthlyPointPerformanceInput = {
   divisionName?: string | null;
+  targetDailyPoints?: number | null;
   targetDays: number;
   totalApprovedPoints: number;
   /** Satu entry per hari kerja yang sudah submit — untuk menghitung rata-rata persentase harian */
@@ -10,17 +11,18 @@ type CalculateMonthlyPointPerformanceInput = {
 
 export function calculateMonthlyPointPerformance({
   divisionName,
+  targetDailyPoints,
   targetDays,
   totalApprovedPoints,
   dailySubmissions,
 }: CalculateMonthlyPointPerformanceInput) {
-  const targetDailyPoints = resolvePointTargetForDivision(divisionName);
-  const totalTargetPoints = targetDailyPoints * targetDays;
+  const resolvedTargetDailyPoints = targetDailyPoints ?? resolvePointTargetForDivision(divisionName);
+  const totalTargetPoints = resolvedTargetDailyPoints * targetDays;
 
   let performancePercent: number;
   if (dailySubmissions && dailySubmissions.length > 0) {
     const dailyPercents = dailySubmissions.map((d) =>
-      targetDailyPoints > 0 ? (d.totalPoints / targetDailyPoints) * 100 : 0
+      resolvedTargetDailyPoints > 0 ? (d.totalPoints / resolvedTargetDailyPoints) * 100 : 0
     );
     performancePercent = Number(
       (dailyPercents.reduce((a, b) => a + b, 0) / dailyPercents.length).toFixed(2)
@@ -30,7 +32,7 @@ export function calculateMonthlyPointPerformance({
   }
 
   return {
-    targetDailyPoints,
+    targetDailyPoints: resolvedTargetDailyPoints,
     targetDays,
     totalTargetPoints,
     totalApprovedPoints,

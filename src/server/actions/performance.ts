@@ -361,6 +361,7 @@ async function resolveDivisionSnapshotForPeriod(employeeId: string, periodStartD
     .select({
       divisionId: employeeDivisionHistories.newDivisionId,
       divisionName: divisionAlias.name,
+      divisionDailyPointTarget: divisionAlias.dailyPointTarget,
     })
     .from(employeeDivisionHistories)
     .leftJoin(divisionAlias, eq(employeeDivisionHistories.newDivisionId, divisionAlias.id))
@@ -377,6 +378,7 @@ async function resolveDivisionSnapshotForPeriod(employeeId: string, periodStartD
     return {
       divisionSnapshotId: historyRow.divisionId,
       divisionSnapshotName: historyRow.divisionName ?? "UNKNOWN",
+      divisionDailyPointTarget: historyRow.divisionDailyPointTarget ?? null,
     };
   }
 
@@ -384,6 +386,7 @@ async function resolveDivisionSnapshotForPeriod(employeeId: string, periodStartD
     .select({
       divisionId: employees.divisionId,
       divisionName: divisions.name,
+      divisionDailyPointTarget: divisions.dailyPointTarget,
     })
     .from(employees)
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
@@ -393,6 +396,7 @@ async function resolveDivisionSnapshotForPeriod(employeeId: string, periodStartD
   return {
     divisionSnapshotId: employeeRow?.divisionId ?? null,
     divisionSnapshotName: employeeRow?.divisionName ?? "UNKNOWN",
+    divisionDailyPointTarget: employeeRow?.divisionDailyPointTarget ?? null,
   };
 }
 
@@ -554,6 +558,7 @@ export async function saveDailyActivityEntry(input: unknown) {
     .select({
       divisionId: employees.divisionId,
       divisionName: divisions.name,
+      divisionDailyPointTarget: divisions.dailyPointTarget,
     })
     .from(employees)
     .leftJoin(divisions, eq(employees.divisionId, divisions.id))
@@ -977,6 +982,7 @@ export async function generateMonthlyPerformance(input: unknown) {
       const totalApprovedPoints = Number((approvedSumByEmployee.get(employee.id) ?? 0).toFixed(2));
       const calculated = calculateMonthlyPointPerformance({
         divisionName: divisionSnapshot.divisionSnapshotName,
+        targetDailyPoints: divisionSnapshot.divisionDailyPointTarget,
         targetDays,
         totalApprovedPoints,
         dailySubmissions,
@@ -1077,7 +1083,9 @@ export async function inputEmployeeMonthlyPerformance(input: unknown) {
 
     const leaveDays = leaveAggregate?.daysCount ?? 0;
     const targetDays = Math.max(0, rawTargetDays - leaveDays);
-    const targetDailyPoints = resolvePointTargetForDivision(divisionSnapshot.divisionSnapshotName);
+    const targetDailyPoints =
+      divisionSnapshot.divisionDailyPointTarget
+      ?? resolvePointTargetForDivision(divisionSnapshot.divisionSnapshotName);
     const totalTargetPoints = targetDailyPoints * targetDays;
     const totalApprovedPoints = Number(
       ((totalTargetPoints * parsed.data.performancePercent) / 100).toFixed(2)

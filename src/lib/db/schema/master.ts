@@ -10,6 +10,7 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import { ALL_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
+import { POINT_TARGET_HARIAN } from "@/config/constants";
 
 export const employeeGroupEnum = pgEnum("employee_group", [...ALL_EMPLOYEE_GROUPS]);
 export const employeeGroupPayrollModeEnum = pgEnum("employee_group_payroll_mode", [
@@ -35,6 +36,7 @@ export const divisions = pgTable("divisions", {
   code: varchar("code", { length: 20 }).notNull().unique(),
   branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
   trainingPassPercent: integer("training_pass_percent").default(80).notNull(),
+  dailyPointTarget: integer("daily_point_target").default(POINT_TARGET_HARIAN).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),

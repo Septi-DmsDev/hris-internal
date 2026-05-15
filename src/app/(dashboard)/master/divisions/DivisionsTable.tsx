@@ -35,6 +35,7 @@ export type DivisionRow = {
   name: string;
   code: string;
   trainingPassPercent: number;
+  dailyPointTarget: number;
   isActive: boolean;
   branchId: string | null;
 };
@@ -115,6 +116,11 @@ export default function DivisionsTable({ data, branches }: DivisionsTableProps) 
         header: "Min. Lulus Training",
         accessorKey: "trainingPassPercent",
         cell: ({ row }) => `${row.original.trainingPassPercent}%`,
+      },
+      {
+        header: "Target Poin Harian",
+        accessorKey: "dailyPointTarget",
+        cell: ({ row }) => row.original.dailyPointTarget.toLocaleString("id-ID"),
       },
       {
         header: "Status",
@@ -231,6 +237,19 @@ export default function DivisionsTable({ data, branches }: DivisionsTableProps) 
               />
             </div>
             <div className="space-y-2">
+              <label htmlFor="division-create-target" className="text-sm font-medium">
+                Target Poin Harian
+              </label>
+              <Input
+                id="division-create-target"
+                name="dailyPointTarget"
+                type="number"
+                min={1}
+                defaultValue={13000}
+                required
+              />
+            </div>
+            <div className="space-y-2">
               <label htmlFor="division-create-active" className="text-sm font-medium">
                 Status
               </label>
@@ -323,6 +342,19 @@ export default function DivisionsTable({ data, branches }: DivisionsTableProps) 
                   max={100}
                   required
                   defaultValue={editingRow.trainingPassPercent}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="division-edit-target" className="text-sm font-medium">
+                  Target Poin Harian
+                </label>
+                <Input
+                  id="division-edit-target"
+                  name="dailyPointTarget"
+                  type="number"
+                  min={1}
+                  required
+                  defaultValue={editingRow.dailyPointTarget}
                 />
               </div>
               <div className="space-y-2">

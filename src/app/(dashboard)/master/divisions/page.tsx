@@ -10,6 +10,7 @@ export default async function DivisionsPage() {
     name: division.name,
     code: division.code,
     trainingPassPercent: division.trainingPassPercent,
+    dailyPointTarget: division.dailyPointTarget,
     isActive: division.isActive,
     branchId: division.branchId,
   }));

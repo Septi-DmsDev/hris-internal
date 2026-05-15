@@ -25,6 +25,7 @@ export const divisionSchema = z.object({
   code: z.string().min(1, "Kode wajib diisi").max(20).toUpperCase(),
   branchId: z.string().uuid("Branch tidak valid").optional(),
   trainingPassPercent: z.coerce.number().int().min(0).max(100).default(80),
+  dailyPointTarget: z.coerce.number().int().min(1).max(1000000).default(13000),
   isActive: z.boolean().default(true),
 });
 

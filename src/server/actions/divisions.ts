@@ -21,6 +21,7 @@ export async function createDivision(formData: FormData) {
     code: formData.get("code")?.toString() ?? "",
     branchId: formData.get("branchId")?.toString() || undefined,
     trainingPassPercent: formData.get("trainingPassPercent")?.toString() ?? "80",
+    dailyPointTarget: formData.get("dailyPointTarget")?.toString() ?? "13000",
     isActive: formData.get("isActive") !== "false",
   };
 
@@ -49,6 +50,7 @@ export async function updateDivision(id: string, formData: FormData) {
     code: formData.get("code")?.toString() ?? "",
     branchId: formData.get("branchId")?.toString() || undefined,
     trainingPassPercent: formData.get("trainingPassPercent")?.toString() ?? "80",
+    dailyPointTarget: formData.get("dailyPointTarget")?.toString() ?? "13000",
     isActive: formData.get("isActive") !== "false",
   };
 

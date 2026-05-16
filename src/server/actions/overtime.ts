@@ -21,8 +21,8 @@ import {
 import type { UserRole } from "@/types";
 import type { EmployeeGroup } from "@/lib/employee-groups";
 
-const OVERTIME_APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "SPV"];
-const OVERTIME_SUBMITTER_ROLES: UserRole[] = ["TEAMWORK"];
+const OVERTIME_APPROVER_ROLES: UserRole[] = ["SUPER_ADMIN", "SPV", "HRD"];
+const OVERTIME_SUBMITTER_ROLES: UserRole[] = ["TEAMWORK", "MANAGERIAL"];
 const OVERTIME_MONITOR_ROLES: UserRole[] = ["HRD"];
 const DIV_SCOPED_ROLES: UserRole[] = ["SPV", "KABAG"];
 
@@ -35,8 +35,10 @@ const OVERTIME_TYPE_CONFIG = {
 } as const;
 
 type OvertimeType = keyof typeof OVERTIME_TYPE_CONFIG;
+type OvertimePlacement = "BEFORE_SHIFT" | "AFTER_SHIFT";
 let hasOvertimeRequestsTablePromise: Promise<boolean> | null = null;
 let hasOvertimeDraftEntriesTablePromise: Promise<boolean> | null = null;
+let hasOvertimePlacementColumnPromise: Promise<boolean> | null = null;
 
 async function hasOvertimeRequestsTable() {
   if (!hasOvertimeRequestsTablePromise) {
@@ -88,6 +90,25 @@ async function ensureOvertimeTableReady() {
   return null;
 }
 
+async function hasOvertimePlacementColumn() {
+  if (!hasOvertimePlacementColumnPromise) {
+    hasOvertimePlacementColumnPromise = db
+      .execute(
+        sql<{ has_column: boolean }>`
+          select exists (
+            select 1
+            from information_schema.columns
+            where table_name = 'overtime_requests'
+              and column_name = 'overtime_placement'
+          ) as has_column
+        `
+      )
+      .then((rows) => Boolean(rows[0]?.has_column))
+      .catch(() => false);
+  }
+  return hasOvertimePlacementColumnPromise;
+}
+
 type OvertimeRequestRow = {
   id: string;
   employeeId: string;
@@ -96,6 +117,7 @@ type OvertimeRequestRow = {
   divisionName: string | null;
   requestDate: Date;
   overtimeType: OvertimeType;
+  overtimePlacement: OvertimePlacement;
   overtimeHours: number;
   breakHours: number;
   baseAmount: string | number;
@@ -104,6 +126,7 @@ type OvertimeRequestRow = {
   periodCode: string;
   reason: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  employeeGroup: EmployeeGroup | null;
   reviewNotes: string | null;
   approvedAt: Date | null;
   rejectedAt: Date | null;
@@ -141,6 +164,7 @@ function resolvePeriodCodeFromDate(date: Date) {
 }
 
 async function getScopedOvertimeRows(role: UserRole, divisionIds: string[]) {
+  const hasPlacementColumn = await hasOvertimePlacementColumn();
   const baseQuery = db
     .select({
       id: overtimeRequests.id,
@@ -150,6 +174,9 @@ async function getScopedOvertimeRows(role: UserRole, divisionIds: string[]) {
       divisionName: divisions.name,
       requestDate: overtimeRequests.requestDate,
       overtimeType: overtimeRequests.overtimeType,
+      overtimePlacement: hasPlacementColumn
+        ? overtimeRequests.overtimePlacement
+        : sql<OvertimePlacement>`'AFTER_SHIFT'`.as("overtime_placement"),
       overtimeHours: overtimeRequests.overtimeHours,
       breakHours: overtimeRequests.breakHours,
       baseAmount: overtimeRequests.baseAmount,
@@ -158,6 +185,7 @@ async function getScopedOvertimeRows(role: UserRole, divisionIds: string[]) {
       periodCode: overtimeRequests.periodCode,
       reason: overtimeRequests.reason,
       status: overtimeRequests.status,
+      employeeGroup: employees.employeeGroup,
       reviewNotes: overtimeRequests.reviewNotes,
       approvedAt: overtimeRequests.approvedAt,
       rejectedAt: overtimeRequests.rejectedAt,
@@ -236,6 +264,7 @@ export async function getOvertimeWorkspace() {
   }
 
   const allRows = canApprove || canMonitor ? await getScopedOvertimeRows(role, roleRow.divisionIds) : [];
+  const hasPlacementColumn = await hasOvertimePlacementColumn();
 
   const myRows = canSubmit && roleRow.employeeId
     ? ((await db
@@ -247,6 +276,9 @@ export async function getOvertimeWorkspace() {
         divisionName: divisions.name,
         requestDate: overtimeRequests.requestDate,
         overtimeType: overtimeRequests.overtimeType,
+        overtimePlacement: hasPlacementColumn
+          ? overtimeRequests.overtimePlacement
+          : sql<OvertimePlacement>`'AFTER_SHIFT'`.as("overtime_placement"),
         overtimeHours: overtimeRequests.overtimeHours,
         breakHours: overtimeRequests.breakHours,
         baseAmount: overtimeRequests.baseAmount,
@@ -255,6 +287,7 @@ export async function getOvertimeWorkspace() {
         periodCode: overtimeRequests.periodCode,
         reason: overtimeRequests.reason,
         status: overtimeRequests.status,
+        employeeGroup: employees.employeeGroup,
         reviewNotes: overtimeRequests.reviewNotes,
         approvedAt: overtimeRequests.approvedAt,
         rejectedAt: overtimeRequests.rejectedAt,
@@ -267,6 +300,10 @@ export async function getOvertimeWorkspace() {
       .orderBy(desc(overtimeRequests.requestDate), desc(overtimeRequests.createdAt))) as Omit<OvertimeRequestRow, "draftTotalPoints" | "draftItems">[])
     : [];
   const myRowsWithDraft = await withDraftMeta(myRows);
+  const pendingRows = allRows.filter((row) => row.status === "PENDING");
+  const pendingRowsScoped = role === "HRD"
+    ? pendingRows
+    : pendingRows.filter((row) => row.employeeGroup !== "MANAGERIAL");
 
   let scopedEmployees: ScopedEmployeeOption[] = [];
   if (canSpvManage) {
@@ -343,13 +380,13 @@ export async function getOvertimeWorkspace() {
     scopedEmployees,
     overtimeCatalogEntries,
     myRequests: myRowsWithDraft,
-    pendingRequests: allRows.filter((row) => row.status === "PENDING"),
+    pendingRequests: pendingRowsScoped,
     processedRequests: allRows.filter((row) => row.status !== "PENDING"),
   };
 }
 
 export async function submitOvertimeDraft(input: unknown) {
-  const authError = await checkRole(["TEAMWORK"]);
+  const authError = await checkRole(["TEAMWORK", "MANAGERIAL"]);
   if (authError) return authError;
   const tableError = await ensureOvertimeTableReady();
   if (tableError) return tableError;
@@ -405,6 +442,7 @@ function buildOvertimeInsertData(params: {
   employeeId: string;
   requestDate: Date;
   overtimeType: OvertimeType;
+  overtimePlacement?: OvertimePlacement;
   reason: string;
   actorUserId: string;
   autoApproved?: boolean;
@@ -418,6 +456,10 @@ function buildOvertimeInsertData(params: {
     employeeId: params.employeeId,
     requestDate: params.requestDate,
     overtimeType: params.overtimeType,
+    overtimePlacement:
+      params.overtimeType === "OVERTIME_3H"
+        ? (params.overtimePlacement ?? "AFTER_SHIFT")
+        : "AFTER_SHIFT",
     overtimeHours: cfg.overtimeHours,
     breakHours: cfg.breakHours,
     baseAmount: cfg.baseAmount.toFixed(2),
@@ -496,6 +538,7 @@ export async function submitOvertimeRequest(input: unknown) {
       employeeId: roleRow.employeeId,
       requestDate: parsed.data.requestDate,
       overtimeType,
+      overtimePlacement: parsed.data.overtimePlacement,
       reason: parsed.data.reason,
       actorUserId,
     }),
@@ -528,6 +571,7 @@ export async function submitSpvOvertimeRequest(input: unknown) {
       employeeId: roleRow.employeeId,
       requestDate: parsed.data.requestDate,
       overtimeType: parsed.data.overtimeType,
+      overtimePlacement: parsed.data.overtimePlacement,
       reason: parsed.data.reason,
       actorUserId,
       autoApproved: true,
@@ -579,6 +623,7 @@ export async function scheduleDivisionOvertime(input: unknown) {
       employeeId: targetEmployee.id,
       requestDate: parsed.data.requestDate,
       overtimeType: parsed.data.overtimeType,
+      overtimePlacement: parsed.data.overtimePlacement,
       reason: `Terjadwal SPV: ${parsed.data.reason}`,
       actorUserId,
       autoApproved: true,
@@ -611,6 +656,7 @@ export async function decideOvertimeRequest(input: unknown) {
       employeeId: overtimeRequests.employeeId,
       status: overtimeRequests.status,
       employeeDivisionId: employees.divisionId,
+      employeeGroup: employees.employeeGroup,
     })
     .from(overtimeRequests)
     .leftJoin(employees, eq(overtimeRequests.employeeId, employees.id))
@@ -619,6 +665,10 @@ export async function decideOvertimeRequest(input: unknown) {
 
   if (!existing) return { error: "Pengajuan overtime tidak ditemukan." };
   if (existing.status !== "PENDING") return { error: "Pengajuan overtime sudah diproses." };
+
+  if (existing.employeeGroup === "MANAGERIAL" && role !== "HRD") {
+    return { error: "Pengajuan overtime managerial hanya dapat diproses oleh HRD." };
+  }
 
   if (DIV_SCOPED_ROLES.includes(role)) {
     if (!existing.employeeDivisionId || !roleRow.divisionIds.includes(existing.employeeDivisionId)) {

@@ -25,6 +25,7 @@ export type OvertimeRow = {
   divisionName: string;
   requestDate: string;
   overtimeType: "OVERTIME_1H" | "OVERTIME_2H" | "OVERTIME_3H" | "LEMBUR_FULLDAY" | "PATCH_ABSENCE_3H";
+  overtimePlacement: "BEFORE_SHIFT" | "AFTER_SHIFT";
   overtimeHours: number;
   breakHours: number;
   baseAmount: number;
@@ -81,6 +82,11 @@ const OVERTIME_HELP_TEXT: Record<OvertimeRow["overtimeType"], string> = {
   PATCH_ABSENCE_3H: "Rp11.000 + uang makan Rp30.000, maksimal 3x/periode (IZIN/SAKIT/CUTI approved)",
 };
 
+const OVERTIME_PLACEMENT_LABEL: Record<OvertimeRow["overtimePlacement"], string> = {
+  BEFORE_SHIFT: "Sebelum jam kerja",
+  AFTER_SHIFT: "Setelah jam kerja",
+};
+
 function currency(value: number) {
   return `Rp${value.toLocaleString("id-ID")}`;
 }
@@ -111,6 +117,7 @@ export default function OvertimeClient({
   const router = useRouter();
   const [requestDate, setRequestDate] = useState(new Date().toISOString().slice(0, 10));
   const [overtimeType, setOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
+  const [overtimePlacement, setOvertimePlacement] = useState<OvertimeRow["overtimePlacement"]>("AFTER_SHIFT");
   const [reason, setReason] = useState("");
   const [openTwSubmit, setOpenTwSubmit] = useState(false);
   const [openTwDraft, setOpenTwDraft] = useState(false);
@@ -145,10 +152,12 @@ export default function OvertimeClient({
   const [openSpvSchedule, setOpenSpvSchedule] = useState(false);
   const [spvRequestDate, setSpvRequestDate] = useState(new Date().toISOString().slice(0, 10));
   const [spvOvertimeType, setSpvOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
+  const [spvOvertimePlacement, setSpvOvertimePlacement] = useState<OvertimeRow["overtimePlacement"]>("AFTER_SHIFT");
   const [spvReason, setSpvReason] = useState("");
   const [targetEmployeeId, setTargetEmployeeId] = useState("");
   const [scheduleRequestDate, setScheduleRequestDate] = useState(new Date().toISOString().slice(0, 10));
   const [scheduleOvertimeType, setScheduleOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
+  const [scheduleOvertimePlacement, setScheduleOvertimePlacement] = useState<OvertimeRow["overtimePlacement"]>("AFTER_SHIFT");
   const [scheduleReason, setScheduleReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +171,7 @@ export default function OvertimeClient({
       const result = await submitOvertimeRequest({
         requestDate,
         overtimeType,
+        overtimePlacement,
         reason,
       });
       if (result && "error" in result) {
@@ -206,6 +216,7 @@ export default function OvertimeClient({
       const result = await submitSpvOvertimeRequest({
         requestDate: spvRequestDate,
         overtimeType: spvOvertimeType,
+        overtimePlacement: spvOvertimePlacement,
         reason: spvReason,
       });
       if (result && "error" in result) {
@@ -230,6 +241,7 @@ export default function OvertimeClient({
         employeeId: targetEmployeeId,
         requestDate: scheduleRequestDate,
         overtimeType: scheduleOvertimeType,
+        overtimePlacement: scheduleOvertimePlacement,
         reason: scheduleReason,
       });
       if (result && "error" in result) {
@@ -466,7 +478,14 @@ export default function OvertimeClient({
                       <p className="text-xs text-slate-500">{row.employeeCode} · {row.divisionName}</p>
                     </td>
                     <td className="px-3 py-2 text-slate-700">{row.requestDate}</td>
-                    <td className="px-3 py-2 text-slate-700">{OVERTIME_TYPE_LABEL[row.overtimeType]}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      <div className="flex flex-col gap-1">
+                        <span>{OVERTIME_TYPE_LABEL[row.overtimeType]}</span>
+                        {row.overtimeType === "OVERTIME_3H" ? (
+                          <span className="text-xs text-slate-500">{OVERTIME_PLACEMENT_LABEL[row.overtimePlacement]}</span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-2 text-right font-semibold text-slate-900">{currency(row.totalAmount)}</td>
                     <td className="px-3 py-2">
                       <Input
@@ -522,7 +541,14 @@ export default function OvertimeClient({
                   <p className="text-xs text-slate-500">{row.employeeCode} · {row.divisionName}</p>
                 </td>
                 <td className="px-3 py-2 text-slate-700">{row.requestDate}</td>
-                <td className="px-3 py-2 text-slate-700">{OVERTIME_TYPE_LABEL[row.overtimeType]}</td>
+                <td className="px-3 py-2 text-slate-700">
+                  <div className="flex flex-col gap-1">
+                    <span>{OVERTIME_TYPE_LABEL[row.overtimeType]}</span>
+                    {row.overtimeType === "OVERTIME_3H" ? (
+                      <span className="text-xs text-slate-500">{OVERTIME_PLACEMENT_LABEL[row.overtimePlacement]}</span>
+                    ) : null}
+                  </div>
+                </td>
                 <td className="px-3 py-2 text-right font-semibold text-slate-900">{currency(row.totalAmount)}</td>
                 <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatOneDecimal(row.draftTotalPoints)}</td>
                 <td className="px-3 py-2">
@@ -561,7 +587,13 @@ export default function OvertimeClient({
                 <label className="text-xs font-medium text-slate-600">Jenis Overtime</label>
                 <select
                   value={overtimeType}
-                  onChange={(e) => setOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
+                  onChange={(e) => {
+                    const nextType = e.target.value as OvertimeRow["overtimeType"];
+                    setOvertimeType(nextType);
+                    if (nextType !== "OVERTIME_3H") {
+                      setOvertimePlacement("AFTER_SHIFT");
+                    }
+                  }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   {Object.entries(OVERTIME_TYPE_LABEL).map(([key, label]) => (
@@ -571,6 +603,19 @@ export default function OvertimeClient({
                 <p className="text-xs text-slate-500">{OVERTIME_HELP_TEXT[overtimeType]}</p>
               </div>
             </div>
+            {overtimeType === "OVERTIME_3H" ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Penempatan Overtime 3 Jam</label>
+                <select
+                  value={overtimePlacement}
+                  onChange={(e) => setOvertimePlacement(e.target.value as OvertimeRow["overtimePlacement"])}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="AFTER_SHIFT">Setelah jam kerja default (contoh 12.00-00.00)</option>
+                  <option value="BEFORE_SHIFT">Sebelum jam kerja default (contoh 09.00-21.00)</option>
+                </select>
+              </div>
+            ) : null}
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Alasan / Catatan</label>
               <textarea
@@ -788,7 +833,13 @@ export default function OvertimeClient({
                 <label className="text-xs font-medium text-slate-600">Jenis</label>
                 <select
                   value={spvOvertimeType}
-                  onChange={(e) => setSpvOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
+                  onChange={(e) => {
+                    const nextType = e.target.value as OvertimeRow["overtimeType"];
+                    setSpvOvertimeType(nextType);
+                    if (nextType !== "OVERTIME_3H") {
+                      setSpvOvertimePlacement("AFTER_SHIFT");
+                    }
+                  }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   {Object.entries(OVERTIME_TYPE_LABEL).filter(([key]) => key !== "PATCH_ABSENCE_3H").map(([key, label]) => (
@@ -797,6 +848,19 @@ export default function OvertimeClient({
                 </select>
               </div>
             </div>
+            {spvOvertimeType === "OVERTIME_3H" ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Penempatan Overtime 3 Jam</label>
+                <select
+                  value={spvOvertimePlacement}
+                  onChange={(e) => setSpvOvertimePlacement(e.target.value as OvertimeRow["overtimePlacement"])}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="AFTER_SHIFT">Setelah jam kerja default (contoh 12.00-00.00)</option>
+                  <option value="BEFORE_SHIFT">Sebelum jam kerja default (contoh 09.00-21.00)</option>
+                </select>
+              </div>
+            ) : null}
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Catatan</label>
               <textarea
@@ -842,7 +906,13 @@ export default function OvertimeClient({
                 <label className="text-xs font-medium text-slate-600">Jenis</label>
                 <select
                   value={scheduleOvertimeType}
-                  onChange={(e) => setScheduleOvertimeType(e.target.value as OvertimeRow["overtimeType"])}
+                  onChange={(e) => {
+                    const nextType = e.target.value as OvertimeRow["overtimeType"];
+                    setScheduleOvertimeType(nextType);
+                    if (nextType !== "OVERTIME_3H") {
+                      setScheduleOvertimePlacement("AFTER_SHIFT");
+                    }
+                  }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
                   {Object.entries(OVERTIME_TYPE_LABEL).filter(([key]) => key !== "PATCH_ABSENCE_3H").map(([key, label]) => (
@@ -851,6 +921,19 @@ export default function OvertimeClient({
                 </select>
               </div>
             </div>
+            {scheduleOvertimeType === "OVERTIME_3H" ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Penempatan Overtime 3 Jam</label>
+                <select
+                  value={scheduleOvertimePlacement}
+                  onChange={(e) => setScheduleOvertimePlacement(e.target.value as OvertimeRow["overtimePlacement"])}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="AFTER_SHIFT">Setelah jam kerja default (contoh 12.00-00.00)</option>
+                  <option value="BEFORE_SHIFT">Sebelum jam kerja default (contoh 09.00-21.00)</option>
+                </select>
+              </div>
+            ) : null}
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Catatan Penjadwalan</label>
               <textarea

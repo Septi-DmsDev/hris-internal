@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const overtimePlacementSchema = z.enum(["BEFORE_SHIFT", "AFTER_SHIFT"]);
+
 export const overtimeRequestSchema = z.object({
   requestDate: z.coerce.date({ message: "Tanggal overtime wajib diisi." }),
   overtimeType: z.enum([
@@ -9,7 +11,16 @@ export const overtimeRequestSchema = z.object({
     "LEMBUR_FULLDAY",
     "PATCH_ABSENCE_3H",
   ]),
+  overtimePlacement: overtimePlacementSchema.optional().default("AFTER_SHIFT"),
   reason: z.string().trim().min(3, "Alasan minimal 3 karakter.").max(500),
+}).superRefine((value, ctx) => {
+  if (value.overtimeType === "OVERTIME_3H" && !value.overtimePlacement) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Posisi overtime 3 jam wajib dipilih.",
+      path: ["overtimePlacement"],
+    });
+  }
 });
 
 export const overtimeDecisionSchema = z.object({
@@ -26,7 +37,16 @@ export const spvSelfOvertimeRequestSchema = z.object({
     "OVERTIME_3H",
     "LEMBUR_FULLDAY",
   ]),
+  overtimePlacement: overtimePlacementSchema.optional().default("AFTER_SHIFT"),
   reason: z.string().trim().min(3, "Alasan minimal 3 karakter.").max(500),
+}).superRefine((value, ctx) => {
+  if (value.overtimeType === "OVERTIME_3H" && !value.overtimePlacement) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Posisi overtime 3 jam wajib dipilih.",
+      path: ["overtimePlacement"],
+    });
+  }
 });
 
 export const spvScheduleOvertimeSchema = z.object({
@@ -38,7 +58,16 @@ export const spvScheduleOvertimeSchema = z.object({
     "OVERTIME_3H",
     "LEMBUR_FULLDAY",
   ]),
+  overtimePlacement: overtimePlacementSchema.optional().default("AFTER_SHIFT"),
   reason: z.string().trim().min(3, "Catatan minimal 3 karakter.").max(500),
+}).superRefine((value, ctx) => {
+  if (value.overtimeType === "OVERTIME_3H" && !value.overtimePlacement) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Posisi overtime 3 jam wajib dipilih.",
+      path: ["overtimePlacement"],
+    });
+  }
 });
 
 export const overtimeDraftItemSchema = z.object({

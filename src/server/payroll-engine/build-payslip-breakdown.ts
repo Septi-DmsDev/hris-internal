@@ -1,4 +1,9 @@
+import type { EmployeeGroup } from "@/lib/employee-groups";
+import { isKpiEmployeeGroup } from "@/lib/employee-groups";
+import { getPayslipLabels } from "@/lib/payslip-labels";
+
 type PayslipBreakdownInput = {
+  employeeGroup: EmployeeGroup;
   baseSalaryPaid: number;
   gradeAllowancePaid: number;
   tenureAllowancePaid: number;
@@ -26,30 +31,41 @@ function positiveItems(items: PayslipItem[]) {
 }
 
 export function buildPayslipBreakdown(input: PayslipBreakdownInput) {
+  const labels = getPayslipLabels(input.employeeGroup);
+
+  const isKpi = isKpiEmployeeGroup(input.employeeGroup);
+
+  // Untuk mitra/training/borongan: baseSalaryPaid + bonusKinerjaAmount digabung jadi satu baris "Komisi/Fee"
+  const baseSalaryLine: PayslipItem = isKpi
+    ? { key: "baseSalaryPaid", label: labels.baseSalaryPaid, amount: input.baseSalaryPaid }
+    : { key: "baseSalaryPaid", label: labels.baseSalaryPaid, amount: input.baseSalaryPaid + input.bonusKinerjaAmount };
+
   const additions = positiveItems([
-    { key: "baseSalaryPaid", label: "Gaji Pokok Dibayar", amount: input.baseSalaryPaid },
-    { key: "gradeAllowancePaid", label: "Tunjangan Grade", amount: input.gradeAllowancePaid },
-    { key: "tenureAllowancePaid", label: "Tunjangan Masa Kerja", amount: input.tenureAllowancePaid },
-    { key: "dailyAllowancePaid", label: "Uang Harian", amount: input.dailyAllowancePaid },
-    { key: "overtimeAmount", label: "Overtime", amount: input.overtimeAmount },
-    { key: "bonusFulltimeAmount", label: "Bonus Fulltime", amount: input.bonusFulltimeAmount },
-    { key: "bonusDisciplineAmount", label: "Bonus Disiplin", amount: input.bonusDisciplineAmount },
-    { key: "bonusKinerjaAmount", label: "Bonus Kinerja", amount: input.bonusKinerjaAmount },
-    { key: "bonusPrestasiAmount", label: "Bonus Prestasi", amount: input.bonusPrestasiAmount },
-    { key: "bonusTeamAmount", label: "Bonus Team", amount: input.bonusTeamAmount },
+    baseSalaryLine,
+    // gradeAllowancePaid hanya untuk managerial/karyawan tetap
+    ...(isKpi ? [{ key: "gradeAllowancePaid", label: labels.gradeAllowancePaid, amount: input.gradeAllowancePaid }] : []),
+    { key: "tenureAllowancePaid", label: labels.tenureAllowancePaid, amount: input.tenureAllowancePaid },
+    { key: "dailyAllowancePaid", label: labels.dailyAllowancePaid, amount: input.dailyAllowancePaid },
+    { key: "overtimeAmount", label: labels.overtimeAmount, amount: input.overtimeAmount },
+    { key: "bonusFulltimeAmount", label: labels.bonusFulltimeAmount, amount: input.bonusFulltimeAmount },
+    { key: "bonusDisciplineAmount", label: labels.bonusDisciplineAmount, amount: input.bonusDisciplineAmount },
+    // bonusKinerjaAmount hanya tampil sebagai baris terpisah untuk karyawan KPI (managerial/karyawan tetap)
+    ...(isKpi ? [{ key: "bonusKinerjaAmount", label: labels.bonusKinerjaAmount, amount: input.bonusKinerjaAmount }] : []),
+    { key: "bonusPrestasiAmount", label: labels.bonusPrestasiAmount, amount: input.bonusPrestasiAmount },
+    { key: "bonusTeamAmount", label: labels.bonusTeamAmount, amount: input.bonusTeamAmount },
     {
       key: "manualAdjustmentAmount",
-      label: "Adjustment Manual (+)",
+      label: labels.manualAddition,
       amount: input.manualAdjustmentAmount > 0 ? input.manualAdjustmentAmount : 0,
     },
   ]);
 
   const deductions = positiveItems([
-    { key: "incidentDeductionAmount", label: "Potongan Incident", amount: input.incidentDeductionAmount },
-    { key: "unpaidLeaveDeductionAmount", label: "Potongan Unpaid Leave", amount: input.unpaidLeaveDeductionAmount },
+    { key: "incidentDeductionAmount", label: labels.incidentDeductionAmount, amount: input.incidentDeductionAmount },
+    { key: "unpaidLeaveDeductionAmount", label: labels.unpaidLeaveDeductionAmount, amount: input.unpaidLeaveDeductionAmount },
     {
       key: "manualAdjustmentAmount",
-      label: "Adjustment Manual (-)",
+      label: labels.manualDeduction,
       amount: input.manualAdjustmentAmount < 0 ? Math.abs(input.manualAdjustmentAmount) : 0,
     },
   ]);
@@ -60,5 +76,7 @@ export function buildPayslipBreakdown(input: PayslipBreakdownInput) {
     totalAdditions: additions.reduce((sum, item) => sum + item.amount, 0),
     totalDeductions: deductions.reduce((sum, item) => sum + item.amount, 0),
     takeHomePay: input.takeHomePay,
+    totalAdditionsLabel: labels.totalAdditions,
+    takeHomePayLabel: labels.takeHomePay,
   };
 }

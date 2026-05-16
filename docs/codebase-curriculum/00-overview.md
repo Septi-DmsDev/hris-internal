@@ -32,6 +32,7 @@ Fungsi bisnis yang sudah muncul di code:
 - login dan session Supabase;
 - user role management, employee login link, dan division scope;
 - account settings dan schedule;
+- account settings untuk self-service profil enrichment (hobi, riwayat pendidikan, kompetensi);
 - master data cabang/divisi/jabatan/grade/shift/jadwal kerja;
 - profiling karyawan dan histori perubahan;
 - mutasi massal penempatan (cabang/divisi/jabatan/grade/kelompok karyawan);
@@ -127,6 +128,13 @@ Employee Link
 | Training graduation | Transisi `graduateTrainee()` masih mengubah status langsung; mitigasi payroll saat ini memprorate bonus fulltime/disiplin jika tanggal lulus berada di tengah periode. |
 | Audit log | Payroll dan performance activity punya log kuat; ticket/review/training masih perlu audit hardening bila diminta. |
 | Payroll hardening | `next-update.md` mencatat overtime, SP quarter, structured additions/deductions, tunjangan masa kerja otomatis, dan rule lain yang belum penuh. |
+
+Catatan implementasi payroll terbaru:
+- tunjangan masa kerja dihitung dari `training_graduation_date` via `resolveTenureAllowanceAmount()` dengan bucket:
+  - Jan-Feb-Mar -> efektif April tahun berikutnya;
+  - Apr-Mei-Jun -> efektif Juli tahun berikutnya;
+  - Jul-Ags-Sep -> efektif Oktober tahun berikutnya;
+  - Okt-Nov-Des -> efektif Januari tahun berikutnya.
 
 ## 8. Risiko Teknis Paling Penting
 

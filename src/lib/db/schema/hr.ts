@@ -69,6 +69,11 @@ export const overtimeRequestStatusEnum = pgEnum("overtime_request_status", [
   "REJECTED",
 ]);
 
+export const overtimePlacementEnum = pgEnum("overtime_placement", [
+  "BEFORE_SHIFT",
+  "AFTER_SHIFT",
+]);
+
 export const attendanceTickets = pgTable("attendance_tickets", {
   id: uuid("id").defaultRandom().primaryKey(),
   employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
@@ -112,6 +117,7 @@ export const overtimeRequests = pgTable("overtime_requests", {
   employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   requestDate: date("request_date", { mode: "date" }).notNull(),
   overtimeType: overtimeTypeEnum("overtime_type").notNull(),
+  overtimePlacement: overtimePlacementEnum("overtime_placement").notNull().default("AFTER_SHIFT"),
   overtimeHours: integer("overtime_hours").notNull(),
   breakHours: integer("break_hours").notNull().default(0),
   baseAmount: numeric("base_amount", { precision: 12, scale: 2 }).notNull(),

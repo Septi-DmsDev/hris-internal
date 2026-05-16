@@ -4,6 +4,7 @@ import { buildPayslipBreakdown } from "./build-payslip-breakdown";
 describe("buildPayslipBreakdown", () => {
   it("mengelompokkan komponen addition dan deduction untuk tampilan slip", () => {
     const breakdown = buildPayslipBreakdown({
+      employeeGroup: "MANAGERIAL",
       baseSalaryPaid: 1_200_000,
       gradeAllowancePaid: 100_000,
       tenureAllowancePaid: 50_000,
@@ -41,6 +42,7 @@ describe("buildPayslipBreakdown", () => {
 
   it("memasukkan adjustment positif sebagai addition", () => {
     const breakdown = buildPayslipBreakdown({
+      employeeGroup: "MITRA_KERJA",
       baseSalaryPaid: 1_000_000,
       gradeAllowancePaid: 0,
       tenureAllowancePaid: 0,

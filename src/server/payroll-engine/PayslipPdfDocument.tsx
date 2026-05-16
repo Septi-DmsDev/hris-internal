@@ -23,6 +23,8 @@ export type PayslipPdfSlip = {
   totalAdditions: number;
   totalDeductions: number;
   takeHomePay: number;
+  totalAdditionsLabel?: string;
+  takeHomePayLabel?: string;
 };
 
 type PayslipPdfDocumentProps = {
@@ -128,11 +130,11 @@ function PayslipPdfPage(props: PayslipPdfSlip) {
 
       <View style={styles.cardGrid}>
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Total Addition</Text>
+          <Text style={styles.cardLabel}>{props.totalAdditionsLabel ?? "Total Penambahan"}</Text>
           <Text style={styles.cardValue}>{formatCurrency(props.totalAdditions)}</Text>
         </View>
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Total Deduction</Text>
+          <Text style={styles.cardLabel}>Total Potongan</Text>
           <Text style={styles.cardValue}>{formatCurrency(props.totalDeductions)}</Text>
         </View>
       </View>
@@ -161,7 +163,7 @@ function PayslipPdfPage(props: PayslipPdfSlip) {
 
       <View style={styles.footer}>
         <View style={styles.footerLine}>
-          <Text style={styles.footerStrong}>Take Home Pay</Text>
+          <Text style={styles.footerStrong}>{props.takeHomePayLabel ?? "Take Home Pay"}</Text>
           <Text style={styles.footerStrong}>{formatCurrency(props.takeHomePay)}</Text>
         </View>
       </View>

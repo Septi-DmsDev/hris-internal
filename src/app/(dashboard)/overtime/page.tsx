@@ -20,6 +20,7 @@ export default async function OvertimePage() {
     divisionName: row.divisionName ?? "-",
     requestDate: format(row.requestDate, "yyyy-MM-dd"),
     overtimeType: row.overtimeType,
+    overtimePlacement: row.overtimePlacement,
     overtimeHours: row.overtimeHours,
     breakHours: row.breakHours,
     baseAmount: Number(row.baseAmount),

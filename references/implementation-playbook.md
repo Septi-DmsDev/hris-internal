@@ -17,7 +17,7 @@ src/app/(dashboard) page/client
 -> revalidatePath/response ke UI
 ```
 
-Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `employees` (termasuk placement helper), `performance`, `tickets`, `attendance`, `reviews`, `training`, `payroll`, serta route handler export karyawan/payroll XLSX dan payslip PDF. Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
+Action dan helper aktual mencakup `users`, `settings`, `me`, `schedule`, `work-schedules`, `employees` (termasuk placement helper), `performance`, `tickets`, `attendance`, `reviews`, `training`, `payroll`, serta route handler export karyawan/payroll XLSX dan payslip PDF. Modul `settings` juga sudah mencakup self-service profil enrichment karyawan (hobi, riwayat pendidikan, kompetensi). Jangan memakai dokumen konsep lama sebagai status implementasi tanpa membandingkan code.
 
 ## 1. Sebelum Coding
 
@@ -93,6 +93,11 @@ Untuk payroll:
 - eligibility bonus fulltime/disiplin memakai `resolveAttendancePayrollEligibility()` dari data absensi periode;
 - bonus disiplin tier memakai rule jumlah telat periode (`0 => 100%`, `<=3 => 90%`, `<=7 => 80%`, `>=8 => 0%`);
 - untuk karyawan yang lulus training di tengah periode, bonus fulltime dan bonus disiplin diprorate dengan rasio sisa hari kerja terjadwal sejak tanggal lulus terhadap total hari kerja terjadwal periode;
+- tunjangan masa kerja dihitung dari `training_graduation_date` melalui `resolveTenureAllowanceAmount()` dengan bucket anchor:
+  - Jan-Feb-Mar -> April tahun berikutnya;
+  - Apr-Mei-Jun -> Juli tahun berikutnya;
+  - Jul-Ags-Sep -> Oktober tahun berikutnya;
+  - Okt-Nov-Des -> Januari tahun berikutnya;
 - kalkulasi TEAMWORK/MANAGERIAL memakai engine payroll;
 - PDF/XLSX memakai builder server-side.
 

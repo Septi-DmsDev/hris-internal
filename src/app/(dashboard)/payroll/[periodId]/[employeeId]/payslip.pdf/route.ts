@@ -33,6 +33,7 @@ export async function GET(_: Request, context: RouteContext) {
   };
 
   const payslipBreakdown = buildPayslipBreakdown({
+    employeeGroup: detail.employeeGroup ?? "MITRA_KERJA",
     baseSalaryPaid: Number(detail.baseSalaryPaid),
     gradeAllowancePaid: Number(detail.gradeAllowancePaid),
     tenureAllowancePaid: Number(detail.tenureAllowancePaid),
@@ -61,6 +62,8 @@ export async function GET(_: Request, context: RouteContext) {
     totalAdditions: payslipBreakdown.totalAdditions,
     totalDeductions: payslipBreakdown.totalDeductions,
     takeHomePay: payslipBreakdown.takeHomePay,
+    totalAdditionsLabel: payslipBreakdown.totalAdditionsLabel,
+    takeHomePayLabel: payslipBreakdown.takeHomePayLabel,
   });
 
   return new NextResponse(new Uint8Array(pdfBuffer), {

@@ -252,6 +252,27 @@ Payroll finalization:
 - tidak boleh mengurangi cicilan/tenor berkali-kali akibat finalisasi ulang;
 - setelah paid/locked, koreksi masuk adjustment periode berikutnya.
 
+Tunjangan masa kerja:
+- dihitung dari tanggal lulus training (`training_graduation_date`);
+- nominal kenaikan per tahun: `Rp100.000`;
+- bucket effective pertama:
+  - lulus Jan/Feb/Mar -> kenaikan pertama efektif 1 April tahun berikutnya;
+  - lulus Apr/Mei/Jun -> kenaikan pertama efektif 1 Juli tahun berikutnya;
+  - lulus Jul/Ags/Sep -> kenaikan pertama efektif 1 Oktober tahun berikutnya;
+  - lulus Okt/Nov/Des -> kenaikan pertama efektif 1 Januari tahun berikutnya;
+- setelah effective pertama, kenaikan berlanjut tiap 12 bulan pada bulan anchor yang sama.
+
+## Profil Karyawan (Self-Service)
+
+Variabel profil tambahan:
+- Hobi (multi entry);
+- Riwayat pendidikan (multi entry);
+- Kompetensi (multi entry, dapat menyimpan link dokumen pendukung/sertifikat).
+
+Aturan akses:
+- data profil tambahan diisi oleh karyawan sendiri melalui account settings;
+- admin dan HRD hanya melihat data ini di profil karyawan (read-only).
+
 ## Variable Penambah Gaji
 
 | Kategori | Berlaku untuk | Aturan |

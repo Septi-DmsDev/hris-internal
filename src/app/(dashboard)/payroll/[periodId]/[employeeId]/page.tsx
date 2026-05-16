@@ -104,6 +104,7 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
   const spPerformancePenaltyType = breakdownMeta.spPerformancePenaltyType ?? "NONE";
 
   const payslipBreakdown = buildPayslipBreakdown({
+    employeeGroup: detail.employeeGroup ?? "MITRA_KERJA",
     baseSalaryPaid: Number(detail.baseSalaryPaid),
     gradeAllowancePaid: Number(detail.gradeAllowancePaid),
     tenureAllowancePaid: Number(detail.tenureAllowancePaid),
@@ -156,15 +157,15 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Take Home Pay</p>
+          <p className="text-sm text-slate-500">{payslipBreakdown.takeHomePayLabel}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(Number(detail.takeHomePay))}</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Total Addition</p>
+          <p className="text-sm text-slate-500">{payslipBreakdown.totalAdditionsLabel}</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(payslipBreakdown.totalAdditions)}</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Total Deduction</p>
+          <p className="text-sm text-slate-500">Total Potongan</p>
           <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(payslipBreakdown.totalDeductions)}</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -181,7 +182,7 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
           </div>
           <div className="grid gap-6 md:grid-cols-2">
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Addition</h4>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Penambahan</h4>
               <div className="space-y-2">
                 {payslipBreakdown.additions.map((item) => (
                   <div key={item.key} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
@@ -192,11 +193,11 @@ export default async function PayrollEmployeeDetailPage({ params }: PageProps) {
               </div>
             </div>
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Deduction</h4>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Potongan</h4>
               <div className="space-y-2">
                 {payslipBreakdown.deductions.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-                    Tidak ada deduction pada periode ini.
+                    Tidak ada potongan pada periode ini.
                   </div>
                 ) : (
                   payslipBreakdown.deductions.map((item) => (

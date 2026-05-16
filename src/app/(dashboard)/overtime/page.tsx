@@ -44,6 +44,7 @@ export default async function OvertimePage() {
       canApprove={workspace.canApprove}
       canMonitor={workspace.canMonitor}
       canSpvManage={workspace.canSpvManage}
+      isManagerial={workspace.isManagerial}
       scopedEmployees={workspace.scopedEmployees}
       overtimeCatalogEntries={workspace.overtimeCatalogEntries.map((entry) => ({
         id: entry.id,

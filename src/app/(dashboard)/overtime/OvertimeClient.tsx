@@ -99,6 +99,7 @@ export default function OvertimeClient({
   canApprove,
   canMonitor,
   canSpvManage,
+  isManagerial,
   scopedEmployees,
   overtimeCatalogEntries,
   myRequests,
@@ -110,6 +111,7 @@ export default function OvertimeClient({
   canApprove: boolean;
   canMonitor: boolean;
   canSpvManage: boolean;
+  isManagerial: boolean;
   scopedEmployees: ScopedEmployeeOption[];
   overtimeCatalogEntries: OvertimeCatalogEntry[];
   myRequests: OvertimeRow[];
@@ -476,7 +478,9 @@ export default function OvertimeClient({
             </div>
           ) : canSubmit ? (
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setOpenTwSubmit(true)}>Ajukan OVT/Lembur</Button>
+              <Button size="sm" onClick={() => setOpenTwSubmit(true)}>
+                {isManagerial ? "Ajukan Lembur" : "Ajukan OVT/Lembur"}
+              </Button>
             </div>
           ) : null}
         </div>
@@ -615,14 +619,21 @@ export default function OvertimeClient({
       {openTwSubmit ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-4 space-y-3">
-            <h3 className="text-base font-semibold text-slate-900">Ajukan Overtime / Lembur</h3>
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                {isManagerial ? "Ajukan Lembur Managerial" : "Ajukan Overtime / Lembur"}
+              </h3>
+              {isManagerial ? (
+                <p className="text-xs text-blue-600 mt-0.5">Pengajuan akan masuk ke antrian approval HRD secara langsung.</p>
+              ) : null}
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Tanggal</label>
                 <Input type="date" value={requestDate} onChange={(e) => setRequestDate(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Jenis Overtime</label>
+                <label className="text-xs font-medium text-slate-600">Jenis {isManagerial ? "Lembur" : "Overtime"}</label>
                 <select
                   value={overtimeType}
                   onChange={(e) => {
@@ -634,9 +645,11 @@ export default function OvertimeClient({
                   }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  {Object.entries(OVERTIME_TYPE_LABEL).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
+                  {Object.entries(OVERTIME_TYPE_LABEL)
+                    .filter(([key]) => !isManagerial || key !== "PATCH_ABSENCE_3H")
+                    .map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
                 </select>
                 <p className="text-xs text-slate-500">{OVERTIME_HELP_TEXT[overtimeType]}</p>
               </div>

@@ -377,6 +377,7 @@ export async function getOvertimeWorkspace() {
     canApprove,
     canMonitor,
     canSpvManage,
+    isManagerial: role === "MANAGERIAL",
     scopedEmployees,
     overtimeCatalogEntries,
     myRequests: myRowsWithDraft,

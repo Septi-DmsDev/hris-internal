@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   decideOvertimeRequest,
+  getEmployeeShiftForDate,
   scheduleDivisionOvertime,
   submitOvertimeDraft,
   submitOvertimeRequest,
@@ -159,9 +160,31 @@ export default function OvertimeClient({
   const [scheduleOvertimeType, setScheduleOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
   const [scheduleOvertimePlacement, setScheduleOvertimePlacement] = useState<OvertimeRow["overtimePlacement"]>("AFTER_SHIFT");
   const [scheduleReason, setScheduleReason] = useState("");
+  const [scheduleShiftInfo, setScheduleShiftInfo] = useState<{ startTime: string; endTime: string } | null | "loading">(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openSpvSchedule || !targetEmployeeId || !scheduleRequestDate) {
+      setScheduleShiftInfo(null);
+      return;
+    }
+    setScheduleShiftInfo("loading");
+    void getEmployeeShiftForDate(targetEmployeeId, scheduleRequestDate).then((result) => {
+      setScheduleShiftInfo(result);
+      if (result) {
+        setScheduleOvertimeType("OVERTIME_3H");
+        setScheduleOvertimePlacement("AFTER_SHIFT");
+      }
+    });
+  }, [openSpvSchedule, targetEmployeeId, scheduleRequestDate]);
+
+  function addHoursToTime(time: string, hours: number): string {
+    const [h, m] = time.split(":").map(Number);
+    const totalMinutes = ((h ?? 0) * 60 + (m ?? 0) + hours * 60 + 1440 * 2) % 1440;
+    return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+  }
 
   async function handleSubmitRequest() {
     setPending(true);
@@ -250,6 +273,7 @@ export default function OvertimeClient({
       }
       setScheduleReason("");
       setTargetEmployeeId("");
+      setScheduleShiftInfo(null);
       setOpenSpvSchedule(false);
       setSuccess("Lembur terjadwal berhasil disimpan dan otomatis disetujui.");
       router.refresh();
@@ -897,43 +921,53 @@ export default function OvertimeClient({
                 ))}
               </select>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Tanggal</label>
-                <Input type="date" value={scheduleRequestDate} onChange={(e) => setScheduleRequestDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Jenis</label>
-                <select
-                  value={scheduleOvertimeType}
-                  onChange={(e) => {
-                    const nextType = e.target.value as OvertimeRow["overtimeType"];
-                    setScheduleOvertimeType(nextType);
-                    if (nextType !== "OVERTIME_3H") {
-                      setScheduleOvertimePlacement("AFTER_SHIFT");
-                    }
-                  }}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  {Object.entries(OVERTIME_TYPE_LABEL).filter(([key]) => key !== "PATCH_ABSENCE_3H").map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Tanggal</label>
+              <Input type="date" value={scheduleRequestDate} onChange={(e) => setScheduleRequestDate(e.target.value)} />
             </div>
-            {scheduleOvertimeType === "OVERTIME_3H" ? (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-600">Penempatan Overtime 3 Jam</label>
-                <select
-                  value={scheduleOvertimePlacement}
-                  onChange={(e) => setScheduleOvertimePlacement(e.target.value as OvertimeRow["overtimePlacement"])}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="AFTER_SHIFT">Setelah jam kerja default (contoh 12.00-00.00)</option>
-                  <option value="BEFORE_SHIFT">Sebelum jam kerja default (contoh 09.00-21.00)</option>
-                </select>
-              </div>
-            ) : null}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Penempatan Overtime 3 Jam</label>
+              {scheduleShiftInfo === "loading" ? (
+                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">Memuat jadwal karyawan...</p>
+              ) : scheduleShiftInfo === null ? (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                  {targetEmployeeId
+                    ? "Jadwal tidak ditemukan untuk tanggal ini. Pastikan karyawan memiliki jadwal aktif."
+                    : "Pilih karyawan dan tanggal terlebih dahulu."}
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setScheduleOvertimeType("OVERTIME_3H"); setScheduleOvertimePlacement("BEFORE_SHIFT"); }}
+                    className={`flex-1 rounded-md border px-3 py-2.5 text-sm text-left transition-colors ${
+                      scheduleOvertimePlacement === "BEFORE_SHIFT"
+                        ? "border-teal-600 bg-teal-50 text-teal-800"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="block font-semibold">Sebelum Shift</span>
+                    <span className="text-xs text-slate-500 font-mono">
+                      {addHoursToTime(scheduleShiftInfo.startTime, -3)} – {scheduleShiftInfo.startTime}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setScheduleOvertimeType("OVERTIME_3H"); setScheduleOvertimePlacement("AFTER_SHIFT"); }}
+                    className={`flex-1 rounded-md border px-3 py-2.5 text-sm text-left transition-colors ${
+                      scheduleOvertimePlacement === "AFTER_SHIFT"
+                        ? "border-teal-600 bg-teal-50 text-teal-800"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="block font-semibold">Setelah Shift</span>
+                    <span className="text-xs text-slate-500 font-mono">
+                      {scheduleShiftInfo.endTime} – {addHoursToTime(scheduleShiftInfo.endTime, 3)}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Catatan Penjadwalan</label>
               <textarea
@@ -945,7 +979,12 @@ export default function OvertimeClient({
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setOpenSpvSchedule(false)} disabled={pending}>Batal</Button>
-              <Button onClick={() => void handleSpvSchedule()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button>
+              <Button
+                onClick={() => void handleSpvSchedule()}
+                disabled={pending || !scheduleShiftInfo || scheduleShiftInfo === "loading"}
+              >
+                {pending ? "Menyimpan..." : "Simpan"}
+              </Button>
             </div>
           </div>
         </div>

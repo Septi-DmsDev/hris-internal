@@ -1,10 +1,10 @@
 "use server";
 
-import { and, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { checkRole, getCurrentUserRoleRow, getUser, requireAuth } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { employees } from "@/lib/db/schema/employee";
+import { employeeScheduleAssignments, workScheduleDays, employees } from "@/lib/db/schema/employee";
 import { attendanceTickets, overtimeDraftEntries, overtimeRequests } from "@/lib/db/schema/hr";
 import { divisions } from "@/lib/db/schema/master";
 import { pointCatalogEntries } from "@/lib/db/schema/point";
@@ -632,6 +632,61 @@ export async function scheduleDivisionOvertime(input: unknown) {
 
   revalidatePath("/overtime");
   return { success: true };
+}
+
+export async function getEmployeeShiftForDate(
+  employeeId: string,
+  date: string
+): Promise<{ startTime: string; endTime: string } | null> {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  if ((roleRow.role as UserRole) !== "SPV") return null;
+
+  const [emp] = await db
+    .select({ divisionId: employees.divisionId })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+  if (!emp || !roleRow.divisionIds.includes(emp.divisionId)) return null;
+
+  const parsedDate = new Date(`${date}T00:00:00`);
+  if (isNaN(parsedDate.getTime())) return null;
+  const dayOfWeek = parsedDate.getDay();
+
+  const [assignment] = await db
+    .select({ scheduleId: employeeScheduleAssignments.scheduleId })
+    .from(employeeScheduleAssignments)
+    .where(
+      and(
+        eq(employeeScheduleAssignments.employeeId, employeeId),
+        lte(employeeScheduleAssignments.effectiveStartDate, parsedDate),
+        or(
+          isNull(employeeScheduleAssignments.effectiveEndDate),
+          gte(employeeScheduleAssignments.effectiveEndDate, parsedDate)
+        )
+      )
+    )
+    .orderBy(desc(employeeScheduleAssignments.effectiveStartDate))
+    .limit(1);
+  if (!assignment) return null;
+
+  const [dayConfig] = await db
+    .select({
+      startTime: workScheduleDays.startTime,
+      endTime: workScheduleDays.endTime,
+      isWorkingDay: workScheduleDays.isWorkingDay,
+    })
+    .from(workScheduleDays)
+    .where(
+      and(
+        eq(workScheduleDays.scheduleId, assignment.scheduleId),
+        eq(workScheduleDays.dayOfWeek, dayOfWeek)
+      )
+    )
+    .limit(1);
+  if (!dayConfig?.isWorkingDay || !dayConfig.startTime || !dayConfig.endTime) return null;
+
+  return { startTime: dayConfig.startTime, endTime: dayConfig.endTime };
 }
 
 export async function decideOvertimeRequest(input: unknown) {

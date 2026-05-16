@@ -634,21 +634,7 @@ export async function scheduleDivisionOvertime(input: unknown) {
   return { success: true };
 }
 
-export async function getEmployeeShiftForDate(
-  employeeId: string,
-  date: string
-): Promise<{ startTime: string; endTime: string } | null> {
-  await requireAuth();
-  const roleRow = await getCurrentUserRoleRow();
-  if ((roleRow.role as UserRole) !== "SPV") return null;
-
-  const [emp] = await db
-    .select({ divisionId: employees.divisionId })
-    .from(employees)
-    .where(eq(employees.id, employeeId))
-    .limit(1);
-  if (!emp || !roleRow.divisionIds.includes(emp.divisionId)) return null;
-
+async function queryShiftForDate(employeeId: string, date: string): Promise<{ startTime: string; endTime: string } | null> {
   const parsedDate = new Date(`${date}T00:00:00`);
   if (isNaN(parsedDate.getTime())) return null;
   const dayOfWeek = parsedDate.getDay();
@@ -687,6 +673,31 @@ export async function getEmployeeShiftForDate(
   if (!dayConfig?.isWorkingDay || !dayConfig.startTime || !dayConfig.endTime) return null;
 
   return { startTime: dayConfig.startTime, endTime: dayConfig.endTime };
+}
+
+export async function getMyShiftForDate(date: string): Promise<{ startTime: string; endTime: string } | null> {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  if (!roleRow.employeeId) return null;
+  return queryShiftForDate(roleRow.employeeId, date);
+}
+
+export async function getEmployeeShiftForDate(
+  employeeId: string,
+  date: string
+): Promise<{ startTime: string; endTime: string } | null> {
+  await requireAuth();
+  const roleRow = await getCurrentUserRoleRow();
+  if ((roleRow.role as UserRole) !== "SPV") return null;
+
+  const [emp] = await db
+    .select({ divisionId: employees.divisionId })
+    .from(employees)
+    .where(eq(employees.id, employeeId))
+    .limit(1);
+  if (!emp || !roleRow.divisionIds.includes(emp.divisionId)) return null;
+
+  return queryShiftForDate(employeeId, date);
 }
 
 export async function decideOvertimeRequest(input: unknown) {

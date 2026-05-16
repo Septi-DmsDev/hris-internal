@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import {
   decideOvertimeRequest,
   getEmployeeShiftForDate,
+  getMyShiftForDate,
   scheduleDivisionOvertime,
   submitOvertimeDraft,
   submitOvertimeRequest,
@@ -160,10 +161,23 @@ export default function OvertimeClient({
   const [scheduleOvertimeType, setScheduleOvertimeType] = useState<OvertimeRow["overtimeType"]>("OVERTIME_1H");
   const [scheduleOvertimePlacement, setScheduleOvertimePlacement] = useState<OvertimeRow["overtimePlacement"]>("AFTER_SHIFT");
   const [scheduleReason, setScheduleReason] = useState("");
+  const [myShiftInfo, setMyShiftInfo] = useState<{ startTime: string; endTime: string } | null | "loading">(null);
   const [scheduleShiftInfo, setScheduleShiftInfo] = useState<{ startTime: string; endTime: string } | null | "loading">(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openTwSubmit || overtimeType !== "OVERTIME_3H" || !requestDate) {
+      setMyShiftInfo(null);
+      return;
+    }
+    setMyShiftInfo("loading");
+    void getMyShiftForDate(requestDate).then((result) => {
+      setMyShiftInfo(result);
+      if (result) setOvertimePlacement("AFTER_SHIFT");
+    });
+  }, [openTwSubmit, overtimeType, requestDate]);
 
   useEffect(() => {
     if (!openSpvSchedule || !targetEmployeeId || !scheduleRequestDate) {
@@ -630,14 +644,44 @@ export default function OvertimeClient({
             {overtimeType === "OVERTIME_3H" ? (
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Penempatan Overtime 3 Jam</label>
-                <select
-                  value={overtimePlacement}
-                  onChange={(e) => setOvertimePlacement(e.target.value as OvertimeRow["overtimePlacement"])}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="AFTER_SHIFT">Setelah jam kerja default (contoh 12.00-00.00)</option>
-                  <option value="BEFORE_SHIFT">Sebelum jam kerja default (contoh 09.00-21.00)</option>
-                </select>
+                {myShiftInfo === "loading" ? (
+                  <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">Memuat jadwal karyawan...</p>
+                ) : myShiftInfo === null ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    Jadwal tidak ditemukan untuk tanggal ini. Pastikan Anda memiliki jadwal aktif.
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOvertimePlacement("BEFORE_SHIFT")}
+                      className={`flex-1 rounded-md border px-3 py-2.5 text-sm text-left transition-colors ${
+                        overtimePlacement === "BEFORE_SHIFT"
+                          ? "border-teal-600 bg-teal-50 text-teal-800"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block font-semibold">Berangkat Lebih Awal</span>
+                      <span className="text-xs font-mono text-slate-500">
+                        {addHoursToTime(myShiftInfo.startTime, -3)} – {myShiftInfo.endTime}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOvertimePlacement("AFTER_SHIFT")}
+                      className={`flex-1 rounded-md border px-3 py-2.5 text-sm text-left transition-colors ${
+                        overtimePlacement === "AFTER_SHIFT"
+                          ? "border-teal-600 bg-teal-50 text-teal-800"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block font-semibold">Pulang Lebih Lama</span>
+                      <span className="text-xs font-mono text-slate-500">
+                        {myShiftInfo.startTime} – {addHoursToTime(myShiftInfo.endTime, 3)}
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : null}
             <div className="space-y-1">

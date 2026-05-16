@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, toggleEmployeeBpjs, updateEmployee } from "@/server/actions/employees";
+import { createEmployee, deleteEmployee, getEmployeeById, importEmployeesFromXlsx, syncEmployeeRoles, toggleEmployeeBpjs, updateEmployee } from "@/server/actions/employees";
 import { getEmployeeLoginInfo, upsertEmployeeLogin } from "@/server/actions/users";
-import { Plus } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faFileExport, faFileImport, faPenToSquare, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { normalizeEmployeeGroup, type EmployeeGroup } from "@/lib/employee-groups";
@@ -303,6 +303,31 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
   const [formError, setFormError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  async function handleSyncRoles() {
+    setPending(true);
+    setSyncResult(null);
+    try {
+      const result = await syncEmployeeRoles();
+      if (result && "error" in result) {
+        setSyncResult(`Gagal: ${result.error}`);
+        return;
+      }
+      if (result && "updatedCount" in result) {
+        setSyncResult(
+          result.updatedCount === 0
+            ? `Semua akses sudah sinkron. (${result.totalChecked} karyawan dicek)`
+            : `Berhasil update ${result.updatedCount} dari ${result.totalChecked} akses karyawan.`
+        );
+      }
+      setSyncOpen(false);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
+  }
 
   function onDraftChange(field: keyof EmployeeDraft, value: string) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -568,7 +593,7 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
 
   return (
     <div className="space-y-3">
-      <DataTable data={data} columns={columns} globalSearch searchPlaceholder="Cari UID, NIK, nama, no telpon, atau tanggal masuk..." toolbarSlot={options.canManage ? <div className="flex gap-2"><Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><FontAwesomeIcon icon={faFileExport} className="mr-1.5 h-3.5 w-3.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><FontAwesomeIcon icon={faFileImport} className="mr-1.5 h-3.5 w-3.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
+      <DataTable data={data} columns={columns} globalSearch searchPlaceholder="Cari UID, NIK, nama, no telpon, atau tanggal masuk..." toolbarSlot={options.canManage ? <div className="flex gap-2">{options.isSuperAdmin ? <Button type="button" variant="outline" size="sm" onClick={() => { setSyncOpen(true); setSyncResult(null); }}><RefreshCw size={14} className="mr-1.5" />Sync Akses</Button> : null}<Button asChild type="button" variant="outline" size="sm"><a href="/employees/export.xlsx"><FontAwesomeIcon icon={faFileExport} className="mr-1.5 h-3.5 w-3.5" />Export Excel</a></Button><Button type="button" variant="outline" size="sm" onClick={() => { setImportOpen(true); setFormError(null); }}><FontAwesomeIcon icon={faFileImport} className="mr-1.5 h-3.5 w-3.5" />Import Excel</Button><Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={openCreate}><Plus size={14} className="mr-1.5" />Tambah Karyawan</Button></div> : undefined} />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}><DialogContent><DialogHeader><DialogTitle>Import Karyawan</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-slate-600">Format: CABANG, NAMA, NIK/ID KARYAWAN, Username, Password, TEMPAT LAHIR, TGL LAHIR, JENIS KELAMIN, AGAMA, STATUS, ALAMAT, NO TELP, EMAIL, MASUK KERJA, LOLOS TRAINING.</p><Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setImportOpen(false)}>Batal</Button><Button onClick={() => void submitImport()} disabled={pending}>{pending ? "Mengimpor..." : "Import"}</Button></DialogFooter></div></DialogContent></Dialog>
 
@@ -577,6 +602,27 @@ export default function EmployeesTable({ data, options }: { data: EmployeeRow[];
       <Dialog open={editingRow !== null} onOpenChange={(open) => { if (!open) setEditingRow(null); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>Edit Karyawan</DialogTitle></DialogHeader><div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">Username login: <span className="font-semibold">{draft.username || "-"}</span> | Password default: <span className="font-semibold">12345678</span></div><EmployeePersonalForm draft={draft} onChange={onDraftChange} options={options} isEditMode />{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<DialogFooter><Button variant="outline" onClick={() => setEditingRow(null)}>Batal</Button><Button onClick={() => void submitEdit()} disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button></DialogFooter></DialogContent></Dialog>
 
       <AlertDialog open={deletingRow !== null} onOpenChange={(open) => { if (!open) setDeletingRow(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus Karyawan</AlertDialogTitle><AlertDialogDescription>{`Data karyawan \"${deletingRow?.fullName ?? ""}\" akan dinonaktifkan.`}</AlertDialogDescription></AlertDialogHeader>{formError ? <p className="text-sm text-red-600">{formError}</p> : null}<AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }}>{pending ? "Menghapus..." : "Hapus"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+
+      <AlertDialog open={syncOpen} onOpenChange={(open) => { if (!open) { setSyncOpen(false); setSyncResult(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sync Akses Pengguna</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">Proses ini akan menyesuaikan role akun login karyawan berdasarkan grup karyawan saat ini:</span>
+              <span className="block text-xs">• Grup <strong>MANAGERIAL</strong> → role <strong>Managerial</strong></span>
+              <span className="block text-xs">• Grup lainnya (Teamwork, Training, dst.) → role <strong>TeamWork</strong></span>
+              <span className="block text-xs text-slate-500 mt-1">Role SPV, KABAG, HRD, Finance, dan Super Admin <strong>tidak</strong> akan diubah.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {syncResult ? <p className="text-sm text-slate-700 px-1">{syncResult}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); void handleSyncRoles(); }} disabled={pending}>
+              {pending ? "Menyinkronkan..." : "Sync Sekarang"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 </div>
   );
 }

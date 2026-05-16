@@ -1864,6 +1864,49 @@ export async function revokeResignedEmployeesAccess() {
   return { success: true, totalCandidates: targets.length, revokedCount };
 }
 
+export async function syncEmployeeRoles() {
+  const authError = await checkRole(["SUPER_ADMIN"]);
+  if (authError) return authError;
+
+  // Ambil semua karyawan aktif yang sudah punya user_roles, dengan role TEAMWORK atau MANAGERIAL
+  // (tidak sentuh SPV, KABAG, HRD, FINANCE, SUPER_ADMIN, PAYROLL_VIEWER)
+  const rows = await db
+    .select({
+      employeeId: employees.id,
+      employeeGroup: employees.employeeGroup,
+      trainingGraduationDate: employees.trainingGraduationDate,
+      userRoleId: userRoles.id,
+      currentRole: userRoles.role,
+    })
+    .from(employees)
+    .innerJoin(userRoles, eq(userRoles.employeeId, employees.id))
+    .where(
+      and(
+        eq(employees.isActive, true),
+        inArray(userRoles.role, ["TEAMWORK", "MANAGERIAL"])
+      )
+    );
+
+  let updatedCount = 0;
+  for (const row of rows) {
+    const resolvedGroup = isPointBasedEmployeeGroup(row.employeeGroup)
+      ? resolveEmployeeGroupFromTrainingDate(row.trainingGraduationDate)
+      : row.employeeGroup;
+    const expectedRole: UserRole = isKpiEmployeeGroup(resolvedGroup) ? "MANAGERIAL" : "TEAMWORK";
+    if (expectedRole !== row.currentRole) {
+      await db
+        .update(userRoles)
+        .set({ role: expectedRole })
+        .where(eq(userRoles.id, row.userRoleId));
+      updatedCount++;
+    }
+  }
+
+  revalidatePath("/users");
+  revalidatePath("/employees");
+  return { success: true, updatedCount, totalChecked: rows.length };
+}
+
 function normalizeUsernameFromLegacyCode(value: string) {
   const base = value.trim().toLowerCase();
   if (!base) return "";

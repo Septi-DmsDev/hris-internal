@@ -131,8 +131,6 @@ function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
   const defaultPosition =
     options.positions.find((position) => normalizeEmployeeGroup(position.employeeGroup) === "MITRA_KERJA") ??
     options.positions[0];
-  const defaultSupervisor = options.supervisors[0];
-
   return {
     employeeCode: "",
     nik: "",
@@ -161,7 +159,7 @@ function createEmptyDraft(options: EmployeeFormOptions): EmployeeDraft {
     employeeGroup: normalizeEmployeeGroup(defaultPosition?.employeeGroup ?? "MITRA_KERJA"),
     employmentStatus: "TRAINING",
     payrollStatus: "TRAINING",
-    supervisorEmployeeId: defaultSupervisor?.id ?? "",
+    supervisorEmployeeId: "",
     scheduleId: "",
     effectiveDate: today,
     isActive: true,

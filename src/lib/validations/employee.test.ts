@@ -25,26 +25,23 @@ const validEmployeeInput = {
 };
 
 describe("employeeSchema", () => {
-  it("memaksa supervisor untuk karyawan teamwork", () => {
+  it("supervisor opsional untuk karyawan teamwork (auto-assign by division)", () => {
     const parsed = employeeSchema.safeParse({
       ...validEmployeeInput,
       supervisorEmployeeId: undefined,
     });
 
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      expect(parsed.error.issues[0]?.message).toContain("Supervisor");
-    }
+    expect(parsed.success).toBe(true);
   });
 
-  it("memaksa supervisor untuk karyawan training", () => {
+  it("supervisor opsional untuk karyawan training (auto-assign by division)", () => {
     const parsed = employeeSchema.safeParse({
       ...validEmployeeInput,
       employeeGroup: "TRAINING",
       supervisorEmployeeId: undefined,
     });
 
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
   });
 
   it("mengubah string tanggal menjadi Date untuk input valid", () => {

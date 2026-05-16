@@ -1,5 +1,5 @@
 import { POINT_TARGET_HARIAN } from "@/config/constants";
-import { ALL_EMPLOYEE_GROUPS, isPointBasedEmployeeGroup } from "@/lib/employee-groups";
+import { ALL_EMPLOYEE_GROUPS } from "@/lib/employee-groups";
 import { z } from "zod";
 
 const optionalText = z.string().trim().optional().transform((value) => value || undefined);
@@ -66,14 +66,6 @@ export const employeeSchema = z
     notes: optionalText,
   })
   .superRefine((value, ctx) => {
-    if (isPointBasedEmployeeGroup(value.employeeGroup) && !value.supervisorEmployeeId) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["supervisorEmployeeId"],
-        message: "Supervisor wajib dipilih untuk karyawan poin-based.",
-      });
-    }
-
     if (value.trainingGraduationDate && value.trainingGraduationDate < value.startDate) {
       ctx.addIssue({
         code: "custom",
